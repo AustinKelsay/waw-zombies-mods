@@ -39,6 +39,7 @@ bz_perks_register()
 	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_perks_on_item_purchased, "perks" );
 	maps\_bz_hooks::bz_register_hook( "speed_scale", ::bz_perks_on_speed_scale, "perks" );
 	maps\_bz_hooks::bz_register_hook( "max_health", ::bz_perks_on_max_health, "perks" );
+	maps\_bz_hooks::bz_register_hook( "wall_buy", ::bz_perks_on_wall_buy, "perks" );
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +467,24 @@ bz_perks_on_player_damage( player, ctx )
 
 		bz_perks_update_hud( player );
 		return;
+	}
+
+	// 4. Quick Revive II extra Solo revive charge (intercepts Solo game-over hit)
+	if ( cur_hp > 0 && inc_dmg >= cur_hp )
+	{
+		solo_players = GetPlayers();
+		if ( IsDefined( solo_players ) && solo_players.size == 1 && bz_perks_try_consume_solo_revive( player ) )
+		{
+			ctx.cancelled = true;
+			max_hp = 100;
+			if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
+			{
+				max_hp = Int( player.maxhealth );
+			}
+			player.health = max_hp;
+			bz_perks_apply_revive_completed( player, player );
+			return;
+		}
 	}
 }
 
@@ -964,6 +983,46 @@ bz_perks_refill_ammo_for_player( player, weapon_name )
 	return updated;
 }
 
+bz_perks_on_wall_buy( player, weapon_name, origin, is_ammo )
+{
+	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( !maps\_bz_state::bz_state_has_apex( player, "double_ammo" ) )
+	{
+		return;
+	}
+	if ( !IsDefined( is_ammo ) || !is_ammo )
+	{
+		return;
+	}
+
+	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	if ( norm == "" || norm == "none" )
+	{
+		return;
+	}
+
+	// Never call HasWeapon( norm + "_upgraded" ) directly because WaW 1.7 throws
+	// a script runtime error for unprecached weapon strings (e.g. *_upgraded on
+	// Nacht/Verruckt/Shi No Numa). Match against actually held primaries instead.
+	upg = norm + "_upgraded";
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) )
+	{
+		return;
+	}
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		held = maps\_bz_rules::bz_normalize_id( primaries[i] );
+		if ( held == norm || held == upg )
+		{
+			bz_perks_refill_ammo_for_player( player, primaries[i] );
+		}
+	}
+}
+
 bz_perks_update_lightweight_heavy( player )
 {
 	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
@@ -1039,7 +1098,20 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 				ny = dy / dist;
 			}
 
-			push_org = ( z.origin[0] + ( nx * 96 ), z.origin[1] + ( ny * 96 ), z.origin[2] );
+			raw_push = ( z.origin[0] + ( nx * 96 ), z.origin[1] + ( ny * 96 ), z.origin[2] );
+			trace_start = ( z.origin[0], z.origin[1], z.origin[2] + 24 );
+			trace_end = ( raw_push[0], raw_push[1], raw_push[2] + 24 );
+			push_org = raw_push;
+			tr = BulletTrace( trace_start, trace_end, false, z );
+			if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
+			{
+				safe_frac = tr["fraction"] - 0.15;
+				if ( safe_frac < 0.0 )
+				{
+					safe_frac = 0.0;
+				}
+				push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
+			}
 			z SetOrigin( push_org );
 			z thread bz_perks_second_chance_stun_zombie( stun_sec );
 			count++;
@@ -1068,19 +1140,7 @@ bz_perks_second_chance_stun_zombie( stun_sec )
 
 bz_perks_get_revive_time( player, base_time )
 {
-	if ( !IsDefined( player ) )
-	{
-		if ( IsDefined( base_time ) && base_time > 0.0 )
-		{
-			return base_time;
-		}
-		return 3.0;
-	}
-
-	has_qr = maps\_bz_state::bz_state_has_perk( player, "quick_revive" );
-	has_qr2 = maps\_bz_state::bz_state_has_perk_t2( player, "quick_revive" );
-	active_class = maps\_bz_state::bz_state_get_class( player );
-	return maps\_bz_rules::bz_calc_revive_time( base_time, has_qr, has_qr2, active_class );
+	return maps\_bz_hooks::bz_get_revive_time( player, base_time );
 }
 
 bz_perks_update_revive_state( player )
@@ -1090,7 +1150,7 @@ bz_perks_update_revive_state( player )
 		return;
 	}
 
-	rev_time = bz_perks_get_revive_time( player, 3.0 );
+	rev_time = maps\_bz_hooks::bz_get_revive_time( player, 3.0 );
 	player.bz_revive_time = rev_time;
 	player SetClientDvar( "revive_time_taken", "" + rev_time );
 }
@@ -1125,6 +1185,18 @@ bz_perks_apply_revive_completed( reviver, revived )
 	{
 		return false;
 	}
+
+	now = GetTime();
+	dedupe_target = reviver;
+	if ( IsDefined( revived ) )
+	{
+		dedupe_target = revived;
+	}
+	if ( IsDefined( dedupe_target.bz_last_qr2_revive_ms ) && dedupe_target.bz_last_qr2_revive_ms == now )
+	{
+		return true;
+	}
+	dedupe_target.bz_last_qr2_revive_ms = now;
 
 	bz_perks_grant_invuln( reviver, dur );
 	if ( IsDefined( revived ) )

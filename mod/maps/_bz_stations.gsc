@@ -429,6 +429,92 @@ bz_stations_init()
 	}
 }
 
+bz_stations_get_model_for_station( map_name, station_id )
+{
+	norm_map = maps\_bz_rules::bz_normalize_id( map_name );
+	sid = maps\_bz_rules::bz_normalize_id( station_id );
+
+	// Per-map models verified precached inside each stock map's .ff fastfile
+	// (zero new FX or custom model assets added to mod.csv).
+	if ( norm_map == "nazi_zombie_factory" )
+	{
+		if ( sid == "perks" )
+		{
+			return "zombie_vending_jugg_on";
+		}
+		if ( sid == "class" )
+		{
+			return "zombie_zapper_tesla_coil";
+		}
+		if ( sid == "arsenal" )
+		{
+			return "zombie_treasure_box";
+		}
+		if ( sid == "pap" )
+		{
+			return "zombie_vending_packapunch_on";
+		}
+	}
+	else if ( norm_map == "nazi_zombie_sumpf" )
+	{
+		if ( sid == "perks" )
+		{
+			return "zombie_vending_jugg_on_price";
+		}
+		if ( sid == "class" )
+		{
+			return "zombie_sumpf_zipcage_box";
+		}
+		if ( sid == "arsenal" )
+		{
+			return "zombie_treasure_box";
+		}
+		if ( sid == "pap" )
+		{
+			return "zombie_vending_sleight_on_price";
+		}
+	}
+	else if ( norm_map == "nazi_zombie_asylum" )
+	{
+		if ( sid == "perks" )
+		{
+			return "zombie_vending_jugg_on";
+		}
+		if ( sid == "class" )
+		{
+			return "zombie_zapper_power_box_on";
+		}
+		if ( sid == "arsenal" )
+		{
+			return "zombie_treasure_box";
+		}
+		if ( sid == "pap" )
+		{
+			return "zombie_vending_revive_on";
+		}
+	}
+	else if ( norm_map == "nazi_zombie_prototype" )
+	{
+		if ( sid == "perks" )
+		{
+			return "static_berlin_ger_radio";
+		}
+		if ( sid == "class" )
+		{
+			return "dest_peleliu_generator_mobile_dmg0";
+		}
+		if ( sid == "arsenal" )
+		{
+			return "german_grenade_bag";
+		}
+		if ( sid == "pap" )
+		{
+			return "zombie_treasure_box_lid";
+		}
+	}
+	return "";
+}
+
 bz_stations_spawn_one( map_name, spec )
 {
 	pos = bz_stations_snap_to_floor( spec.origin );
@@ -444,6 +530,16 @@ bz_stations_spawn_one( map_name, spec )
 	trig SetHintString( spec.hint_string );
 	trig.bz_station_id = spec.id;
 
+	model_name = bz_stations_get_model_for_station( map_name, spec.id );
+	vis = undefined;
+	if ( model_name != "" )
+	{
+		vis = Spawn( "script_model", pos );
+		vis.angles = spec.angles;
+		vis SetModel( model_name );
+		vis.bz_station_id = spec.id;
+	}
+
 	station = SpawnStruct();
 	station.id = spec.id;
 	station.menu_name = spec.menu_name;
@@ -454,10 +550,22 @@ bz_stations_spawn_one( map_name, spec )
 	station.paired_with_native_pap = spec.paired_with_native_pap;
 	station.anchor = anchor;
 	station.trigger = trig;
+	station.model = vis;
+	station.model_name = model_name;
 
 	level.bz_stations[spec.id] = station;
 	level.bz_station_entities[level.bz_station_entities.size] = anchor;
 	level.bz_station_entities[level.bz_station_entities.size] = trig;
+	if ( IsDefined( vis ) )
+	{
+		level.bz_station_entities[level.bz_station_entities.size] = vis;
+	}
+
+	model_label = model_name;
+	if ( model_label == "" )
+	{
+		model_label = "none";
+	}
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "map", map_name );
@@ -467,6 +575,7 @@ bz_stations_spawn_one( map_name, spec )
 	fields[4] = maps\_bz_log::kv( "y", Int( pos[1] ) );
 	fields[5] = maps\_bz_log::kv( "z", Int( pos[2] ) );
 	fields[6] = maps\_bz_log::kv( "paired_native", maps\_bz_hooks::bz_bool_int( spec.paired_with_native_pap ) );
+	fields[7] = maps\_bz_log::kv( "model", model_label );
 	maps\_bz_log::emit( "STATION_SPAWN", maps\_bz_log::join_fields( fields ) );
 
 	station thread bz_station_trigger_think();

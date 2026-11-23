@@ -174,10 +174,14 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         for sid in EXPECTED_STATION_IDS:
             self.assertIsNot(stations[sid], UNDEFINED, f"Station {sid} did not spawn")
 
-        # 4 stations x (script_origin + trigger_radius) = 8 lightweight entities, zero FX
-        self.assertEqual(len(self.gsc.spawned_entities), 8)
+        # 4 stations x (script_origin + trigger_radius + visible script_model) = 12 lightweight entities, zero FX
+        self.assertEqual(len(self.gsc.spawned_entities), 12)
         triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
+        models = [e for e in self.gsc.spawned_entities if e.classname == "script_model"]
         self.assertEqual(len(triggers), 4)
+        self.assertEqual(len(models), 4)
+        for mdl in models:
+            self.assertTrue(bool(mdl.get_field("model")))
         for trig in triggers:
             self.assertEqual(trig.cursor_hint, "HINT_NOICON")
             self.assertIn("&&1", trig.hint_string)
@@ -205,7 +209,7 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         self.assertIs(stations["class"], UNDEFINED)
         self.assertIs(stations["arsenal"], UNDEFINED)
         self.assertIs(stations["pap"], UNDEFINED)
-        self.assertEqual(len(self.gsc.spawned_entities), 2)
+        self.assertEqual(len(self.gsc.spawned_entities), 3)
 
         # Arsenal opens if reserved elements or companions gate is enabled even with pap=0
         dvars2 = FakeDvarStore()

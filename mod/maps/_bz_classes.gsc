@@ -35,6 +35,7 @@ bz_classes_register()
 	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_classes_on_actor_damage, "classes" );
 	maps\_bz_hooks::bz_register_hook( "points_modify", ::bz_classes_on_points_modify, "classes" );
 	maps\_bz_hooks::bz_register_hook( "box_cost_modify", ::bz_classes_on_box_cost_modify, "classes" );
+	maps\_bz_hooks::bz_register_hook( "wall_buy", ::bz_classes_on_wall_buy, "classes" );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +243,11 @@ bz_class_update_hud( player )
 		hud.alpha = 0.92;
 		player.bz_class_hud = hud;
 		player.bz_class_hud_text = "";
+		if ( !IsDefined( level.bz_class_hud_elems ) )
+		{
+			level.bz_class_hud_elems = [];
+		}
+		level.bz_class_hud_elems[level.bz_class_hud_elems.size] = hud;
 	}
 
 	if ( player.bz_class_hud_text != badge_text )
@@ -263,8 +269,19 @@ bz_class_destroy_hud( player )
 	destroyed = false;
 	if ( IsDefined( player.bz_class_hud ) )
 	{
-		player.bz_class_hud Destroy();
+		hud = player.bz_class_hud;
 		player.bz_class_hud = undefined;
+		if ( IsDefined( level.bz_class_hud_elems ) )
+		{
+			for ( i = 0; i < level.bz_class_hud_elems.size; i++ )
+			{
+				if ( IsDefined( level.bz_class_hud_elems[i] ) && level.bz_class_hud_elems[i] == hud )
+				{
+					level.bz_class_hud_elems[i] = undefined;
+				}
+			}
+		}
+		hud Destroy();
 		destroyed = true;
 	}
 	player.bz_class_hud_text = "";
@@ -290,6 +307,7 @@ bz_classes_init()
 
 	level.bz_class_traps = [];
 	level.bz_sapper_wall_cooldowns = [];
+	level.bz_class_hud_elems = [];
 }
 
 bz_classes_on_player_connect( player )
@@ -466,6 +484,19 @@ bz_classes_on_end_game()
 		level.bz_class_traps = [];
 	}
 
+	if ( IsDefined( level.bz_class_hud_elems ) )
+	{
+		for ( i = 0; i < level.bz_class_hud_elems.size; i++ )
+		{
+			elem = level.bz_class_hud_elems[i];
+			if ( IsDefined( elem ) )
+			{
+				elem Destroy();
+			}
+		}
+		level.bz_class_hud_elems = [];
+	}
+
 	level.bz_sapper_wall_cooldowns = [];
 	level.bz_classes_initialized = false;
 }
@@ -620,7 +651,6 @@ bz_class_apply( player, class_id )
 		player.bz_max_grenades = max_nades;
 		bz_sapper_set_grenades( player, max_nades );
 		player thread bz_sapper_grenade_watch();
-		player thread bz_sapper_wall_buy_watch();
 	}
 	else if ( id == "daredevil" )
 	{
@@ -754,26 +784,7 @@ bz_medic_is_instant_revive( player )
 
 bz_medic_get_revive_time( player, base_time )
 {
-	t_base = 3.0;
-	if ( IsDefined( base_time ) && base_time > 0.0 )
-	{
-		t_base = base_time;
-	}
-	if ( !IsDefined( player ) )
-	{
-		return t_base;
-	}
-
-	has_qr = bz_medic_player_has_quick_revive( player );
-	has_qr2 = maps\_bz_state::bz_state_has_perk_t2( player, "quick_revive" );
-	class_id = maps\_bz_state::bz_state_get_class( player );
-
-	res = maps\_bz_rules::bz_calc_revive_time( t_base, has_qr, has_qr2, class_id );
-	if ( res <= 0.0 )
-	{
-		return 0.05;
-	}
-	return res;
+	return maps\_bz_hooks::bz_get_revive_time( player, base_time );
 }
 
 bz_medic_sync_revive_state( player )
@@ -782,7 +793,7 @@ bz_medic_sync_revive_state( player )
 	{
 		return;
 	}
-	player.bz_revive_time = bz_medic_get_revive_time( player, 3.0 );
+	player.bz_revive_time = maps\_bz_hooks::bz_get_revive_time( player, 3.0 );
 	player.bz_instant_revive = bz_medic_is_instant_revive( player );
 }
 
@@ -1370,7 +1381,7 @@ bz_sapper_track_thrown_grenade( grenade )
 	}
 }
 
-bz_sapper_get_round_safe()
+bz_classes_get_round_safe()
 {
 	if ( IsDefined( level.bz_current_round ) && Int( level.bz_current_round ) > 0 )
 	{
@@ -1381,6 +1392,19 @@ bz_sapper_get_round_safe()
 		return Int( level.round_number );
 	}
 	return 1;
+}
+
+bz_classes_on_wall_buy( player, weapon_name, origin, is_ammo )
+{
+	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	{
+		return undefined;
+	}
+	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	{
+		return undefined;
+	}
+	return bz_sapper_on_wall_buy( player, weapon_name, origin );
 }
 
 bz_sapper_on_wall_buy( player, wall_id, origin )
@@ -1447,7 +1471,7 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	anchor = Spawn( "script_origin", pos );
 	level.bz_class_traps[level.bz_class_traps.size] = anchor;
 
-	r = bz_sapper_get_round_safe();
+	r = bz_classes_get_round_safe();
 	trap = SpawnStruct();
 	trap.owner = player;
 	trap.wall_id = wid;
@@ -1745,7 +1769,7 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 		return undefined;
 	}
 
-	round_num = bz_sapper_get_round_safe();
+	round_num = bz_classes_get_round_safe();
 	slam_dmg = maps\_bz_rules::bz_calc_flopper_slam_damage( fall_height, round_num );
 	slam_radius = maps\_bz_rules::bz_calc_flopper_slam_radius( fall_height );
 	if ( slam_dmg <= 0 || slam_radius <= 0 )

@@ -100,6 +100,38 @@ ADD_PLAYER_SCORE_DEF_RE = re.compile(
     r"^add_to_player_score\([ \t]*(?P<param>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*\r?\n\{",
     re.MULTILINE,
 )
+PLAYER_ADD_POINTS_SCORE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self\.score[ \t]*\+=[ \t]*points;(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+SCORE_INSTA_KILL_RE = re.compile(
+    r'if\([ \t]*level\.zombie_vars\["zombie_powerup_insta_kill_on"\][ \t]*==[ \t]*1[ \t]*&&[ \t]*mod[ \t]*==[ \t]*"MOD_UNKNOWN"[ \t]*\)'
+)
+SCORE_DLC3_ACHIEVEMENT_RE = re.compile(
+    r'^[ \t]*self[ \t]+achievement_notify\([^\n]*\);[ \t]*\r?$',
+    re.MULTILINE,
+)
+WALL_WEAPON_GIVE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)player[ \t]+weapon_give\([ \t]*self\.zombie_weapon_upgrade[ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+WALL_AMMO_GIVEN_RE = re.compile(
+    r"^(?P<indent>[ \t]*)if\([ \t]*ammo_given[ \t]*\)[ \t]*\r?\n(?P=indent)\{",
+    re.MULTILINE,
+)
+LASTSTAND_REVIVE_TIME_RE = re.compile(
+    r"^(?P<indent>[ \t]*)reviveTime[ \t]*=[ \t]*3;[ \t]*\r?"
+    r'(?:(?:\r?\n[ \t]*)*if[ \t]*\([ \t]*self[ \t]+HasPerk\([ \t]*"specialty_quickrevive"[ \t]*\)[ \t]*\)[ \t]*\r?\n[ \t]*\{[ \t]*\r?\n[ \t]*reviveTime[ \t]*=[ \t]*reviveTime[ \t]*/[ \t]*2;[ \t]*\r?\n[ \t]*\}[ \t]*\r?)?',
+    re.MULTILINE,
+)
+LASTSTAND_REVIVE_SUCCESS_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+reviveplayer\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+LASTSTAND_ALL_DOWN_RE = re.compile(
+    r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*player_all_players_in_laststand\([ \t]*\)[ \t]*\)",
+    re.MULTILINE,
+)
 
 
 def extract_rawfile_from_ff(ff_path: Path, rawfile_name: str) -> bytes:
@@ -406,8 +438,9 @@ def _replace_weapon_cap_checks(text: str) -> tuple[str, int]:
 
 
 def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
-    """Patch stock _zombiemode_weapons.gsc with dynamic weapon caps and Mystery Box cost hook."""
+    """Patch stock _zombiemode_weapons.gsc with dynamic weapon caps, Mystery Box cost, and wall-buy hooks."""
     text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
     text, cap_count = _replace_weapon_cap_checks(text)
     if cap_count == 0:
         raise ValueError(
@@ -427,6 +460,31 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
         ),
         text,
     )
+
+    # Inject guarded wall-buy weapon purchase hook (Sapper Wall-Buy Traps)
+    def _inject_wall_weapon(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) "
+            f"{{ maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, false ); }}{ending}"
+        )
+
+    text = WALL_WEAPON_GIVE_RE.sub(_inject_wall_weapon, text)
+
+    # Inject guarded wall-buy ammo purchase hook (Double Ammo 2x refill + Sapper Wall-Buy Traps)
+    def _inject_wall_ammo(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        orig = match.group(0)
+        return (
+            f"{orig}{newline}"
+            f"{indent}\tif ( maps\\_bz_hooks::bz_enabled() ) "
+            f"{{ maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, true ); }}"
+        )
+
+    text = WALL_AMMO_GIVEN_RE.sub(_inject_wall_ammo, text)
     return text.encode("latin1")
 
 
@@ -482,9 +540,22 @@ def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
 
 
 def inject_zombiemode_score_hooks(script_bytes: bytes) -> bytes:
-    """Patch stock _zombiemode_score.gsc add_to_player_score() with guarded bz_points_modify."""
+    """Patch stock _zombiemode_score.gsc with guarded bz_points_modify on all point awards."""
     text = script_bytes.decode("latin1")
     newline = "\r\n" if "\r\n" in text else "\n"
+
+    # Guard DLC3-only zombie_powerup_insta_kill_on and omit DLC3-only achievement_notify
+    # so the unified _zombiemode_score.gsc compiles and runs cleanly across all 4 stock maps.
+    text = SCORE_INSTA_KILL_RE.sub(
+        'if( IsDefined( level.zombie_vars["zombie_powerup_insta_kill_on"] ) && level.zombie_vars["zombie_powerup_insta_kill_on"] == 1 && mod == "MOD_UNKNOWN" )',
+        text,
+    )
+    text = SCORE_DLC3_ACHIEVEMENT_RE.sub(
+        "\t\t\t\t// DLC3 achievement_notify omitted for 4-map stock parity",
+        text,
+    )
+
+    # 1. Hook add_to_player_score( cost ) for repair/carpenter/revive/scripted point awards
     match = ADD_PLAYER_SCORE_DEF_RE.search(text)
     if match is None:
         raise ValueError("Could not locate add_to_player_score( points ) in _zombiemode_score.gsc")
@@ -497,11 +568,81 @@ def inject_zombiemode_score_hooks(script_bytes: bytes) -> bytes:
         f"\t}}"
     )
     text = text[: match.end()] + hook + text[match.end() :]
+
+    # 2. Hook player_add_points() right before `self.score += points;` for hit & kill awards
+    def _inject_player_add_points(m: re.Match[str]) -> str:
+        indent = m.group("indent")
+        orig = m.group(0)
+        return (
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+            f"{indent}{{{newline}"
+            f"{indent}\tpoints = maps\\_bz_hooks::bz_points_modify( self, points, event );{newline}"
+            f"{indent}}}{newline}"
+            f"{orig}"
+        )
+
+    text = PLAYER_ADD_POINTS_SCORE_RE.sub(_inject_player_add_points, text, count=1)
+    return text.encode("latin1")
+
+
+def inject_laststand_hooks(script_bytes: bytes) -> bytes:
+    """Patch stock _laststand.gsc with unified revive speed, QR II invuln, and Solo extra revive."""
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    # 1. Unified revive timing in revive_do_revive() (Quick Revive I/II + Field Medic)
+    rev_match = LASTSTAND_REVIVE_TIME_RE.search(text)
+    if rev_match is None:
+        raise ValueError("Could not locate reviveTime = 3; in _laststand.gsc")
+    rev_indent = rev_match.group("indent")
+    rev_orig = rev_match.group(0).rstrip("\r")
+    rev_ending = "\r" if rev_match.group(0).endswith("\r") else ""
+    rev_hook = (
+        f"{rev_orig}{newline}"
+        f"{rev_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{rev_indent}{{{newline}"
+        f"{rev_indent}\treviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );{newline}"
+        f"{rev_indent}}}{rev_ending}"
+    )
+    text = text[: rev_match.start()] + rev_hook + text[rev_match.end() :]
+
+    # 2. Post-revive invulnerability hook in revive_success( reviver )
+    succ_match = LASTSTAND_REVIVE_SUCCESS_RE.search(text)
+    if succ_match is None:
+        raise ValueError("Could not locate self reviveplayer(); in _laststand.gsc")
+    succ_indent = succ_match.group("indent")
+    succ_orig = succ_match.group(0).rstrip("\r")
+    succ_ending = "\r" if succ_match.group(0).endswith("\r") else ""
+    succ_hook = (
+        f"{succ_orig}{newline}"
+        f"{succ_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{succ_indent}{{{newline}"
+        f"{succ_indent}\tmaps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );{newline}"
+        f"{succ_indent}}}{succ_ending}"
+    )
+    text = text[: succ_match.start()] + succ_hook + text[succ_match.end() :]
+
+    # 3. Solo extra revive hook in PlayerLastStand() before mission fail check
+    all_match = LASTSTAND_ALL_DOWN_RE.search(text)
+    if all_match is None:
+        raise ValueError("Could not locate player_all_players_in_laststand() check in _laststand.gsc")
+    all_indent = all_match.group("indent")
+    solo_hook = (
+        f"{all_indent}if ( maps\\_bz_hooks::bz_enabled() && GetPlayers().size == 1 && maps\\_bz_perks::bz_perks_try_consume_solo_revive( self ) ){newline}"
+        f"{all_indent}{{{newline}"
+        f"{all_indent}\tself.health = self.maxhealth;{newline}"
+        f"{all_indent}\tmaps\\_bz_perks::bz_perks_apply_revive_completed( self, self );{newline}"
+        f"{all_indent}\treturn;{newline}"
+        f"{all_indent}}}{newline}"
+        f"{all_match.group(0)}"
+    )
+    text = text[: all_match.start()] + solo_hook + text[all_match.end() :]
+
     return text.encode("latin1")
 
 
 def generate_staged_mod_csv(base_csv_text: str, staged_gsc_relpaths: list[str]) -> str:
-    """Ensure mod.csv includes all staged _bz_*.gsc and per-map BZ wrapper scripts without duplicates."""
+    """Ensure mod.csv includes all staged _bz_*.gsc and BZ-patched stock scripts without duplicates."""
     newline = "\r\n" if "\r\n" in base_csv_text else "\n"
     existing_lines = {line.strip().lower() for line in base_csv_text.splitlines()}
     additions: list[str] = []
@@ -512,6 +653,7 @@ def generate_staged_mod_csv(base_csv_text: str, staged_gsc_relpaths: list[str]) 
             stem.startswith("_bz_")
             or stem.startswith("_zombiemode_weapons_bz_")
             or stem.startswith("_zombiemode_perks_bz_")
+            or stem in ("_zombiemode_score.gsc", "_laststand.gsc")
         )
         if not is_bz_script:
             continue
@@ -537,10 +679,14 @@ def patch_main_menu_bz(source: str) -> str:
     newline = "\r\n" if "\r\n" in source else "\n"
     text = source
 
-    # 1. Ensure LOCAL_ZOMBIE_RESET resets bz_enabled to 0 alongside gauntlet_enabled 0
+    # 1. Ensure LOCAL_ZOMBIE_RESET resets all 6 bz_*_enabled gates to 0 alongside gauntlet_enabled 0
     if "set bz_enabled 0" not in text:
         reset_re = re.compile(r'(set gauntlet_enabled 0)";')
-        new_text, count = reset_re.subn(r'\1; set bz_enabled 0";', text, count=1)
+        new_text, count = reset_re.subn(
+            r'\1; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0";',
+            text,
+            count=1,
+        )
         if count != 1:
             raise ValueError("Could not locate LOCAL_ZOMBIE_RESET gauntlet_enabled reset in ui/main.menu")
         text = new_text
@@ -569,20 +715,27 @@ def patch_levels_menu_bz(source: str) -> str:
     newline = "\r\n" if "\r\n" in source else "\n"
     text = source
 
-    # 1. Ensure Classic Solo Nazi Zombies map entries explicitly set bz_enabled "0"
+    # 1. Ensure Classic Solo Nazi Zombies map entries explicitly zero all 6 bz_*_enabled gates
     if 'setdvar bz_enabled "0"' not in text:
         gauntlet_zero_re = re.compile(
             r'(setdvar gauntlet_enabled "0";[ \t]*\\\r?\n)',
             re.MULTILINE,
         )
         new_text, count = gauntlet_zero_re.subn(
-            rf'\1\tsetdvar bz_enabled "0"; \\{newline}', text, count=1
+            rf'\1\tsetdvar bz_enabled "0"; \\{newline}'
+            rf'\tsetdvar bz_perks_enabled "0"; \\{newline}'
+            rf'\tsetdvar bz_classes_enabled "0"; \\{newline}'
+            rf'\tsetdvar bz_pap_enabled "0"; \\{newline}'
+            rf'\tsetdvar bz_elements_enabled "0"; \\{newline}'
+            rf'\tsetdvar bz_companions_enabled "0"; \\{newline}',
+            text,
+            count=1,
         )
         if count != 1:
             raise ValueError("Could not locate gauntlet_enabled reset in ui/levels.menu")
         text = new_text
 
-    # 2. Inject Solo "ENHANCEMENTS" button at slot 6 alongside ZOMBIE GAUNTLET
+    # 2. Inject Solo Enhancements buttons for all 4 Stock Maps at slots 6..9 alongside ZOMBIE GAUNTLET
     if "BZ_SOLO_START_ACTION" not in text:
         gauntlet_lvl_re = re.compile(
             r'^(?P<indent>[ \t]*)ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
@@ -592,12 +745,21 @@ def patch_levels_menu_bz(source: str) -> str:
         if match is None:
             raise ValueError("Could not locate levels_unlock ZOMBIE GAUNTLET entry in ui/levels.menu")
         indent = match.group("indent")
-        bz_entry = (
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS", BZ_SOLO_START_ACTION, '
+        bz_entries = (
+            f'{indent}ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS: DER RIESE", BZ_SOLO_START_ACTION, '
             f'"nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP).", '
-            f'18, exec "set ui_load_index 18" )'
+            f'18, exec "set ui_load_index 18" ){newline}'
+            f'{indent}ZOMBIE_CHOICE_BUTTON( 7, "ENHANCEMENTS: NACHT", BZ_SOLO_START_PROTOTYPE_ACTION, '
+            f'"nazi_zombie_prototype", "Base Zombies Enhancements on Nacht der Untoten (Perks, Classes, PaP).", '
+            f'15, exec "set ui_load_index 15" ){newline}'
+            f'{indent}ZOMBIE_CHOICE_BUTTON( 8, "ENHANCEMENTS: VERRUCKT", BZ_SOLO_START_ASYLUM_ACTION, '
+            f'"nazi_zombie_asylum", "Base Zombies Enhancements on Verruckt (Perks, Classes, PaP).", '
+            f'16, exec "set ui_load_index 16" ){newline}'
+            f'{indent}ZOMBIE_CHOICE_BUTTON( 9, "ENHANCEMENTS: SHI NO NUMA", BZ_SOLO_START_SUMPF_ACTION, '
+            f'"nazi_zombie_sumpf", "Base Zombies Enhancements on Shi No Numa (Perks, Classes, PaP).", '
+            f'17, exec "set ui_load_index 17" )'
         )
-        text = text[: match.end()] + f"{newline}{bz_entry}" + text[match.end() :]
+        text = text[: match.end()] + f"{newline}{bz_entries}" + text[match.end() :]
 
     return text
 
@@ -718,6 +880,26 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
         zm_dst.parent.mkdir(parents=True, exist_ok=True)
         zm_dst.write_bytes(zm_patched_bytes)
+
+    # Stage unified, era-safe patched maps/_zombiemode_score.gsc and maps/_laststand.gsc
+    # from Der Riese (which is a clean superset across all 4 stock maps) so every stock
+    # caller (spawner, powerups, blockers, weapons, perks, dogs) routes through our guarded
+    # Broker score multiplier, unified revive speed, QR II invuln, and Solo extra revive hooks.
+    score_stock = extract_stock_script(
+        "nazi_zombie_factory", "maps/_zombiemode_score.gsc", steam_game, tools_root
+    )
+    score_patched = inject_zombiemode_score_hooks(score_stock)
+    score_dst = stage_dir / "maps" / "_zombiemode_score.gsc"
+    score_dst.parent.mkdir(parents=True, exist_ok=True)
+    score_dst.write_bytes(score_patched)
+
+    laststand_stock = extract_stock_script(
+        "nazi_zombie_factory", "maps/_laststand.gsc", steam_game, tools_root
+    )
+    laststand_patched = inject_laststand_hooks(laststand_stock)
+    laststand_dst = stage_dir / "maps" / "_laststand.gsc"
+    laststand_dst.parent.mkdir(parents=True, exist_ok=True)
+    laststand_dst.write_bytes(laststand_patched)
 
     # Auto-register any tracked _bz_*.gsc and staged per-map BZ wrapper scripts in staged mod.csv
     staged_mod_csv = stage_dir / "mod.csv"

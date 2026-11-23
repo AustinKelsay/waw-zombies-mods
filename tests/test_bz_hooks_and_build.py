@@ -239,6 +239,16 @@ class BzGscParser(Parser):
                         line=target.line,
                     )
                     continue
+                if self.peek(1).kind == "::":
+                    target = self._parse_call_target()
+                    expr = MethodCallExpr(
+                        receiver=expr,
+                        method_name=f"{target.module_path}::{target.func_name}",
+                        args=target.args,
+                        threaded=False,
+                        line=target.line,
+                    )
+                    continue
                 if self.peek(1).kind == "(":
                     method_tok = self.expect("IDENT")
                     args = self.parse_arg_list()
@@ -315,6 +325,7 @@ class BzGscRuntime(GscRuntime):
         self.world_entities: dict[tuple[str, str], list[FakeEntity]] = {}
         self.bullet_trace_fn: Callable[[GscArray, GscArray], dict[str, Any]] | None = None
         self.sim_time_ms: int = 1000
+        self.notifies: list[tuple[Any, str]] = []
 
     def register_py_callback(self, name: str, fn: Callable[..., Any]) -> GscFuncPtr:
         key = name.lower()
@@ -477,10 +488,29 @@ class BzGscRuntime(GscRuntime):
             if expr.threaded:
                 self._threads.append((receiver, expr.method_name, eval_args))
                 return UNDEFINED
-            return self._exec_method(receiver, expr.method_name.lower(), eval_args, expr.line)
+            m_lower = expr.method_name.lower()
+            if "::" not in m_lower and m_lower in self.load_module(mod_key):
+                return self.call_on(receiver, mod_key, m_lower, *eval_args)
+            return self._exec_method(receiver, m_lower, eval_args, expr.line)
         return super()._eval_expr(expr, mod_key, env)
 
     def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
+        if "::" in method:
+            mod_path, fn_name = method.split("::", 1)
+            return self.call_on(receiver, mod_path, fn_name, *args)
+        if method == "setmodel":
+            if isinstance(receiver, FakeEntity):
+                receiver.set_field("model", _waw_to_str(args[0]) if args else "")
+            return UNDEFINED
+        if method == "dodamage":
+            if isinstance(receiver, FakeEntity) and args:
+                dmg = int(args[0])
+                cur_hp = int(receiver.get_field("health")) if receiver.get_field("health") is not UNDEFINED else 100
+                receiver.set_field("health", cur_hp - dmg)
+                if "damage_events" not in receiver.__dict__:
+                    receiver.damage_events = []
+                receiver.damage_events.append((dmg, args[1] if len(args) > 1 else UNDEFINED, args[2] if len(args) > 2 else UNDEFINED))
+            return UNDEFINED
         if method == "setmovespeedscale":
             if not isinstance(receiver, FakeEntity):
                 raise GscRuntimeError(f"line {line}: SetMoveSpeedScale on non-entity {receiver!r}")
@@ -634,7 +664,11 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return receiver.use_pressed
             return False
-        if method in ("endon", "waittill", "notify"):
+        if method == "notify":
+            ev = _waw_to_str(args[0]) if args else ""
+            self.notifies.append((receiver, ev))
+            return UNDEFINED
+        if method in ("endon", "waittill"):
             return UNDEFINED
         raise GscRuntimeError(f"line {line}: unsupported method {method!r} on {receiver!r}")
 
@@ -910,6 +944,102 @@ class TestBzHooksAndComposition(unittest.TestCase):
         )
         self.assertIn("BZ_EVENT|ROUND_START|round=5", self.gsc.emitted_events)
         self.assertIn("BZ_EVENT|END_GAME|map=nazi_zombie_factory", self.gsc.emitted_events)
+        # Fix #6: bz_on_end_game emits level notify("end_game") idempotently after cleanup
+        end_notifies = [ev for target, ev in self.gsc.notifies if target is self.gsc.level and ev == "end_game"]
+        self.assertEqual(len(end_notifies), 1)
+        # Calling bz_on_end_game a second time must be an idempotent noop (no loop / duplicate telemetry)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
+        end_notifies_after = [ev for target, ev in self.gsc.notifies if target is self.gsc.level and ev == "end_game"]
+        self.assertEqual(len(end_notifies_after), 1)
+
+    def test_global_actor_damage_wrapper_applies_extra_damage_with_reentrancy_guard(self) -> None:
+        self._enable_all_phase1()
+        stock_calls: list[str] = []
+        stock_dmg = self.gsc.register_py_callback(
+            "stock_zombie_dmg",
+            lambda _self, mod, *_rest: stock_calls.append(str(mod)),
+        )
+        self.gsc.level.set_field("global_damage_func", stock_dmg)
+        self.gsc.level.set_field("global_damage_func_ads", stock_dmg)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+
+        self.assertTrue(self.gsc.level.get_field("bz_actor_damage_hooked"))
+        self.assertEqual(self.gsc.level.get_field("bz_prev_global_damage_func"), stock_dmg)
+        self.assertEqual(self.gsc.level.get_field("bz_prev_global_damage_func_ads"), stock_dmg)
+
+        # Register 2x multiplier hook on actor_damage
+        def double_dmg(_s: Any, _z: Any, ctx: GscStruct) -> None:
+            ctx.set_field("damage_mult", ctx.get_field("damage_mult") * 2.0)
+
+        self.gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_register_hook",
+            "actor_damage",
+            self.gsc.register_py_callback("double_dmg", double_dmg),
+            "perks",
+        )
+
+        self.zombie.set_field("health", 500)
+        self.zombie.set_field("damagetaken", 100)
+        self.zombie.set_field("damageweapon", "thompson")
+        self.zombie.set_field("origin", GscArray([10, 20, 0]))
+
+        # First call applies stock_dmg + extra 100 damage (200 - 100) via DoDamage
+        self.gsc.call_on(
+            self.zombie,
+            BZ_HOOKS_MOD,
+            "bz_global_damage_wrapper",
+            "MOD_RIFLE_BULLET",
+            "torso_upper",
+            GscArray([10, 20, 0]),
+            self.player,
+            UNDEFINED,
+        )
+        self.assertEqual(stock_calls, ["MOD_RIFLE_BULLET"])
+        self.assertEqual(self.zombie.get_field("health"), 400)
+        self.assertTrue(self.zombie.get_field("bz_in_damage_dispatch"))
+
+        # Re-entrant call triggered by our own DoDamage on the same tick MUST short-circuit
+        self.gsc.call_on(
+            self.zombie,
+            BZ_HOOKS_MOD,
+            "bz_global_damage_wrapper",
+            "MOD_UNKNOWN",
+            "none",
+            GscArray([10, 20, 0]),
+            self.player,
+            UNDEFINED,
+        )
+        self.assertEqual(stock_calls, ["MOD_RIFLE_BULLET"])
+        self.assertEqual(self.zombie.get_field("health"), 400)
+        self.assertFalse(self.zombie.get_field("bz_in_damage_dispatch"))
+
+    def test_wall_buy_and_unified_revive_time_seams(self) -> None:
+        self._enable_all_phase1()
+        seen_walls: list[tuple[str, bool]] = []
+        self.gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_register_hook",
+            "wall_buy",
+            self.gsc.register_py_callback(
+                "wall_cb",
+                lambda _s, _p, w, _o, is_ammo: seen_walls.append((str(w), bool(is_ammo))),
+            ),
+            "perks",
+        )
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_wall_buy", self.player, "thompson", GscArray([0, 0, 0]), True)
+        self.assertEqual(seen_walls, [("thompson", True)])
+
+        # Unified revive time: vanilla 3.0s -> QR I 1.5s -> QR II 0.9s -> Field Medic + QR 0.05s
+        self.assertAlmostEqual(self.gsc.call(BZ_HOOKS_MOD, "bz_get_revive_time", self.player, 3.0), 3.0)
+        self.player.give_perk("specialty_quickrevive")
+        self.assertAlmostEqual(self.gsc.call(BZ_HOOKS_MOD, "bz_get_revive_time", self.player, 3.0), 1.5)
+        self.gsc.call("maps\\_bz_state", "bz_state_ensure_init", self.player)
+        self.player.get_field("bz_perks").set_item("quick_revive", True)
+        self.player.get_field("bz_perks_t2").set_item("quick_revive", True)
+        self.assertAlmostEqual(self.gsc.call(BZ_HOOKS_MOD, "bz_get_revive_time", self.player, 3.0), 0.9)
+        self.player.set_field("bz_class", "medic")
+        self.assertAlmostEqual(self.gsc.call(BZ_HOOKS_MOD, "bz_get_revive_time", self.player, 3.0), 0.05)
 
     def test_max_primary_weapons_supports_mule_kick_1_and_2_and_respects_perks_gate(self) -> None:
         self._enable_all_phase1()
@@ -1221,6 +1351,11 @@ class TestBzHooksAndComposition(unittest.TestCase):
             "bz_points_modify",
             "bz_box_cost_modify",
             "bz_on_menu_response",
+            "bz_on_wall_buy",
+            "bz_get_revive_time",
+            "bz_install_actor_damage_hooks",
+            "bz_global_damage_wrapper",
+            "bz_global_damage_ads_wrapper",
             "bz_recompute_player_speed",
             "bz_recompute_player_max_health",
         }
@@ -1463,6 +1598,91 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("rawfile,maps/_zombiemode_weapons_bz_factory.gsc", staged)
         self.assertIn("rawfile,maps/_zombiemode_perks_bz_factory.gsc", staged)
 
+        staged_with_score_ls = self.bm.generate_staged_mod_csv(
+            mod_csv,
+            [
+                "maps/_zombiemode_score.gsc",
+                "maps/_laststand.gsc",
+            ],
+        )
+        self.assertIn("rawfile,maps/_zombiemode_score.gsc", staged_with_score_ls)
+        self.assertIn("rawfile,maps/_laststand.gsc", staged_with_score_ls)
+
+    def test_inject_laststand_weapons_wallbuy_and_real_stock_scripts(self) -> None:
+        # Synthetic _laststand.gsc patching
+        synthetic_ls = (
+            "PlayerLastStand()\n"
+            "{\n"
+            "\tif ( player_all_players_in_laststand() )\n"
+            "\t{\n"
+            "\t\treturn;\n"
+            "\t}\n"
+            "}\n"
+            "revive_do_revive( playerBeingRevived, reviverGun )\n"
+            "{\n"
+            "\treviveTime = 3;\n"
+            "\tif ( self HasPerk( \"specialty_quickrevive\" ) )\n"
+            "\t{\n"
+            "\t\treviveTime = reviveTime / 2;\n"
+            "\t}\n"
+            "}\n"
+            "revive_success( reviver )\n"
+            "{\n"
+            "\tself reviveplayer();\n"
+            "}\n"
+        ).encode("latin1")
+        patched_ls = self.bm.inject_laststand_hooks(synthetic_ls).decode("latin1")
+        self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", patched_ls)
+        self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", patched_ls)
+        self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", patched_ls)
+
+        # Real installed stock scripts (runs on plebdev-ultra when WaW fastfiles exist)
+        try:
+            ff = self.bm.resolve_stock_ff(
+                "nazi_zombie_factory", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+            )
+        except FileNotFoundError:
+            ff = None
+        if ff is not None:
+            for m in self.bm.STOCK_MAPS:
+                wp = self.bm.extract_stock_script(
+                    m, "maps/_zombiemode_weapons.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+                )
+                wp_patched = self.bm.inject_zombiemode_weapons_hooks(wp).decode("latin1")
+                self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, false )", wp_patched)
+                self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, true )", wp_patched)
+
+            sc = self.bm.extract_stock_script(
+                "nazi_zombie_factory", "maps/_zombiemode_score.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+            )
+            sc_patched = self.bm.inject_zombiemode_score_hooks(sc).decode("latin1")
+            self.assertIn('cost = maps\\_bz_hooks::bz_points_modify( self, cost, "score" );', sc_patched)
+            self.assertIn("points = maps\\_bz_hooks::bz_points_modify( self, points, event );", sc_patched)
+            self.assertIn('IsDefined( level.zombie_vars["zombie_powerup_insta_kill_on"] )', sc_patched)
+            self.assertNotIn("self achievement_notify(", sc_patched)
+
+            ls = self.bm.extract_stock_script(
+                "nazi_zombie_factory", "maps/_laststand.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+            )
+            ls_patched = self.bm.inject_laststand_hooks(ls).decode("latin1")
+            self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", ls_patched)
+            self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", ls_patched)
+            self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", ls_patched)
+
+            # Verify stage_mod_files() stages patched _zombiemode_score.gsc and _laststand.gsc into mod.csv
+            if (self.bm.DEFAULT_TOOLS_ROOT / "raw" / "ui" / "main.menu").is_file():
+                stage_dir = self.bm.stage_mod_files(
+                    tools_root=self.bm.DEFAULT_TOOLS_ROOT,
+                    steam_game=self.bm.DEFAULT_STEAM_GAME,
+                )
+                staged_score = (stage_dir / "maps" / "_zombiemode_score.gsc").read_text(encoding="latin1")
+                staged_ls = (stage_dir / "maps" / "_laststand.gsc").read_text(encoding="latin1")
+                staged_csv = (stage_dir / "mod.csv").read_text(encoding="latin1")
+                self.assertIn("maps\\_bz_hooks::bz_points_modify(", staged_score)
+                self.assertIn("maps\\_bz_hooks::bz_get_revive_time(", staged_ls)
+                self.assertIn("rawfile,maps/_zombiemode_score.gsc", staged_csv)
+                self.assertIn("rawfile,maps/_laststand.gsc", staged_csv)
+
     def test_solo_and_coop_enhancements_menus_are_ascii_balanced_and_preserve_classic_and_gauntlet(self) -> None:
         import tempfile
         from tests.test_gauntlet_hud_menus import (
@@ -1483,16 +1703,23 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             non_ascii = [ch for ch in text if ord(ch) > 126 or (ord(ch) < 32 and ch not in "\t\r\n")]
             self.assertEqual(non_ascii, [], f"Non-ASCII chars in {ui_file.name}: {non_ascii!r}")
 
-        # Verify bz_menus.inc defines Enhancements Solo/Co-op macros
+        # Verify bz_menus.inc defines Enhancements Solo/Co-op macros for all 4 Stock Maps + full Gauntlet reset
         bz_inc = (ui_dir / "bz_menus.inc").read_text(encoding="latin1")
         for token in (
             "BZ_SOLO_START_ACTION",
+            "BZ_SOLO_START_PROTOTYPE_ACTION",
+            "BZ_SOLO_START_ASYLUM_ACTION",
+            "BZ_SOLO_START_SUMPF_ACTION",
+            "GAUNTLET_CLEAR_RUN_STATE_EXEC",
             "set bz_enabled 1",
             "set bz_perks_enabled 1",
             "set bz_classes_enabled 1",
             "set bz_pap_enabled 1",
             "set gauntlet_enabled 0",
             "map nazi_zombie_factory",
+            "map nazi_zombie_prototype",
+            "map nazi_zombie_asylum",
+            "map nazi_zombie_sumpf",
             "BZ_CLASSIC_MODE_ACTION",
             "set bz_enabled 0",
             "BZ_COOP_SETUP_TOGGLE",
@@ -1500,10 +1727,18 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         ):
             self.assertIn(token, bz_inc)
 
-        # Verify Gauntlet Solo & Classic actions explicitly zero bz_enabled
+        # Verify Gauntlet Solo & Classic actions explicitly zero all 6 bz_*_enabled gates
         gauntlet_inc = (ui_dir / "gauntlet_menus.inc").read_text(encoding="latin1")
         self.assertIn('#include "ui/bz_menus.inc"', gauntlet_inc)
-        self.assertIn("set bz_enabled 0", gauntlet_inc)
+        for gate in (
+            "set bz_enabled 0",
+            "set bz_perks_enabled 0",
+            "set bz_classes_enabled 0",
+            "set bz_pap_enabled 0",
+            "set bz_elements_enabled 0",
+            "set bz_companions_enabled 0",
+        ):
+            self.assertIn(gate, gauntlet_inc)
 
         # Verify pc_gamesetup_coop.menu exposes Enhancements toggle without breaking Gauntlet/Classic
         coop_menu = (ui_dir / "pc_gamesetup_coop.menu").read_text(encoding="latin1")
@@ -1543,10 +1778,32 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
 
             self.assertIn("ENHANCEMENTS", patched_main)
             self.assertIn("BZ_SOLO_START_ACTION", patched_main)
-            self.assertIn("set bz_enabled 0", patched_main)
-            self.assertIn("ENHANCEMENTS", patched_levels)
+            for gate in (
+                "set bz_enabled 0",
+                "set bz_perks_enabled 0",
+                "set bz_classes_enabled 0",
+                "set bz_pap_enabled 0",
+                "set bz_elements_enabled 0",
+                "set bz_companions_enabled 0",
+            ):
+                self.assertIn(gate, patched_main)
+            self.assertIn("ENHANCEMENTS: DER RIESE", patched_levels)
+            self.assertIn("ENHANCEMENTS: NACHT", patched_levels)
+            self.assertIn("ENHANCEMENTS: VERRUCKT", patched_levels)
+            self.assertIn("ENHANCEMENTS: SHI NO NUMA", patched_levels)
             self.assertIn("BZ_SOLO_START_ACTION", patched_levels)
-            self.assertIn('setdvar bz_enabled "0"', patched_levels)
+            self.assertIn("BZ_SOLO_START_PROTOTYPE_ACTION", patched_levels)
+            self.assertIn("BZ_SOLO_START_ASYLUM_ACTION", patched_levels)
+            self.assertIn("BZ_SOLO_START_SUMPF_ACTION", patched_levels)
+            for dvar in (
+                'setdvar bz_enabled "0"',
+                'setdvar bz_perks_enabled "0"',
+                'setdvar bz_classes_enabled "0"',
+                'setdvar bz_pap_enabled "0"',
+                'setdvar bz_elements_enabled "0"',
+                'setdvar bz_companions_enabled "0"',
+            ):
+                self.assertIn(dvar, patched_levels)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 

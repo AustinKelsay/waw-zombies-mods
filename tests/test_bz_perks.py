@@ -622,6 +622,13 @@ class TestBzApexPerks(unittest.TestCase):
         self.assertEqual(self.player.weapon_stock["zombie_mg42"], 1000)
         self.assertEqual(self.player.weapon_stock["thompson_upgraded"], 900)
 
+        # Real wall-buy ammo purchase event (bz_on_wall_buy) refills both base & upgraded variant
+        self.player.weapon_stock["thompson"] = 25
+        self.player.weapon_stock["thompson_upgraded"] = 30
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_wall_buy", self.player, "thompson", GscArray([0, 0, 0]), True)
+        self.assertEqual(self.player.weapon_stock["thompson"], 400)
+        self.assertEqual(self.player.weapon_stock["thompson_upgraded"], 900)
+
     def test_lightweight_heavy_compensates_heavy_weapon_without_stomping_staminup_or_daredevil(self) -> None:
         self._buy_perks_menu("buy_perk:staminup")
         self._buy_perks_menu("buy_t2:staminup")
@@ -744,6 +751,25 @@ class TestBzApexPerks(unittest.TestCase):
             z_near1, z_near1, 120, 0, "MOD_MELEE", "none", GscArray([100, 100, 0]), GscArray([-1, 0, 0]), "none", 0, 0,
         )
         self.assertEqual(dmg_recharged, 0)
+
+    def test_second_chance_pushback_clamps_before_wall_via_bullettrace(self) -> None:
+        self._buy_perks_menu("buy_apex:second_chance")
+        z_wall = PerksFakeEntity("z_wall", ent_num=40, is_player=False)
+        z_wall.set_field("origin", GscArray([150, 100, 0]))
+        z_wall.set_field("health", 250)
+        self.gsc.zombies.append(z_wall)
+
+        # Simulate a solid wall halfway along the 96-unit push vector (fraction=0.5 -> safe_frac=0.35 -> +33.6u)
+        self.gsc.bullet_trace_fn = lambda s, e: {"fraction": 0.5, "position": e}
+        self.gsc.sim_time_ms = 20000
+        dmg = self.gsc.call_on(
+            self.player, BZ_HOOKS_MOD, "bz_player_damage_override",
+            z_wall, z_wall, 150, 0, "MOD_MELEE", "none", GscArray([100, 100, 0]), GscArray([-1, 0, 0]), "none", 0, 0,
+        )
+        self.assertEqual(dmg, 0)
+        pushed_x = float(z_wall.get_field("origin")[0])
+        self.assertAlmostEqual(pushed_x, 150.0 + 96.0 * 0.35, places=3)
+        self.assertLess(pushed_x, 150.0 + 96.0 * 0.5)
 
     def test_blast_shield_blocks_all_self_explosive_splash_fire_and_fall_without_wasting_second_chance(self) -> None:
         self._buy_perks_menu("buy_apex:blast_shield")

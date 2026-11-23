@@ -269,6 +269,7 @@ bz_init()
 		return;
 	}
 	level.bz_initialized = true;
+	level.bz_end_game_notified = false;
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
@@ -284,6 +285,10 @@ bz_init()
 		level.overridePlayerDamage = ::bz_player_damage_override;
 		level.bz_player_damage_hooked = true;
 	}
+
+	// Chain stock zombie actor damage callbacks (level.global_damage_func & _ads)
+	// across all 4 stock maps without missing stock symbols.
+	bz_install_actor_damage_hooks();
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
@@ -516,6 +521,12 @@ bz_on_end_game()
 		return;
 	}
 
+	if ( IsDefined( level.bz_end_game_notified ) && level.bz_end_game_notified )
+	{
+		return;
+	}
+	level.bz_end_game_notified = true;
+
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
 	maps\_bz_log::emit( "END_GAME", maps\_bz_log::join_fields( fields ) );
@@ -532,6 +543,11 @@ bz_on_end_game()
 			}
 		}
 	}
+
+	// Emit level notify("end_game") AFTER cleanup and telemetry so Nacht,
+	// Verruckt, and Shi No Numa terminate all `level endon("end_game")` child
+	// threads cleanly without aborting cleanup early.
+	level notify( "end_game" );
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +679,115 @@ bz_player_damage_override( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeat
 // ---------------------------------------------------------------------------
 // Zombie Actor Damage Dispatch Seam (AP, DT II, Titan, Assassin, Double PaP, Melee)
 // ---------------------------------------------------------------------------
+
+bz_install_actor_damage_hooks()
+{
+	if ( !bz_enabled() )
+	{
+		return;
+	}
+
+	if ( !IsDefined( level.bz_actor_damage_hooked ) || !level.bz_actor_damage_hooked )
+	{
+		if ( IsDefined( level.global_damage_func ) && level.global_damage_func != ::bz_global_damage_wrapper )
+		{
+			level.bz_prev_global_damage_func = level.global_damage_func;
+		}
+		level.global_damage_func = ::bz_global_damage_wrapper;
+
+		if ( IsDefined( level.global_damage_func_ads ) && level.global_damage_func_ads != ::bz_global_damage_ads_wrapper )
+		{
+			level.bz_prev_global_damage_func_ads = level.global_damage_func_ads;
+		}
+		level.global_damage_func_ads = ::bz_global_damage_ads_wrapper;
+
+		level.bz_actor_damage_hooked = true;
+	}
+}
+
+bz_global_damage_wrapper( mod, hit_location, hit_origin, player, is_dog )
+{
+	self bz_handle_global_actor_damage( level.bz_prev_global_damage_func, mod, hit_location, hit_origin, player, is_dog );
+}
+
+bz_global_damage_ads_wrapper( mod, hit_location, hit_origin, player )
+{
+	self bz_handle_global_actor_damage( level.bz_prev_global_damage_func_ads, mod, hit_location, hit_origin, player, undefined );
+}
+
+bz_handle_global_actor_damage( prev_cb, mod, hit_location, hit_origin, player, is_dog )
+{
+	// Guard against re-entrant DoDamage triggered by our own bonus damage application.
+	if ( IsDefined( self ) && IsDefined( self.bz_in_damage_dispatch ) && self.bz_in_damage_dispatch )
+	{
+		if ( !IsDefined( self.bz_damage_dispatch_time ) || ( GetTime() - self.bz_damage_dispatch_time ) <= 100 )
+		{
+			self.bz_in_damage_dispatch = false;
+			return;
+		}
+		self.bz_in_damage_dispatch = false;
+	}
+
+	if ( IsDefined( prev_cb ) )
+	{
+		if ( IsDefined( is_dog ) )
+		{
+			self [[ prev_cb ]]( mod, hit_location, hit_origin, player, is_dog );
+		}
+		else
+		{
+			self [[ prev_cb ]]( mod, hit_location, hit_origin, player );
+		}
+	}
+
+	if ( !bz_enabled() || !IsDefined( self ) || !IsAlive( self ) || !IsDefined( player ) || !IsPlayer( player ) )
+	{
+		return;
+	}
+
+	base_dmg = 0;
+	if ( IsDefined( self.damagetaken ) && Int( self.damagetaken ) > 0 )
+	{
+		base_dmg = Int( self.damagetaken );
+	}
+	else if ( IsDefined( mod ) && tolower( "" + mod ) == "mod_melee" )
+	{
+		base_dmg = 150;
+	}
+	else
+	{
+		base_dmg = 50;
+	}
+
+	weap = "";
+	if ( IsDefined( self.damageweapon ) && self.damageweapon != "" )
+	{
+		weap = self.damageweapon;
+	}
+	else
+	{
+		weap = player GetCurrentWeapon();
+	}
+
+	origin = hit_origin;
+	if ( !IsDefined( origin ) && IsDefined( self.origin ) )
+	{
+		origin = self.origin;
+	}
+	if ( !IsDefined( origin ) )
+	{
+		origin = ( 0, 0, 0 );
+	}
+
+	final_dmg = bz_actor_damage_dispatch( self, player, player, base_dmg, 0, mod, weap, origin, ( 0, 0, 0 ), hit_location, 0 );
+	extra = Int( final_dmg ) - Int( base_dmg );
+	if ( extra > 0 && IsDefined( self ) && IsAlive( self ) )
+	{
+		self.bz_in_damage_dispatch = true;
+		self.bz_damage_dispatch_time = GetTime();
+		self DoDamage( extra, origin, player );
+	}
+}
 
 bz_actor_damage_dispatch( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, psOffsetTime )
 {
@@ -857,6 +982,70 @@ bz_on_item_purchased( player, category, item_id, result, weapon_name )
 			}
 		}
 	}
+}
+
+// Dispatches real wall-buy weapon and ammo purchases from _zombiemode_weapons.gsc
+// to Double Ammo (2x wall ammo refill) and Sapper (Wall-Buy Traps).
+bz_on_wall_buy( player, weapon_name, origin, is_ammo )
+{
+	if ( !bz_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	ammo_flag = ( IsDefined( is_ammo ) && is_ammo );
+	entries = get_hook_entries( "wall_buy" );
+	if ( IsDefined( entries ) )
+	{
+		for ( i = 0; i < entries.size; i++ )
+		{
+			entry = entries[i];
+			if ( bz_is_gate_open( entry.gate ) )
+			{
+				[[ entry.fn ]]( player, weapon_name, origin, ammo_flag );
+			}
+		}
+	}
+}
+
+// Unified revive time query (Quick Revive I/II + Field Medic instant/2x) used
+// by patched _laststand.gsc as well as _bz_perks and _bz_classes.
+bz_get_revive_time( reviver, base_time )
+{
+	t_base = 3.0;
+	if ( IsDefined( base_time ) && base_time > 0.0 )
+	{
+		t_base = base_time;
+	}
+	if ( !bz_enabled() || !IsDefined( reviver ) )
+	{
+		return t_base;
+	}
+
+	has_qr = false;
+	has_qr2 = false;
+	if ( bz_perks_enabled() )
+	{
+		has_qr = maps\_bz_state::bz_state_has_perk( reviver, "quick_revive" ) || reviver HasPerk( "specialty_quickrevive" );
+		has_qr2 = maps\_bz_state::bz_state_has_perk_t2( reviver, "quick_revive" );
+	}
+	else if ( reviver HasPerk( "specialty_quickrevive" ) )
+	{
+		has_qr = true;
+	}
+
+	class_id = "";
+	if ( bz_classes_enabled() )
+	{
+		class_id = maps\_bz_state::bz_state_get_class( reviver );
+	}
+
+	res = maps\_bz_rules::bz_calc_revive_time( t_base, has_qr, has_qr2, class_id );
+	if ( res <= 0.0 )
+	{
+		return 0.05;
+	}
+	return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -1144,8 +1333,6 @@ bz_selftest_check( st, ok, label )
 
 bz_run_test_selftest()
 {
-	level endon( "end_game" );
-
 	if ( !bz_enabled() || GetDvarInt( "bz_test_selftest" ) != 1 )
 	{
 		return;
@@ -1191,13 +1378,26 @@ bz_run_test_selftest()
 
 	map_name = bz_get_map_name();
 
-	// 1. All 4 Stations spawned
+	// 1. All 4 Stations spawned with visible precached stock models
 	stations_ok = IsDefined( level.bz_stations ) &&
 		IsDefined( level.bz_stations["perks"] ) &&
 		IsDefined( level.bz_stations["class"] ) &&
 		IsDefined( level.bz_stations["arsenal"] ) &&
-		IsDefined( level.bz_stations["pap"] );
+		IsDefined( level.bz_stations["pap"] ) &&
+		IsDefined( level.bz_stations["perks"].model ) &&
+		IsDefined( level.bz_stations["class"].model ) &&
+		IsDefined( level.bz_stations["arsenal"].model ) &&
+		IsDefined( level.bz_stations["pap"].model );
 	bz_selftest_check( st, stations_ok, "stations_spawned" );
+
+	// 1b. Actor damage hook wired onto stock level.global_damage_func & _ads
+	actor_hook_ok = IsDefined( level.bz_actor_damage_hooked ) &&
+		level.bz_actor_damage_hooked &&
+		IsDefined( level.global_damage_func ) &&
+		level.global_damage_func == ::bz_global_damage_wrapper &&
+		IsDefined( level.global_damage_func_ads ) &&
+		level.global_damage_func_ads == ::bz_global_damage_ads_wrapper;
+	bz_selftest_check( st, actor_hook_ok, "actor_damage_hooked" );
 
 	// Grant ample test points for full Station purchase sweep
 	p.score = 300000;
@@ -1246,7 +1446,9 @@ bz_run_test_selftest()
 
 	// 3. Class Altar: Swap across all 6 Classes
 	bz_on_menu_response( p, "bz_station_class", "buy_class:medic" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "medic", "class_medic" );
+	p SetPerk( "specialty_quickrevive" );
+	medic_rev_time = bz_get_revive_time( p, 3.0 );
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "medic" && medic_rev_time <= 0.1, "class_medic" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
 	titan_hp = Int( p.maxhealth );
@@ -1261,7 +1463,23 @@ bz_run_test_selftest()
 		p SetWeaponAmmoClip( "stielhandgranate", sapper_clip - 1 );
 	}
 	sapper_after_throw = maps\_bz_classes::bz_sapper_on_grenade_thrown( p, "stielhandgranate" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "sapper" && sapper_nades == 10 && sapper_after_throw == 9 && Int( p.maxhealth ) == 220, "class_sapper_10nades" );
+	traps_before = 0;
+	if ( IsDefined( level.bz_class_traps ) )
+	{
+		traps_before = level.bz_class_traps.size;
+	}
+	wall_weap = p GetCurrentWeapon();
+	if ( !IsDefined( wall_weap ) || wall_weap == "" || wall_weap == "none" )
+	{
+		wall_weap = "zombie_colt";
+	}
+	bz_on_wall_buy( p, wall_weap, p.origin, true );
+	traps_after = 0;
+	if ( IsDefined( level.bz_class_traps ) )
+	{
+		traps_after = level.bz_class_traps.size;
+	}
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "sapper" && sapper_nades == 10 && sapper_after_throw == 9 && Int( p.maxhealth ) == 220 && traps_after > traps_before, "class_sapper_10nades" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:daredevil" );
 	dd_fall = p bz_player_damage_override( undefined, undefined, 150, 0, "MOD_FALLING", "none", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
@@ -1281,6 +1499,7 @@ bz_run_test_selftest()
 	hs_dmg = bz_actor_damage_dispatch( undefined, p, p, 100, 0, "MOD_HEAD_SHOT", p GetCurrentWeapon(), p.origin, ( 0, 0, 0 ), "head", 0 );
 
 	// Wait briefly for a real live Der Riese zombie to verify SetContents(0) + restore
+	// AND live actor damage dispatch via bz_global_damage_wrapper
 	ghost_z = undefined;
 	z_wait = 0.0;
 	while ( !IsDefined( ghost_z ) && z_wait < 8.0 )
@@ -1305,6 +1524,7 @@ bz_run_test_selftest()
 	}
 
 	ghost_ok = false;
+	live_actor_dmg_ok = false;
 	if ( IsDefined( ghost_z ) )
 	{
 		maps\_bz_classes::bz_assassin_acquire_ghost_on_zombie( p, ghost_z );
@@ -1312,13 +1532,24 @@ bz_run_test_selftest()
 		maps\_bz_classes::bz_assassin_restore_all_zombies( p );
 		was_restored = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 0 && !IsDefined( ghost_z.bz_orig_contents );
 		ghost_ok = was_ghosted && was_restored;
+
+		// Verify live actor damage wrapper deals extra bonus damage safely with re-entrancy guard
+		ghost_z.maxhealth = 5000;
+		ghost_z.health = 5000;
+		ghost_z bz_global_damage_wrapper( "MOD_HEAD_SHOT", "head", ghost_z.origin, p );
+		wait( 0.1 );
+		live_actor_dmg_ok = IsDefined( ghost_z ) && IsAlive( ghost_z ) && Int( ghost_z.health ) < 5000 && Int( ghost_z.health ) > 0;
 	}
 	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "assassin" && hs_dmg >= 500 && ghost_ok, "class_assassin_ghost" );
+	bz_selftest_check( st, live_actor_dmg_ok, "live_actor_damage_extra" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:broker" );
 	broker_pts = bz_points_modify( p, 100, "score" );
 	broker_box = bz_box_cost_modify( p, 950 );
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475, "class_broker_2x_475" );
+	score_before_live = Int( p.score );
+	p maps\_zombiemode_score::add_to_player_score( 100 );
+	live_score_delta = Int( p.score ) - score_before_live;
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
 
 	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP + PaP Bowie + PaP Cluster
 	bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
