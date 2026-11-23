@@ -22,6 +22,12 @@ STOCK_MAPS = (
     "nazi_zombie_sumpf",
     "nazi_zombie_factory",
 )
+STOCK_MAP_SLUGS = {
+    "nazi_zombie_prototype": "prototype",
+    "nazi_zombie_asylum": "asylum",
+    "nazi_zombie_sumpf": "sumpf",
+    "nazi_zombie_factory": "factory",
+}
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MOD_SRC_DIR = REPO_ROOT / "mod"
@@ -38,7 +44,23 @@ DEFAULT_STEAM_APPDATA = (
 )
 
 ZOMBIEMODE_MAIN_RE = re.compile(
-    r"^(?P<indent>[ \t]*)maps\\_zombiemode::main\([^)]*\);(?P<trailing>[ \t]*)\r?$",
+    r"^(?P<indent>[ \t]*)maps\\_zombiemode::main\((?P<args>[^)]*)\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+ROUND_THINK_CALL_RE = re.compile(
+    r"^(?P<indent>[ \t]*)level[ \t]+thread[ \t]+round_think\(\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+ROUND_WAIT_CALL_RE = re.compile(
+    r"^(?P<indent>[ \t]*)round_wait\(\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+END_GAME_DEF_RE = re.compile(
+    r"^end_game\(\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+INTERMISSION_TRUE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)level\.intermission[ \t]*=[ \t]*true;(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE,
 )
 
@@ -89,8 +111,29 @@ def resolve_stock_ff(map_name: str, steam_game: Path, tools_root: Path, prefer_p
     )
 
 
+def zombiemode_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_gauntlet_{slug}"
+
+
+def extract_stock_zombiemode(map_name: str, steam_game: Path, tools_root: Path) -> bytes:
+    """Extract era-specific stock maps/_zombiemode.gsc, preferring <map>_patch.ff."""
+    rawfile_rel = "maps/_zombiemode.gsc"
+    ff_patch = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=True)
+    try:
+        return extract_rawfile_from_ff(ff_patch, rawfile_rel)
+    except ValueError:
+        ff_base = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
+        if ff_base == ff_patch:
+            raise
+        return extract_rawfile_from_ff(ff_base, rawfile_rel)
+
+
 def inject_map_hooks(script_bytes: bytes, map_name: str) -> bytes:
-    """Inject pre/post Gauntlet bootstrap hooks around maps\\_zombiemode::main(...)."""
+    """Inject Gauntlet bootstrap hooks and rewire maps\\_zombiemode::main(...) to per-map wrapper."""
     text = script_bytes.decode("latin1")
     newline = "\r\n" if "\r\n" in text else "\n"
     matches = list(ZOMBIEMODE_MAIN_RE.finditer(text))
@@ -102,19 +145,113 @@ def inject_map_hooks(script_bytes: bytes, map_name: str) -> bytes:
 
     match = matches[0]
     indent = match.group("indent")
-    original_line = match.group(0).rstrip("\r")
+    args = match.group("args")
+    trailing = match.group("trailing")
     line_ending = "\r" if match.group(0).endswith("\r") else ""
+    zm_mod = zombiemode_module_for_map(map_name)
+    rewired_line = f"{indent}maps\\{zm_mod}::main({args});{trailing}"
     replacement = (
         f"{indent}{PRE_HOOK_CALL}{newline}"
-        f"{original_line}{newline}"
+        f"{rewired_line}{newline}"
         f"{indent}{POST_HOOK_CALL}{line_ending}"
     )
     patched = text[: match.start()] + replacement + text[match.end() :]
     return patched.encode("latin1")
 
 
+def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
+    """Inject strictly gated Gauntlet hooks into a stock map's maps/_zombiemode.gsc.
+
+    Hooks injected (all strictly guarded by maps\\_gauntlet_mode::is_gauntlet_enabled()):
+      1. round_start(): before `level thread round_think();` -> on_stage_init()
+      2. round_think(): before `round_wait();` -> level thread on_round_started(level.round_number)
+         and after `round_wait();` -> if (on_round_completed(level.round_number)) return;
+      3. end_game(): after `level.intermission = true;` -> if (on_end_game()) return;
+
+    Leaves all stock/DLC3 features and local waw_solo_fov() definitions 100% intact.
+    """
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    # 1. Hook round_start() before `level thread round_think();`
+    rt_matches = list(ROUND_THINK_CALL_RE.finditer(text))
+    if len(rt_matches) != 1:
+        raise ValueError(
+            f"Expected exactly 1 'level thread round_think();' in {map_name} _zombiemode.gsc, "
+            f"found {len(rt_matches)}"
+        )
+    rt_match = rt_matches[0]
+    rt_indent = rt_match.group("indent")
+    rt_orig = rt_match.group(0)
+    rt_hook = (
+        f"{rt_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
+        f"{rt_indent}{{{newline}"
+        f"{rt_indent}\tmaps\\_gauntlet_mode::on_stage_init();{newline}"
+        f"{rt_indent}}}{newline}"
+        f"{rt_orig}"
+    )
+    text = text[: rt_match.start()] + rt_hook + text[rt_match.end() :]
+
+    # 2. Hook round_think() around `round_wait();`
+    rw_matches = list(ROUND_WAIT_CALL_RE.finditer(text))
+    if len(rw_matches) != 1:
+        raise ValueError(
+            f"Expected exactly 1 'round_wait();' call in {map_name} _zombiemode.gsc, "
+            f"found {len(rw_matches)}"
+        )
+    rw_match = rw_matches[0]
+    rw_indent = rw_match.group("indent")
+    rw_orig = rw_match.group(0).rstrip("\r")
+    rw_ending = "\r" if rw_match.group(0).endswith("\r") else ""
+    rw_hook = (
+        f"{rw_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
+        f"{rw_indent}{{{newline}"
+        f"{rw_indent}\tlevel thread maps\\_gauntlet_mode::on_round_started( level.round_number );{newline}"
+        f"{rw_indent}}}{newline}"
+        f"{rw_orig}{newline}"
+        f"{rw_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
+        f"{rw_indent}{{{newline}"
+        f"{rw_indent}\tif ( maps\\_gauntlet_mode::on_round_completed( level.round_number ) ){newline}"
+        f"{rw_indent}\t{{{newline}"
+        f"{rw_indent}\t\treturn;{newline}"
+        f"{rw_indent}\t}}{newline}"
+        f"{rw_indent}}}{rw_ending}"
+    )
+    text = text[: rw_match.start()] + rw_hook + text[rw_match.end() :]
+
+    # 3. Hook end_game() right after `level.intermission = true;`
+    eg_matches = list(END_GAME_DEF_RE.finditer(text))
+    if len(eg_matches) != 1:
+        raise ValueError(
+            f"Expected exactly 1 end_game() definition in {map_name} _zombiemode.gsc, "
+            f"found {len(eg_matches)}"
+        )
+    eg_start = eg_matches[0].end()
+    inter_match = INTERMISSION_TRUE_RE.search(text, pos=eg_start, endpos=eg_start + 300)
+    if inter_match is None:
+        raise ValueError(
+            f"Could not locate 'level.intermission = true;' inside end_game() for {map_name}"
+        )
+    eg_indent = inter_match.group("indent")
+    eg_orig = inter_match.group(0).rstrip("\r")
+    eg_ending = "\r" if inter_match.group(0).endswith("\r") else ""
+    eg_hook = (
+        f"{eg_orig}{newline}"
+        f"{eg_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
+        f"{eg_indent}{{{newline}"
+        f"{eg_indent}\tif ( maps\\_gauntlet_mode::on_end_game() ){newline}"
+        f"{eg_indent}\t{{{newline}"
+        f"{eg_indent}\t\treturn;{newline}"
+        f"{eg_indent}\t}}{newline}"
+        f"{eg_indent}}}{eg_ending}"
+    )
+    text = text[: inter_match.start()] + eg_hook + text[inter_match.end() :]
+
+    return text.encode("latin1")
+
+
 def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
-    """Stage mod sources and hooked stock map entry scripts into <tools_root>/mods/waw_gauntlet."""
+    """Stage mod sources, hooked stock map entry scripts, and per-map _zombiemode wrappers."""
     stage_dir = tools_root / "mods" / MOD_NAME
     if stage_dir.exists():
         shutil.rmtree(stage_dir)
@@ -129,17 +266,22 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_path, dst)
 
-    # Extract each stock map entry script from its installed .ff and inject hooks.
-    # Because each map keeps its own stock/patched maps/_zombiemode.gsc intact,
-    # all per-map DLC features and local FOV patches remain 100% preserved.
+    # Extract each stock map entry script and era-specific maps/_zombiemode.gsc
+    # (preferring <map>_patch.ff so DLC3 features and local waw_solo_fov() stay intact).
     for map_name in STOCK_MAPS:
         rawfile_rel = f"maps/{map_name}.gsc"
         ff_path = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
         stock_bytes = extract_rawfile_from_ff(ff_path, rawfile_rel)
-        patched_bytes = inject_map_hooks(stock_bytes, map_name)
+        patched_map_bytes = inject_map_hooks(stock_bytes, map_name)
         dst = stage_dir / rawfile_rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(patched_bytes)
+        dst.write_bytes(patched_map_bytes)
+
+        zm_stock_bytes = extract_stock_zombiemode(map_name, steam_game, tools_root)
+        zm_patched_bytes = inject_zombiemode_hooks(zm_stock_bytes, map_name)
+        zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
+        zm_dst.parent.mkdir(parents=True, exist_ok=True)
+        zm_dst.write_bytes(zm_patched_bytes)
 
     return stage_dir
 

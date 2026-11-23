@@ -4,28 +4,20 @@
 
 ensure_mode_dvar()
 {
-	if ( GetDvar( "gauntlet_enabled" ) == "" )
-	{
-		SetDvar( "gauntlet_enabled", "0" );
-	}
+	maps\_gauntlet_mode::ensure_mode_dvar();
 }
 
 is_gauntlet_enabled()
 {
-	ensure_mode_dvar();
-	return GetDvarInt( "gauntlet_enabled" ) != 0;
+	return maps\_gauntlet_mode::is_gauntlet_enabled();
 }
 
 get_map_name()
 {
-	if ( IsDefined( level.script ) && level.script != "" )
-	{
-		return tolower( level.script );
-	}
-	return tolower( GetDvar( "mapname" ) );
+	return maps\_gauntlet_mode::get_current_map_name();
 }
 
-// Invoked synchronously immediately before stock maps\_zombiemode::main().
+// Invoked synchronously immediately before stock maps\_zombiemode_gauntlet_<map>::main().
 // Reserved for pre-maps\_load::main() precache/setup hooks in downstream tickets.
 pre_zombiemode_init()
 {
@@ -35,6 +27,8 @@ pre_zombiemode_init()
 	{
 		return;
 	}
+
+	maps\_gauntlet_mode::on_pre_zombiemode_init();
 }
 
 // Invoked threaded immediately after stock maps\_zombiemode::main() returns
