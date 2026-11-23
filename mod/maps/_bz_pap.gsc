@@ -1024,8 +1024,14 @@ bz_pap_on_actor_damage( zombie, ctx )
 	mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
 
 	// Melee path: PaP Knife (3x) and PaP Bowie Knife (1-hit kill regular zombies any round, 3x boss/dogs)
+	// Defers cleanly when the player currently has the Phase 2 War Club equipped in their melee slot.
 	if ( mod == "mod_melee" )
 	{
+		if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) == "war_club" )
+		{
+			return;
+		}
+
 		has_pap_knife = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_knife", "" );
 		has_pap_bowie = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_bowie", "" );
 		if ( !has_pap_knife && !has_pap_bowie )

@@ -472,6 +472,14 @@ EXPECTED_MENU_TOKENS: dict[str, set[str]] = {
         "buy_pap:pap_knife",
         "buy_pap:pap_bowie",
         "buy_pap:pap_cluster",
+        "buy_element:acid_sprayer",
+        "buy_element:cryo_cannon",
+        "buy_element:multi_crossbow",
+        "buy_element:blade_boomerang",
+        "buy_gear:war_club",
+        "buy_gear:pap_war_club",
+        "buy_gear:equip_bowie",
+        "buy_gear:portal_grenade",
         "close",
     },
     "bz_station_pap": {
@@ -538,6 +546,7 @@ class TestBzStationMenusManifestAndWaw17Compliance(unittest.TestCase):
         dvars.set("bz_perks_enabled", "1")
         dvars.set("bz_classes_enabled", "1")
         dvars.set("bz_pap_enabled", "1")
+        dvars.set("bz_elements_enabled", "1")
 
         player = FakeEntity("TokenTester", ent_num=0)
         player.set_field("score", 500000)

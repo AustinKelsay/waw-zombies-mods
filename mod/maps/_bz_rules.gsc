@@ -100,6 +100,25 @@ bz_get_pap_upgrade_ids()
 	return ids;
 }
 
+bz_get_element_weapon_ids()
+{
+	ids = [];
+	ids[0] = "acid_sprayer";
+	ids[1] = "cryo_cannon";
+	ids[2] = "multi_crossbow";
+	ids[3] = "blade_boomerang";
+	return ids;
+}
+
+bz_get_special_gear_ids()
+{
+	ids = [];
+	ids[0] = "war_club";
+	ids[1] = "pap_war_club";
+	ids[2] = "portal_grenade";
+	return ids;
+}
+
 // ---------------------------------------------------------------------------
 // Catalog Validation
 // ---------------------------------------------------------------------------
@@ -127,6 +146,16 @@ bz_is_valid_class( class_id )
 bz_is_valid_pap_upgrade( upgrade_id )
 {
 	return bz_array_contains_id( bz_get_pap_upgrade_ids(), upgrade_id );
+}
+
+bz_is_valid_element_weapon( item_id )
+{
+	return bz_array_contains_id( bz_get_element_weapon_ids(), item_id );
+}
+
+bz_is_valid_special_gear( item_id )
+{
+	return bz_array_contains_id( bz_get_special_gear_ids(), item_id );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +247,109 @@ bz_get_pap_upgrade_price( upgrade_id )
 	if ( id == "pap_knife" || id == "pap_bowie" || id == "pap_cluster" )
 	{
 		return 5000;
+	}
+
+	return undefined;
+}
+
+bz_get_element_weapon_name( item_id )
+{
+	id = bz_normalize_id( item_id );
+	if ( id == "acid_sprayer" )
+	{
+		return "bz_acid_sprayer";
+	}
+	if ( id == "cryo_cannon" )
+	{
+		return "bz_cryo_cannon";
+	}
+	if ( id == "multi_crossbow" )
+	{
+		return "bz_multi_crossbow";
+	}
+	if ( id == "blade_boomerang" )
+	{
+		return "bz_blade_boomerang";
+	}
+
+	return undefined;
+}
+
+bz_get_element_weapon_id_from_weapon( weapon_name )
+{
+	weap = bz_normalize_id( weapon_name );
+	if ( weap == "bz_acid_sprayer" )
+	{
+		return "acid_sprayer";
+	}
+	if ( weap == "bz_cryo_cannon" )
+	{
+		return "cryo_cannon";
+	}
+	if ( weap == "bz_multi_crossbow" )
+	{
+		return "multi_crossbow";
+	}
+	if ( weap == "bz_blade_boomerang" )
+	{
+		return "blade_boomerang";
+	}
+
+	return "";
+}
+
+bz_get_element_weapon_price( item_id )
+{
+	id = bz_normalize_id( item_id );
+	if ( id == "acid_sprayer" )
+	{
+		return 6500;
+	}
+	if ( id == "cryo_cannon" )
+	{
+		return 7000;
+	}
+	if ( id == "multi_crossbow" )
+	{
+		return 7500;
+	}
+	if ( id == "blade_boomerang" )
+	{
+		return 6000;
+	}
+
+	return undefined;
+}
+
+bz_get_special_gear_price( item_id )
+{
+	id = bz_normalize_id( item_id );
+	if ( id == "war_club" )
+	{
+		return 5000;
+	}
+	if ( id == "pap_war_club" )
+	{
+		return 5000;
+	}
+	if ( id == "portal_grenade" )
+	{
+		return 6000;
+	}
+
+	return undefined;
+}
+
+bz_get_special_gear_prereq( item_id )
+{
+	id = bz_normalize_id( item_id );
+	if ( id == "pap_war_club" )
+	{
+		return "war_club";
+	}
+	if ( id == "war_club" || id == "portal_grenade" )
+	{
+		return "";
 	}
 
 	return undefined;
@@ -346,6 +478,48 @@ bz_get_item_display_name( category, item_id )
 		return undefined;
 	}
 
+	if ( cat == "element_weapon" )
+	{
+		if ( id == "acid_sprayer" )
+		{
+			return "Acid Sprayer";
+		}
+		if ( id == "cryo_cannon" )
+		{
+			return "Cryo Cannon";
+		}
+		if ( id == "multi_crossbow" )
+		{
+			return "Multi-Crossbow";
+		}
+		if ( id == "blade_boomerang" )
+		{
+			return "Blade Boomerang";
+		}
+		return undefined;
+	}
+
+	if ( cat == "special_gear" )
+	{
+		if ( id == "war_club" )
+		{
+			return "War Club";
+		}
+		if ( id == "pap_war_club" )
+		{
+			return "PaP War Club";
+		}
+		if ( id == "portal_grenade" )
+		{
+			return "Portal Grenade";
+		}
+		if ( id == "equip_bowie" )
+		{
+			return "Bowie Knife";
+		}
+		return undefined;
+	}
+
 	return undefined;
 }
 
@@ -355,6 +529,7 @@ bz_get_item_info( category, item_id )
 	id = bz_normalize_id( item_id );
 	price = undefined;
 	prereq = "";
+	weap_name = "";
 
 	if ( cat == "perk" )
 	{
@@ -388,6 +563,22 @@ bz_get_item_info( category, item_id )
 			prereq = "bowie_knife";
 		}
 	}
+	else if ( cat == "element_weapon" )
+	{
+		price = bz_get_element_weapon_price( id );
+		if ( IsDefined( price ) )
+		{
+			weap_name = bz_get_element_weapon_name( id );
+		}
+	}
+	else if ( cat == "special_gear" )
+	{
+		price = bz_get_special_gear_price( id );
+		if ( IsDefined( price ) )
+		{
+			prereq = bz_get_special_gear_prereq( id );
+		}
+	}
 
 	if ( !IsDefined( price ) )
 	{
@@ -400,6 +591,7 @@ bz_get_item_info( category, item_id )
 	info.display_name = bz_get_item_display_name( cat, id );
 	info.price = price;
 	info.prereq = prereq;
+	info.weapon_name = weap_name;
 	return info;
 }
 
@@ -897,4 +1089,187 @@ bz_is_self_damage_immune( has_blast_shield, class_id, damage_type )
 	}
 
 	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 Elemental Arsenal & Special Weapons Pure Math Helpers
+// ---------------------------------------------------------------------------
+
+bz_get_acid_puddle_duration()
+{
+	return 6.0;
+}
+
+bz_get_acid_slow_scale()
+{
+	return 0.60;
+}
+
+bz_get_acid_brittle_mult()
+{
+	return 1.50;
+}
+
+bz_get_cryo_freeze_duration()
+{
+	return 4.0;
+}
+
+bz_get_cryo_shatter_mult()
+{
+	return 2.50;
+}
+
+bz_get_wunderwaffe_stun_duration()
+{
+	return 3.5;
+}
+
+bz_resolve_zombie_health( round_num, zombie_health )
+{
+	if ( IsDefined( zombie_health ) && Int( zombie_health ) > 0 )
+	{
+		return Int( zombie_health );
+	}
+	return bz_estimate_round_zombie_health( round_num );
+}
+
+bz_calc_flame_dot_damage( round_num, zombie_health, is_close_range, is_upgraded )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	close = bz_is_true( is_close_range );
+	upgraded = bz_is_true( is_upgraded );
+
+	pct = 0.22;
+	floor_dmg = 120;
+	if ( close )
+	{
+		pct = 0.40;
+		floor_dmg = 250;
+	}
+	if ( upgraded )
+	{
+		pct = pct * 1.5;
+		floor_dmg = Int( floor_dmg * 1.5 );
+	}
+
+	dmg = Int( zhp * pct );
+	if ( dmg < floor_dmg )
+	{
+		dmg = floor_dmg;
+	}
+	return dmg;
+}
+
+bz_calc_war_club_damage( base_dmg, zombie_health, is_pap_war_club )
+{
+	dmg = 150;
+	if ( IsDefined( base_dmg ) )
+	{
+		dmg = Int( base_dmg );
+		if ( dmg < 0 )
+		{
+			dmg = 0;
+		}
+	}
+
+	zhp = 0;
+	if ( IsDefined( zombie_health ) )
+	{
+		zhp = Int( zombie_health );
+		if ( zhp < 0 )
+		{
+			zhp = 0;
+		}
+	}
+
+	if ( bz_is_true( is_pap_war_club ) )
+	{
+		out = dmg * 8;
+		if ( out < 1500 )
+		{
+			out = 1500;
+		}
+		if ( zhp > out )
+		{
+			out = zhp;
+		}
+		return out;
+	}
+
+	out = dmg * 4;
+	if ( out < 600 )
+	{
+		out = 600;
+	}
+	scaled = Int( zhp * 0.5 );
+	if ( scaled > out )
+	{
+		out = scaled;
+	}
+	return out;
+}
+
+bz_get_war_club_aoe_radius( is_pap_war_club )
+{
+	if ( bz_is_true( is_pap_war_club ) )
+	{
+		return 160;
+	}
+	return 96;
+}
+
+bz_get_crossbow_bolt_count()
+{
+	return 3;
+}
+
+bz_calc_crossbow_bolt_damage( round_num, zombie_health, is_double_pap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	dmg = Int( zhp * 0.80 );
+	if ( dmg < 900 )
+	{
+		dmg = 900;
+	}
+	if ( bz_is_true( is_double_pap ) )
+	{
+		dmg = Int( dmg * 1.75 );
+	}
+	return dmg;
+}
+
+bz_get_boomerang_max_pierce()
+{
+	return 6;
+}
+
+bz_calc_boomerang_damage( round_num, zombie_health, is_double_pap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	dmg = Int( zhp * 0.75 );
+	if ( dmg < 800 )
+	{
+		dmg = 800;
+	}
+	if ( bz_is_true( is_double_pap ) )
+	{
+		dmg = Int( dmg * 1.75 );
+	}
+	return dmg;
+}
+
+bz_get_portal_duration()
+{
+	return 8.0;
+}
+
+bz_get_portal_cooldown()
+{
+	return 25.0;
+}
+
+bz_get_portal_max_charges()
+{
+	return 2;
 }

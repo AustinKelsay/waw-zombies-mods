@@ -36,6 +36,15 @@ bz_state_init_player( player )
 	player.bz_sapper_grenade_refill_ready = false;
 	player.bz_grenades_to_refill = 0;
 
+	// Phase 2 Elemental Arsenal & Special Weapons per-player state
+	player.bz_melee_slot = "knife";
+	player.bz_owns_war_club = false;
+	player.bz_pap_war_club = false;
+	player.bz_owns_bowie = false;
+	player.bz_owns_portal_grenade = false;
+	player.bz_portal_charges = 0;
+	player.bz_element_weapons = [];
+
 	return player;
 }
 
@@ -80,6 +89,7 @@ bz_make_purchase_result( status, item_id, cost, remaining_score )
 	res.remaining_score = remaining_score;
 	res.previous_class = "";
 	res.swapped = false;
+	res.weapon_name = "";
 	return res;
 }
 
@@ -253,6 +263,118 @@ bz_state_get_max_health( player )
 bz_state_get_max_grenades( player )
 {
 	return maps\_bz_rules::bz_calc_max_grenades( bz_state_get_class( player ) );
+}
+
+bz_state_get_melee_slot( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return "knife";
+	}
+	if ( !IsDefined( player.bz_melee_slot ) || player.bz_melee_slot == "" )
+	{
+		player.bz_melee_slot = "knife";
+	}
+	return player.bz_melee_slot;
+}
+
+bz_state_owns_war_club( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	return IsDefined( player.bz_owns_war_club ) && player.bz_owns_war_club;
+}
+
+bz_state_has_pap_war_club( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	return IsDefined( player.bz_pap_war_club ) && player.bz_pap_war_club;
+}
+
+bz_state_owns_bowie( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.bz_owns_bowie ) && player.bz_owns_bowie )
+	{
+		return true;
+	}
+	if ( IsDefined( player.bz_has_bowie ) && player.bz_has_bowie )
+	{
+		return true;
+	}
+	if ( IsDefined( player.has_altmelee ) && player.has_altmelee )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_state_sync_bowie_ownership( player, has_bowie )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( has_bowie ) && has_bowie )
+	{
+		player.bz_owns_bowie = true;
+		if ( bz_state_get_melee_slot( player ) == "knife" )
+		{
+			player.bz_melee_slot = "bowie";
+		}
+		return true;
+	}
+	return bz_state_owns_bowie( player );
+}
+
+bz_state_owns_portal_grenade( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	return IsDefined( player.bz_owns_portal_grenade ) && player.bz_owns_portal_grenade;
+}
+
+bz_state_get_portal_charges( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return 0;
+	}
+	if ( !IsDefined( player.bz_portal_charges ) || Int( player.bz_portal_charges ) < 0 )
+	{
+		return 0;
+	}
+	return Int( player.bz_portal_charges );
+}
+
+bz_state_try_consume_portal_charge( player )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return false;
+	}
+	if ( !bz_state_owns_portal_grenade( player ) )
+	{
+		player.bz_portal_charges = 0;
+		return false;
+	}
+	charges = bz_state_get_portal_charges( player );
+	if ( charges <= 0 )
+	{
+		return false;
+	}
+	player.bz_portal_charges = charges - 1;
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +609,148 @@ bz_try_buy_pap_upgrade( player, upgrade_id, weapon_name, has_prereq )
 	return bz_make_purchase_result( "invalid_item", id, 0, score );
 }
 
+bz_try_buy_element_weapon( player, item_id, already_has_weapon )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
+	}
+
+	id = maps\_bz_rules::bz_normalize_id( item_id );
+	score = bz_state_get_score_safe( player );
+	cost = maps\_bz_rules::bz_get_element_weapon_price( id );
+	if ( !IsDefined( cost ) )
+	{
+		return bz_make_purchase_result( "invalid_item", id, 0, score );
+	}
+
+	weap_name = maps\_bz_rules::bz_get_element_weapon_name( id );
+	if ( IsDefined( already_has_weapon ) && already_has_weapon )
+	{
+		dup = bz_make_purchase_result( "already_owned", id, cost, score );
+		dup.weapon_name = weap_name;
+		return dup;
+	}
+
+	if ( score < cost )
+	{
+		poor = bz_make_purchase_result( "insufficient_points", id, cost, score );
+		poor.weapon_name = weap_name;
+		return poor;
+	}
+
+	player.score = score - cost;
+	if ( !IsDefined( player.bz_element_weapons ) )
+	{
+		player.bz_element_weapons = [];
+	}
+	player.bz_element_weapons[id] = true;
+
+	res = bz_make_purchase_result( "ok", id, cost, player.score );
+	res.weapon_name = weap_name;
+	return res;
+}
+
+bz_try_buy_special_gear( player, item_id, owns_bowie_override )
+{
+	if ( !bz_state_ensure_init( player ) )
+	{
+		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
+	}
+
+	if ( IsDefined( owns_bowie_override ) && owns_bowie_override )
+	{
+		bz_state_sync_bowie_ownership( player, true );
+	}
+
+	id = maps\_bz_rules::bz_normalize_id( item_id );
+	score = bz_state_get_score_safe( player );
+
+	if ( id == "war_club" )
+	{
+		if ( bz_state_owns_war_club( player ) )
+		{
+			if ( bz_state_get_melee_slot( player ) == "war_club" )
+			{
+				return bz_make_purchase_result( "already_owned", id, 0, score );
+			}
+			player.bz_melee_slot = "war_club";
+			swap_res = bz_make_purchase_result( "ok", id, 0, score );
+			swap_res.swapped = true;
+			return swap_res;
+		}
+
+		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		if ( score < cost )
+		{
+			return bz_make_purchase_result( "insufficient_points", id, cost, score );
+		}
+
+		player.score = score - cost;
+		player.bz_owns_war_club = true;
+		player.bz_melee_slot = "war_club";
+		return bz_make_purchase_result( "ok", id, cost, player.score );
+	}
+
+	if ( id == "equip_bowie" )
+	{
+		if ( !bz_state_owns_bowie( player ) )
+		{
+			return bz_make_purchase_result( "missing_prereq", id, 0, score );
+		}
+		if ( bz_state_get_melee_slot( player ) == "bowie" )
+		{
+			return bz_make_purchase_result( "already_owned", id, 0, score );
+		}
+		player.bz_melee_slot = "bowie";
+		bowie_res = bz_make_purchase_result( "ok", id, 0, score );
+		bowie_res.swapped = true;
+		return bowie_res;
+	}
+
+	if ( id == "pap_war_club" )
+	{
+		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		if ( bz_state_has_pap_war_club( player ) )
+		{
+			return bz_make_purchase_result( "already_owned", id, cost, score );
+		}
+		if ( !bz_state_owns_war_club( player ) )
+		{
+			return bz_make_purchase_result( "missing_prereq", id, cost, score );
+		}
+		if ( score < cost )
+		{
+			return bz_make_purchase_result( "insufficient_points", id, cost, score );
+		}
+
+		player.score = score - cost;
+		player.bz_pap_war_club = true;
+		player.bz_melee_slot = "war_club";
+		return bz_make_purchase_result( "ok", id, cost, player.score );
+	}
+
+	if ( id == "portal_grenade" )
+	{
+		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		if ( bz_state_owns_portal_grenade( player ) )
+		{
+			return bz_make_purchase_result( "already_owned", id, cost, score );
+		}
+		if ( score < cost )
+		{
+			return bz_make_purchase_result( "insufficient_points", id, cost, score );
+		}
+
+		player.score = score - cost;
+		player.bz_owns_portal_grenade = true;
+		player.bz_portal_charges = maps\_bz_rules::bz_get_portal_max_charges();
+		return bz_make_purchase_result( "ok", id, cost, player.score );
+	}
+
+	return bz_make_purchase_result( "invalid_item", id, 0, score );
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle Transitions: Down/Bleedout Reset & Round-Start Recharge
 // ---------------------------------------------------------------------------
@@ -508,6 +772,10 @@ bz_state_on_player_downed( player, current_primary_count )
 	summary.preserved_pap_knife = false;
 	summary.preserved_pap_bowie = false;
 	summary.preserved_pap_cluster = false;
+	summary.preserved_melee_slot = "knife";
+	summary.preserved_war_club = false;
+	summary.preserved_pap_war_club = false;
+	summary.preserved_portal_grenade = false;
 
 	if ( !bz_state_ensure_init( player ) )
 	{
@@ -570,6 +838,10 @@ bz_state_on_player_downed( player, current_primary_count )
 	summary.preserved_pap_knife = ( IsDefined( player.bz_pap_knife ) && player.bz_pap_knife );
 	summary.preserved_pap_bowie = ( IsDefined( player.bz_pap_bowie ) && player.bz_pap_bowie );
 	summary.preserved_pap_cluster = ( IsDefined( player.bz_pap_cluster ) && player.bz_pap_cluster );
+	summary.preserved_melee_slot = bz_state_get_melee_slot( player );
+	summary.preserved_war_club = bz_state_owns_war_club( player );
+	summary.preserved_pap_war_club = bz_state_has_pap_war_club( player );
+	summary.preserved_portal_grenade = bz_state_owns_portal_grenade( player );
 
 	return summary;
 }
@@ -602,6 +874,8 @@ bz_state_on_round_start( player )
 	summary.second_chance_recharged = false;
 	summary.sapper_grenade_refill = false;
 	summary.target_grenades = 4;
+	summary.portal_recharged = false;
+	summary.portal_charges = 0;
 
 	if ( !bz_state_ensure_init( player ) )
 	{
@@ -632,6 +906,18 @@ bz_state_on_round_start( player )
 	{
 		player.bz_sapper_grenade_refill_ready = false;
 		player.bz_grenades_to_refill = 0;
+	}
+
+	if ( bz_state_owns_portal_grenade( player ) )
+	{
+		max_portals = maps\_bz_rules::bz_get_portal_max_charges();
+		player.bz_portal_charges = max_portals;
+		summary.portal_recharged = true;
+		summary.portal_charges = max_portals;
+	}
+	else
+	{
+		player.bz_portal_charges = 0;
 	}
 
 	return summary;
