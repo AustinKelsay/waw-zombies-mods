@@ -441,6 +441,17 @@ class BzGscRuntime(GscRuntime):
             return True, 160
         if name_lower == "weaponclipsize":
             return True, 30
+        if name_lower == "loadfx":
+            fx_path = _waw_to_str(args[0]) if args else ""
+            return True, f"fx:{fx_path}"
+        if name_lower in ("playfx", "triggerfx", "earthquake"):
+            return True, UNDEFINED
+        if name_lower == "spawnfx":
+            ent = FakeEntity(name="script_fx", ent_num=200 + len(self.spawned_entities), is_player=False)
+            if len(args) > 1:
+                ent.set_field("origin", args[1])
+            self.spawned_entities.append(ent)
+            return True, ent
         return super()._call_builtin(name_lower, args, line)
 
     def _read_target(self, target: Any, mod_key: str, env: dict[str, Any]) -> Any:
@@ -665,6 +676,12 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return float(receiver.__dict__.get("ads_fraction", 0.0))
             return 0.0
+        if method == "notifyoncommand":
+            if isinstance(receiver, FakeEntity) and len(args) >= 2:
+                if "notify_commands" not in receiver.__dict__:
+                    receiver.notify_commands = []
+                receiver.notify_commands.append((_waw_to_str(args[0]), _waw_to_str(args[1])))
+            return UNDEFINED
         if method == "usebuttonpressed":
             if isinstance(receiver, FakeEntity):
                 return receiver.use_pressed

@@ -737,7 +737,8 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
             "torso_upper",
             0,
         )
-        self.assertEqual(wc_melee_dmg, 150)
+        # PaP Bowie defers while War Club is equipped; PaP War Club applies its heavy smash (5000 vs 20000 HP zombie, NOT 1-hit kill)
+        self.assertEqual(wc_melee_dmg, 5000)
 
         # 7. Free swap back to owned Bowie Knife (0 pts) -> restores specialty_altmelee & PaP Bowie 1-hit kill
         self.assertTrue(

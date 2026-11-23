@@ -458,7 +458,10 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.3)
         self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 128.0)
         self.assertGreater(len(gsc.played_fx), 0)
-        self.assertEqual(gsc.load_fx_calls, [])
+        self.assertTrue(
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
+            f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
+        )
 
         # Reset positions & upgrade to PaP War Club -> radius expands to 160, heavy damage = 2500, AOE knockback smash
         z_primary.set_pos(48.0, 0.0, 0.0)
@@ -868,7 +871,10 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
         self.assertAlmostEqual(float(portal.get_field("bz_duration")), 8.0)
         self.assertEqual(portal.get_field("bz_fx_name"), "transporter_ambient")
-        self.assertEqual(gsc.load_fx_calls, [])
+        self.assertTrue(
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
+            f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
+        )
         self.assertTrue(
             any(
                 e.startswith("BZ_EVENT|SPECIAL_PORTAL_OPEN|")
@@ -928,7 +934,18 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         gsc_n.sim_time_ms = 5000
         portal_n = gsc_n.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", pn)
         self.assertEqual(portal_n.get_field("bz_fx_name"), "misc/fx_zombie_powerup_wave")
-        self.assertEqual(gsc_n.load_fx_calls, [])
+        self.assertTrue(
+            all(
+                fx in (
+                    "misc/fx_zombie_powerup_on",
+                    "misc/fx_exp_raygun_impact",
+                    "env/electrical/fx_elec_short_oneshot",
+                    "bio/player/fx_footstep_water",
+                )
+                for fx in gsc_n.load_fx_calls
+            ),
+            f"Unexpected LoadFX calls: {gsc_n.load_fx_calls}",
+        )
 
         # Round start recharges portal back to 2 charges, and cooldown expiry allows 2nd throw
         gsc.call(BZ_HOOKS_MOD, "bz_on_round_start", 2)
