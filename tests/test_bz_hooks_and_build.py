@@ -414,6 +414,17 @@ class BzGscRuntime(GscRuntime):
             dy = float(a[1]) - float(b[1])
             dz = float(a[2]) - float(b[2])
             return True, (dx * dx + dy * dy + dz * dz) ** 0.5
+        if name_lower == "getaispeciesarray":
+            return True, GscArray([])
+        if name_lower == "newclienthudelem":
+            elem = GscStruct()
+            elem.set_field("owner", args[0] if args else UNDEFINED)
+            elem.set_field("destroyed", False)
+            return True, elem
+        if name_lower == "weaponmaxammo":
+            return True, 160
+        if name_lower == "weaponclipsize":
+            return True, 30
         return super()._call_builtin(name_lower, args, line)
 
     def _read_target(self, target: Any, mod_key: str, env: dict[str, Any]) -> Any:
@@ -524,6 +535,101 @@ class BzGscRuntime(GscRuntime):
                 w = _waw_to_str(args[0]).lower() if args else ""
                 return w in receiver.weapons
             return False
+        if method == "getweaponslistprimaries":
+            if isinstance(receiver, FakeEntity):
+                primaries = receiver.__dict__.get("primary_weapons")
+                if isinstance(primaries, (list, tuple, set)):
+                    return GscArray(list(primaries))
+                if receiver.weapons:
+                    return GscArray(sorted(receiver.weapons))
+                if receiver.current_weapon and receiver.current_weapon != "none":
+                    return GscArray([receiver.current_weapon])
+            return GscArray([])
+        if method == "getweaponslist":
+            if isinstance(receiver, FakeEntity):
+                if receiver.weapons:
+                    return GscArray(sorted(receiver.weapons))
+                if receiver.current_weapon and receiver.current_weapon != "none":
+                    return GscArray([receiver.current_weapon])
+            return GscArray([])
+        if method in ("setperk", "unsetperk"):
+            if isinstance(receiver, FakeEntity) and args:
+                perk = _waw_to_str(args[0]).lower()
+                if method == "setperk":
+                    receiver.give_perk(perk)
+                else:
+                    receiver._perks.discard(perk)
+            return UNDEFINED
+        if method == "giveweapon":
+            if isinstance(receiver, FakeEntity) and args:
+                receiver.give_weapon(_waw_to_str(args[0]))
+            return UNDEFINED
+        if method == "takeweapon":
+            if isinstance(receiver, FakeEntity) and args:
+                w = _waw_to_str(args[0]).lower()
+                receiver.weapons.discard(w)
+            return UNDEFINED
+        if method == "switchtoweapon":
+            if isinstance(receiver, FakeEntity) and args:
+                receiver.current_weapon = _waw_to_str(args[0]).lower()
+            return UNDEFINED
+        if method in ("givemaxammo", "setweaponammoclip", "setweaponammostock"):
+            if isinstance(receiver, FakeEntity) and args:
+                w = _waw_to_str(args[0]).lower()
+                if method == "setweaponammoclip" and len(args) > 1:
+                    if "weapon_clips" not in receiver.__dict__:
+                        receiver.weapon_clips = {}
+                    receiver.weapon_clips[w] = int(args[1])
+                elif method == "setweaponammostock" and len(args) > 1:
+                    if "weapon_stocks" not in receiver.__dict__:
+                        receiver.weapon_stocks = {}
+                    receiver.weapon_stocks[w] = int(args[1])
+            return UNDEFINED
+        if method == "getweaponammoclip":
+            if isinstance(receiver, FakeEntity) and args:
+                w = _waw_to_str(args[0]).lower()
+                return receiver.__dict__.get("weapon_clips", {}).get(w, 0)
+            return 0
+        if method == "getweaponammostock":
+            if isinstance(receiver, FakeEntity) and args:
+                w = _waw_to_str(args[0]).lower()
+                return receiver.__dict__.get("weapon_stocks", {}).get(w, 0)
+            return 0
+        if method == "settext":
+            if isinstance(receiver, GscStruct):
+                receiver.set_field("text", _waw_to_str(args[0]) if args else "")
+            return UNDEFINED
+        if method == "destroy":
+            if isinstance(receiver, GscStruct):
+                receiver.set_field("destroyed", True)
+            return UNDEFINED
+        if method == "getcurrentoffhand":
+            if isinstance(receiver, FakeEntity):
+                return receiver.__dict__.get("current_offhand", "stielhandgranate")
+            return "stielhandgranate"
+        if method == "isonground":
+            if isinstance(receiver, FakeEntity):
+                return bool(receiver.__dict__.get("on_ground", True))
+            return True
+        if method == "getvelocity":
+            if isinstance(receiver, FakeEntity):
+                vel = receiver.__dict__.get("velocity", (0.0, 0.0, 0.0))
+                return GscArray(list(vel))
+            return GscArray([0.0, 0.0, 0.0])
+        if method == "setvelocity":
+            if isinstance(receiver, FakeEntity) and args:
+                receiver.velocity = args[0]
+            return UNDEFINED
+        if method == "setcontents":
+            if isinstance(receiver, FakeEntity) and args:
+                old = receiver.__dict__.get("contents", 1)
+                receiver.contents = int(args[0])
+                return old
+            return 1
+        if method == "playerads":
+            if isinstance(receiver, FakeEntity):
+                return float(receiver.__dict__.get("ads_fraction", 0.0))
+            return 0.0
         if method == "usebuttonpressed":
             if isinstance(receiver, FakeEntity):
                 return receiver.use_pressed

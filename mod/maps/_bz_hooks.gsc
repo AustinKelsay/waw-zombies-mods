@@ -223,6 +223,9 @@ bz_ensure_default_modules_registered()
 	level.bz_default_modules_registered = true;
 
 	maps\_bz_stations::bz_stations_register();
+	maps\_bz_perks::bz_perks_register();
+	maps\_bz_classes::bz_classes_register();
+	maps\_bz_pap::bz_pap_register();
 }
 
 // Synchronous pre-zombiemode init seam (for precaching in downstream modules).
