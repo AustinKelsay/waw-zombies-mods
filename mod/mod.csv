@@ -1,0 +1,34 @@
+// Unified Zombie Gauntlet mod fastfile manifest (compiled into mod.ff)
+// Script-only package: zero custom FX, weapon, or model assets to stay well
+// below Call of Duty: World at War's 400-FX ceiling across all 4 stock maps.
+
+// Core Gauntlet scripts
+rawfile,maps/_gauntlet_log.gsc
+rawfile,maps/_gauntlet_rules.gsc
+rawfile,maps/_gauntlet_state.gsc
+rawfile,maps/_gauntlet_perks.gsc
+rawfile,maps/_gauntlet_wipe.gsc
+rawfile,maps/_gauntlet_mode.gsc
+rawfile,maps/_gauntlet_hud.gsc
+rawfile,maps/_gauntlet_bootstrap.gsc
+
+// Frontend Solo & Co-op menus (overrides stock ui/patch_menus.txt)
+menufile,ui/patch_menus.txt
+
+// Stock WaW perk HUD icon materials (ensures carried-over perk icons render on Nacht der Untoten)
+material,specialty_juggernaut_zombies
+material,specialty_fastreload_zombies
+material,specialty_doubletap_zombies
+material,specialty_quickrevive_zombies
+
+// Build-staged per-map hooked _zombiemode scripts (preserves era-specific stock/DLC3 code + waw_solo_fov)
+rawfile,maps/_zombiemode_gauntlet_prototype.gsc
+rawfile,maps/_zombiemode_gauntlet_asylum.gsc
+rawfile,maps/_zombiemode_gauntlet_sumpf.gsc
+rawfile,maps/_zombiemode_gauntlet_factory.gsc
+
+// Build-staged stock-safe entry hooks for all four stock Nazi Zombies maps
+rawfile,maps/nazi_zombie_prototype.gsc
+rawfile,maps/nazi_zombie_asylum.gsc
+rawfile,maps/nazi_zombie_sumpf.gsc
+rawfile,maps/nazi_zombie_factory.gsc
