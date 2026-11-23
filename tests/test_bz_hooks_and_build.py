@@ -87,6 +87,13 @@ class ThreadCallExpr:
     line: int
 
 
+@dataclass
+class VectorExpr:
+    x: Any
+    y: Any
+    z: Any
+
+
 @dataclass(frozen=True)
 class GscFuncPtr:
     module_key: str
@@ -105,9 +112,9 @@ class _WaittillSuspend(Exception):
 
 
 class FakeEntity(GscStruct):
-    """Fake WaW 1.7 player or zombie entity for offline hook contract tests."""
+    """Fake WaW 1.7 player, zombie, or world entity for offline hook contract tests."""
 
-    def __init__(self, name: str = "player_0", ent_num: int = 0) -> None:
+    def __init__(self, name: str = "player_0", ent_num: int = 0, is_player: bool = True) -> None:
         super().__init__()
         self.set_field("playername", name)
         self.set_field("name", name)
@@ -117,6 +124,17 @@ class FakeEntity(GscStruct):
         self._ent_num = ent_num
         self._perks: set[str] = set()
         self.speed_scale_calls: list[float] = []
+        self.is_player = is_player
+        self.classname = "player" if is_player else name
+        self.client_dvars: dict[str, str] = {}
+        self.opened_menus: list[str] = []
+        self.closed_menus: int = 0
+        self.weapons: set[str] = set()
+        self.current_weapon: str = "colt"
+        self.use_pressed: bool = False
+        self.hint_string: str = ""
+        self.cursor_hint: str = ""
+        self.deleted: bool = False
 
     def give_perk(self, perk: str) -> None:
         self._perks.add(perk.lower())
@@ -126,6 +144,12 @@ class FakeEntity(GscStruct):
 
     def has_perk(self, perk: str) -> bool:
         return perk.lower() in self._perks
+
+    def give_weapon(self, weapon: str, make_current: bool = False) -> None:
+        norm = weapon.lower()
+        self.weapons.add(norm)
+        if make_current:
+            self.current_weapon = norm
 
 
 class BzGscParser(Parser):
@@ -233,6 +257,18 @@ class BzGscParser(Parser):
 
     def parse_primary(self) -> Any:
         tok = self.peek()
+        # Parenthesized expression OR WaW 1.7 3D vector literal `( x, y, z )`
+        if tok.kind == "(":
+            self.pos += 1
+            first = self.parse_expr()
+            if self.match(","):
+                second = self.parse_expr()
+                self.expect(",")
+                third = self.parse_expr()
+                self.expect(")")
+                return VectorExpr(first, second, third)
+            self.expect(")")
+            return first
         # Function pointer literal: `::func_name`
         if tok.kind == "::":
             self.pos += 1
@@ -274,6 +310,11 @@ class BzGscRuntime(GscRuntime):
         self._py_callbacks: dict[str, Callable[..., Any]] = {}
         self._current_self: Any = self.level
         self._threads: list[tuple[Any, str, list[Any]]] = []
+        self.precached_menus: list[str] = []
+        self.spawned_entities: list[FakeEntity] = []
+        self.world_entities: dict[tuple[str, str], list[FakeEntity]] = {}
+        self.bullet_trace_fn: Callable[[GscArray, GscArray], dict[str, Any]] | None = None
+        self.sim_time_ms: int = 1000
 
     def register_py_callback(self, name: str, fn: Callable[..., Any]) -> GscFuncPtr:
         key = name.lower()
@@ -319,8 +360,60 @@ class BzGscRuntime(GscRuntime):
             if isinstance(ent, FakeEntity):
                 return True, int(ent.get_field("health")) > 0
             return True, False
+        if name_lower == "isplayer":
+            ent = args[0] if args else UNDEFINED
+            return True, isinstance(ent, FakeEntity) and ent.is_player
         if name_lower == "wait":
             return True, UNDEFINED
+        if name_lower == "gettime":
+            return True, self.sim_time_ms
+        if name_lower == "issubstr":
+            haystack = _waw_to_str(args[0]) if len(args) > 0 else ""
+            needle = _waw_to_str(args[1]) if len(args) > 1 else ""
+            return True, needle in haystack
+        if name_lower == "precachemenu":
+            menu = _waw_to_str(args[0]) if args else ""
+            self.precached_menus.append(menu)
+            return True, UNDEFINED
+        if name_lower == "spawn":
+            classname = _waw_to_str(args[0]) if args else "script_origin"
+            ent = FakeEntity(name=classname, ent_num=100 + len(self.spawned_entities), is_player=False)
+            ent.classname = classname
+            ent.set_field("classname", classname)
+            if len(args) > 1:
+                ent.set_field("origin", args[1])
+            if len(args) > 3:
+                ent.set_field("radius", args[3])
+            if len(args) > 4:
+                ent.set_field("height", args[4])
+            self.spawned_entities.append(ent)
+            return True, ent
+        if name_lower == "getentarray":
+            val = _waw_to_str(args[0]).lower() if len(args) > 0 else ""
+            key = _waw_to_str(args[1]).lower() if len(args) > 1 else ""
+            matches = self.world_entities.get((key, val), [])
+            return True, GscArray(list(matches))
+        if name_lower == "bullettrace":
+            start = args[0] if len(args) > 0 else GscArray([0, 0, 0])
+            end = args[1] if len(args) > 1 else GscArray([0, 0, 0])
+            trace = GscArray()
+            if self.bullet_trace_fn is not None:
+                res = self.bullet_trace_fn(start, end)
+                for k, v in res.items():
+                    trace.set_item(k, v)
+            else:
+                # Default ground plane sits at start_z - 64 (matching original origin.z)
+                hit_pos = GscArray([start[0], start[1], start[2] - 64])
+                trace.set_item("fraction", 0.25)
+                trace.set_item("position", hit_pos)
+            return True, trace
+        if name_lower == "distance":
+            a = args[0]
+            b = args[1]
+            dx = float(a[0]) - float(b[0])
+            dy = float(a[1]) - float(b[1])
+            dz = float(a[2]) - float(b[2])
+            return True, (dx * dx + dy * dy + dz * dz) ** 0.5
         return super()._call_builtin(name_lower, args, line)
 
     def _read_target(self, target: Any, mod_key: str, env: dict[str, Any]) -> Any:
@@ -333,6 +426,14 @@ class BzGscRuntime(GscRuntime):
         return super()._read_target(target, mod_key, env)
 
     def _eval_expr(self, expr: Any, mod_key: str, env: dict[str, Any]) -> Any:
+        if isinstance(expr, VectorExpr):
+            return GscArray(
+                [
+                    self._eval_expr(expr.x, mod_key, env),
+                    self._eval_expr(expr.y, mod_key, env),
+                    self._eval_expr(expr.z, mod_key, env),
+                ]
+            )
         if isinstance(expr, VarRef):
             lower = expr.name.lower()
             if lower == "level":
@@ -384,6 +485,49 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return receiver._ent_num
             return 0
+        if method == "setclientdvar":
+            if not isinstance(receiver, FakeEntity):
+                raise GscRuntimeError(f"line {line}: SetClientDvar on non-entity {receiver!r}")
+            key = _waw_to_str(args[0]).lower() if len(args) > 0 else ""
+            val = _waw_to_str(args[1]) if len(args) > 1 else ""
+            receiver.client_dvars[key] = val
+            return UNDEFINED
+        if method == "openmenu":
+            if not isinstance(receiver, FakeEntity):
+                raise GscRuntimeError(f"line {line}: openMenu on non-entity {receiver!r}")
+            menu = _waw_to_str(args[0]) if args else ""
+            receiver.opened_menus.append(menu)
+            return UNDEFINED
+        if method == "closemenu":
+            if not isinstance(receiver, FakeEntity):
+                raise GscRuntimeError(f"line {line}: closeMenu on non-entity {receiver!r}")
+            receiver.closed_menus += 1
+            return UNDEFINED
+        if method == "setcursorhint":
+            if isinstance(receiver, FakeEntity):
+                receiver.cursor_hint = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if method == "sethintstring":
+            if isinstance(receiver, FakeEntity):
+                receiver.hint_string = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if method == "delete":
+            if isinstance(receiver, FakeEntity):
+                receiver.deleted = True
+            return UNDEFINED
+        if method == "getcurrentweapon":
+            if isinstance(receiver, FakeEntity):
+                return receiver.current_weapon
+            return "none"
+        if method == "hasweapon":
+            if isinstance(receiver, FakeEntity):
+                w = _waw_to_str(args[0]).lower() if args else ""
+                return w in receiver.weapons
+            return False
+        if method == "usebuttonpressed":
+            if isinstance(receiver, FakeEntity):
+                return receiver.use_pressed
+            return False
         if method in ("endon", "waittill", "notify"):
             return UNDEFINED
         raise GscRuntimeError(f"line {line}: unsupported method {method!r} on {receiver!r}")

@@ -212,6 +212,19 @@ get_hook_entries( hook_name )
 // Lifecycle Seams
 // ---------------------------------------------------------------------------
 
+// Idempotent registration of built-in Base Zombies modules.
+// Downstream Phase 1 modules (T4/T5/T6) follow this exact same registration seam.
+bz_ensure_default_modules_registered()
+{
+	if ( IsDefined( level.bz_default_modules_registered ) && level.bz_default_modules_registered )
+	{
+		return;
+	}
+	level.bz_default_modules_registered = true;
+
+	maps\_bz_stations::bz_stations_register();
+}
+
 // Synchronous pre-zombiemode init seam (for precaching in downstream modules).
 // Complete noop when bz_enabled != 1.
 bz_pre_init()
@@ -223,6 +236,7 @@ bz_pre_init()
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
+	bz_ensure_default_modules_registered();
 
 	entries = get_hook_entries( "pre_init" );
 	if ( IsDefined( entries ) )
@@ -255,6 +269,7 @@ bz_init()
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
+	bz_ensure_default_modules_registered();
 
 	// Chain level.overridePlayerDamage without clobbering stock/Gauntlet logic.
 	if ( !IsDefined( level.bz_player_damage_hooked ) || !level.bz_player_damage_hooked )
@@ -795,6 +810,36 @@ bz_on_menu_response( player, menu, response )
 		}
 	}
 	return false;
+}
+
+// Dispatches validated Station purchases to Chunk 3 feature modules (_bz_perks,
+// _bz_classes, _bz_pap) without coupling _bz_stations to downstream internals.
+bz_on_item_purchased( player, category, item_id, result, weapon_name )
+{
+	if ( !bz_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	ctx = SpawnStruct();
+	ctx.player = player;
+	ctx.category = category;
+	ctx.item_id = item_id;
+	ctx.result = result;
+	ctx.weapon_name = weapon_name;
+
+	entries = get_hook_entries( "item_purchased" );
+	if ( IsDefined( entries ) )
+	{
+		for ( i = 0; i < entries.size; i++ )
+		{
+			entry = entries[i];
+			if ( bz_is_gate_open( entry.gate ) )
+			{
+				[[ entry.fn ]]( ctx );
+			}
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

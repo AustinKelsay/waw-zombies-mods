@@ -15,9 +15,18 @@ rawfile,maps/_gauntlet_bootstrap.gsc
 // Base Zombies modular enhancement framework scripts (future _bz_*.gsc staged automatically)
 rawfile,maps/_bz_log.gsc
 rawfile,maps/_bz_hooks.gsc
+rawfile,maps/_bz_rules.gsc
+rawfile,maps/_bz_state.gsc
+rawfile,maps/_bz_stations.gsc
 
 // Frontend Solo & Co-op menus (overrides stock ui/patch_menus.txt)
 menufile,ui/patch_menus.txt
+
+// Base Zombies in-world Station shop popups
+menufile,ui/bz_station_perks.menu
+menufile,ui/bz_station_class.menu
+menufile,ui/bz_station_arsenal.menu
+menufile,ui/bz_station_pap.menu
 
 // Stock WaW perk HUD icon materials (ensures carried-over perk icons render on Nacht der Untoten)
 material,specialty_juggernaut_zombies
