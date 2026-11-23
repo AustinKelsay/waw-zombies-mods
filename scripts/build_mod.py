@@ -66,6 +66,40 @@ INTERMISSION_TRUE_RE = re.compile(
 
 PRE_HOOK_CALL = "maps\\_gauntlet_bootstrap::pre_zombiemode_init();"
 POST_HOOK_CALL = "level thread maps\\_gauntlet_bootstrap::post_zombiemode_init();"
+BZ_PRE_HOOK_CALL = "if ( maps\\_bz_hooks::bz_enabled() ) { maps\\_bz_hooks::bz_pre_init(); }"
+BZ_POST_HOOK_CALL = "if ( maps\\_bz_hooks::bz_enabled() ) { level thread maps\\_bz_hooks::bz_init(); }"
+
+WEAPON_ARRAY_CAP_RE = re.compile(
+    r"(?P<lhs>\b(?:primaries|primaryweapons|primary_weapons|weapons|weaponslist|weapon_list|current_weapons)\.size)[ \t]*>=[ \t]*2\b",
+    re.IGNORECASE,
+)
+WEAPON_LIMIT_ASSIGN_RE = re.compile(
+    r"(?P<lhs>\bweapon_limit[ \t]*=[ \t]*)2(?P<semi>[ \t]*;)",
+    re.IGNORECASE,
+)
+GET_PRIMARIES_ENT_RE = re.compile(
+    r"\b(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GetWeaponsListPrimaries[ \t]*\([ \t]*\)",
+    re.IGNORECASE,
+)
+CHEST_SCORE_CHECK_RE = re.compile(
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)\.score[ \t]*>=[ \t]*self\.zombie_cost\b"
+)
+CHEST_SCORE_DEDUCT_RE = re.compile(
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*self\.zombie_cost[ \t]*\)"
+)
+JUGG_HEALTH_BLOCK_RE = re.compile(
+    r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\];(?P<trailing>[ \t]*)\r?'
+    r'(?:\r?\n[ \t]*(?P=ent)\.health[ \t]*=[^\n;]*;[ \t]*\r?)?',
+    re.MULTILINE,
+)
+PERK_RESET_HEALTH_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*100;(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+ADD_PLAYER_SCORE_DEF_RE = re.compile(
+    r"^add_to_player_score\([ \t]*(?P<param>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
 
 
 def extract_rawfile_from_ff(ff_path: Path, rawfile_name: str) -> bytes:
@@ -119,9 +153,26 @@ def zombiemode_module_for_map(map_name: str) -> str:
     return f"_zombiemode_gauntlet_{slug}"
 
 
-def extract_stock_zombiemode(map_name: str, steam_game: Path, tools_root: Path) -> bytes:
-    """Extract era-specific stock maps/_zombiemode.gsc, preferring <map>_patch.ff."""
-    rawfile_rel = "maps/_zombiemode.gsc"
+def zombiemode_weapons_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_weapons script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_weapons_bz_{slug}"
+
+
+def zombiemode_perks_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_perks script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_perks_bz_{slug}"
+
+
+def extract_stock_script(
+    map_name: str, rawfile_rel: str, steam_game: Path, tools_root: Path
+) -> bytes:
+    """Extract an era-specific stock rawfile script, preferring <map>_patch.ff."""
     ff_patch = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=True)
     try:
         return extract_rawfile_from_ff(ff_patch, rawfile_rel)
@@ -132,8 +183,41 @@ def extract_stock_zombiemode(map_name: str, steam_game: Path, tools_root: Path) 
         return extract_rawfile_from_ff(ff_base, rawfile_rel)
 
 
-def inject_map_hooks(script_bytes: bytes, map_name: str) -> bytes:
-    """Inject Gauntlet bootstrap hooks and rewire maps\\_zombiemode::main(...) to per-map wrapper."""
+def try_extract_stock_script(
+    map_name: str, rawfile_rel: str, steam_game: Path, tools_root: Path
+) -> bytes | None:
+    """Extract an era-specific stock script or return None if absent on that map."""
+    try:
+        return extract_stock_script(map_name, rawfile_rel, steam_game, tools_root)
+    except ValueError:
+        return None
+
+
+def extract_stock_zombiemode(map_name: str, steam_game: Path, tools_root: Path) -> bytes:
+    """Extract era-specific stock maps/_zombiemode.gsc, preferring <map>_patch.ff."""
+    return extract_stock_script(map_name, "maps/_zombiemode.gsc", steam_game, tools_root)
+
+
+def _rewire_stock_module_refs(
+    text: str,
+    rewire_weapons_module: str | None = None,
+    rewire_perks_module: str | None = None,
+) -> str:
+    if rewire_weapons_module:
+        text = text.replace("maps\\_zombiemode_weapons::", f"maps\\{rewire_weapons_module}::")
+    if rewire_perks_module:
+        text = text.replace("maps\\_zombiemode_perks::", f"maps\\{rewire_perks_module}::")
+    return text
+
+
+def inject_map_hooks(
+    script_bytes: bytes,
+    map_name: str,
+    *,
+    rewire_weapons_module: str | None = None,
+    rewire_perks_module: str | None = None,
+) -> bytes:
+    """Inject Gauntlet + guarded Base Zombies bootstrap hooks and rewire maps\\_zombiemode::main(...)."""
     text = script_bytes.decode("latin1")
     newline = "\r\n" if "\r\n" in text else "\n"
     matches = list(ZOMBIEMODE_MAIN_RE.finditer(text))
@@ -152,21 +236,39 @@ def inject_map_hooks(script_bytes: bytes, map_name: str) -> bytes:
     rewired_line = f"{indent}maps\\{zm_mod}::main({args});{trailing}"
     replacement = (
         f"{indent}{PRE_HOOK_CALL}{newline}"
+        f"{indent}{BZ_PRE_HOOK_CALL}{newline}"
         f"{rewired_line}{newline}"
-        f"{indent}{POST_HOOK_CALL}{line_ending}"
+        f"{indent}{POST_HOOK_CALL}{newline}"
+        f"{indent}{BZ_POST_HOOK_CALL}{line_ending}"
     )
     patched = text[: match.start()] + replacement + text[match.end() :]
+    patched = _rewire_stock_module_refs(
+        patched,
+        rewire_weapons_module=rewire_weapons_module,
+        rewire_perks_module=rewire_perks_module,
+    )
     return patched.encode("latin1")
 
 
-def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
-    """Inject strictly gated Gauntlet hooks into a stock map's maps/_zombiemode.gsc.
+def inject_zombiemode_hooks(
+    script_bytes: bytes,
+    map_name: str,
+    *,
+    rewire_weapons_module: str | None = None,
+    rewire_perks_module: str | None = None,
+) -> bytes:
+    """Inject strictly gated Gauntlet & Base Zombies hooks into a stock map's maps/_zombiemode.gsc.
 
-    Hooks injected (all strictly guarded by maps\\_gauntlet_mode::is_gauntlet_enabled()):
-      1. round_start(): before `level thread round_think();` -> on_stage_init()
-      2. round_think(): before `round_wait();` -> level thread on_round_started(level.round_number)
-         and after `round_wait();` -> if (on_round_completed(level.round_number)) return;
-      3. end_game(): after `level.intermission = true;` -> if (on_end_game()) return;
+    Hooks injected:
+      1. round_start(): before `level thread round_think();`
+         - Gauntlet: on_stage_init() (guarded by is_gauntlet_enabled())
+         - Base Zombies: bz_init() (guarded by bz_enabled())
+      2. round_think(): around `round_wait();`
+         - Gauntlet: on_round_started / on_round_completed
+         - Base Zombies: bz_on_round_start(level.round_number) (guarded by bz_enabled())
+      3. end_game(): after `level.intermission = true;`
+         - Base Zombies: bz_on_end_game() (guarded by bz_enabled())
+         - Gauntlet: if (on_end_game()) return; (guarded by is_gauntlet_enabled())
 
     Leaves all stock/DLC3 features and local waw_solo_fov() definitions 100% intact.
     """
@@ -188,6 +290,10 @@ def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
         f"{rt_indent}{{{newline}"
         f"{rt_indent}\tmaps\\_gauntlet_mode::on_stage_init();{newline}"
         f"{rt_indent}}}{newline}"
+        f"{rt_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{rt_indent}{{{newline}"
+        f"{rt_indent}\tmaps\\_bz_hooks::bz_init();{newline}"
+        f"{rt_indent}}}{newline}"
         f"{rt_orig}"
     )
     text = text[: rt_match.start()] + rt_hook + text[rt_match.end() :]
@@ -207,6 +313,10 @@ def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
         f"{rw_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
         f"{rw_indent}{{{newline}"
         f"{rw_indent}\tlevel thread maps\\_gauntlet_mode::on_round_started( level.round_number );{newline}"
+        f"{rw_indent}}}{newline}"
+        f"{rw_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{rw_indent}{{{newline}"
+        f"{rw_indent}\tlevel thread maps\\_bz_hooks::bz_on_round_start( level.round_number );{newline}"
         f"{rw_indent}}}{newline}"
         f"{rw_orig}{newline}"
         f"{rw_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
@@ -237,6 +347,10 @@ def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
     eg_ending = "\r" if inter_match.group(0).endswith("\r") else ""
     eg_hook = (
         f"{eg_orig}{newline}"
+        f"{eg_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{eg_indent}{{{newline}"
+        f"{eg_indent}\tmaps\\_bz_hooks::bz_on_end_game();{newline}"
+        f"{eg_indent}}}{newline}"
         f"{eg_indent}if ( maps\\_gauntlet_mode::is_gauntlet_enabled() ){newline}"
         f"{eg_indent}{{{newline}"
         f"{eg_indent}\tif ( maps\\_gauntlet_mode::on_end_game() ){newline}"
@@ -247,7 +361,296 @@ def inject_zombiemode_hooks(script_bytes: bytes, map_name: str) -> bytes:
     )
     text = text[: inter_match.start()] + eg_hook + text[inter_match.end() :]
 
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+        rewire_perks_module=rewire_perks_module,
+    )
     return text.encode("latin1")
+
+
+def _infer_player_entity_before(text: str, pos: int) -> str:
+    """Find the player variable calling GetWeaponsListPrimaries() nearest before pos."""
+    window_start = max(0, pos - 600)
+    window = text[window_start:pos]
+    # Stop at the nearest function opening brace if any top-level function boundary exists
+    last_fn = window.rfind("\n{")
+    if last_fn != -1:
+        window = window[last_fn:]
+    matches = list(GET_PRIMARIES_ENT_RE.finditer(window))
+    if matches:
+        return matches[-1].group("ent")
+    return "self"
+
+
+def _replace_weapon_cap_checks(text: str) -> tuple[str, int]:
+    """Replace hardcoded 2-weapon primary slot caps with bz_get_max_primary_weapons(<ent>)."""
+    total = 0
+
+    def _sub_limit(match: re.Match[str]) -> str:
+        nonlocal total
+        total += 1
+        ent = _infer_player_entity_before(text, match.start())
+        return f"{match.group('lhs')}maps\\_bz_hooks::bz_get_max_primary_weapons( {ent} ){match.group('semi')}"
+
+    text = WEAPON_LIMIT_ASSIGN_RE.sub(_sub_limit, text)
+
+    def _sub_arr(match: re.Match[str]) -> str:
+        nonlocal total
+        total += 1
+        ent = _infer_player_entity_before(text, match.start())
+        return f"{match.group('lhs')} >= maps\\_bz_hooks::bz_get_max_primary_weapons( {ent} )"
+
+    text = WEAPON_ARRAY_CAP_RE.sub(_sub_arr, text)
+    return text, total
+
+
+def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
+    """Patch stock _zombiemode_weapons.gsc with dynamic weapon caps and Mystery Box cost hook."""
+    text = script_bytes.decode("latin1")
+    text, cap_count = _replace_weapon_cap_checks(text)
+    if cap_count == 0:
+        raise ValueError(
+            "Expected at least 1 primary weapon cap check (>= 2 or weapon_limit = 2) "
+            "in _zombiemode_weapons.gsc"
+        )
+
+    # Route Mystery Box cost checks and deductions through bz_box_cost_modify (noop when bz_enabled=0)
+    text = CHEST_SCORE_CHECK_RE.sub(
+        lambda m: f"{m.group('ent')}.score >= maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost )",
+        text,
+    )
+    text = CHEST_SCORE_DEDUCT_RE.sub(
+        lambda m: (
+            f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
+            f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost ) )"
+        ),
+        text,
+    )
+    return text.encode("latin1")
+
+
+def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
+    """Patch stock _zombiemode_perks.gsc with dynamic weapon cap and unified maxhealth recompute."""
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    text, cap_count = _replace_weapon_cap_checks(text)
+    health_hooks = 0
+
+    # Inject guarded bz_recompute_player_max_health right after stock Juggernog health assignment
+    def _inject_after_jugg(match: re.Match[str]) -> str:
+        nonlocal health_hooks
+        health_hooks += 1
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+            f"{indent}{{{newline}"
+            f"{indent}\tmaps\\_bz_hooks::bz_recompute_player_max_health( {ent} );{newline}"
+            f"{indent}}}{ending}"
+        )
+
+    text = JUGG_HEALTH_BLOCK_RE.sub(_inject_after_jugg, text)
+
+    # Inject guarded bz_recompute_player_max_health right after stock perk loss reset (maxhealth = 100)
+    def _inject_after_reset(match: re.Match[str]) -> str:
+        nonlocal health_hooks
+        health_hooks += 1
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+            f"{indent}{{{newline}"
+            f"{indent}\tmaps\\_bz_hooks::bz_recompute_player_max_health( {ent} );{newline}"
+            f"{indent}}}{ending}"
+        )
+
+    text = PERK_RESET_HEALTH_RE.sub(_inject_after_reset, text)
+
+    if cap_count == 0 and health_hooks == 0:
+        raise ValueError(
+            "Expected at least 1 weapon-cap or maxhealth hook site in _zombiemode_perks.gsc"
+        )
+    return text.encode("latin1")
+
+
+def inject_zombiemode_score_hooks(script_bytes: bytes) -> bytes:
+    """Patch stock _zombiemode_score.gsc add_to_player_score() with guarded bz_points_modify."""
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    match = ADD_PLAYER_SCORE_DEF_RE.search(text)
+    if match is None:
+        raise ValueError("Could not locate add_to_player_score( points ) in _zombiemode_score.gsc")
+    param = match.group("param")
+    hook = (
+        f"{newline}"
+        f"\tif ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"\t{{{newline}"
+        f'\t\t{param} = maps\\_bz_hooks::bz_points_modify( self, {param}, "score" );{newline}'
+        f"\t}}"
+    )
+    text = text[: match.end()] + hook + text[match.end() :]
+    return text.encode("latin1")
+
+
+def generate_staged_mod_csv(base_csv_text: str, staged_gsc_relpaths: list[str]) -> str:
+    """Ensure mod.csv includes all staged _bz_*.gsc and per-map BZ wrapper scripts without duplicates."""
+    newline = "\r\n" if "\r\n" in base_csv_text else "\n"
+    existing_lines = {line.strip().lower() for line in base_csv_text.splitlines()}
+    additions: list[str] = []
+    for rel in sorted(staged_gsc_relpaths):
+        norm = rel.replace("\\", "/").lstrip("/")
+        stem = Path(norm).name.lower()
+        is_bz_script = (
+            stem.startswith("_bz_")
+            or stem.startswith("_zombiemode_weapons_bz_")
+            or stem.startswith("_zombiemode_perks_bz_")
+        )
+        if not is_bz_script:
+            continue
+        entry = f"rawfile,{norm}"
+        if entry.lower() not in existing_lines:
+            existing_lines.add(entry.lower())
+            additions.append(entry)
+
+    if not additions:
+        return base_csv_text
+
+    suffix = "" if base_csv_text.endswith(("\n", "\r")) else newline
+    return base_csv_text + suffix + newline.join(additions) + newline
+
+
+# ---------------------------------------------------------------------------
+# Base Zombies Stock Menu Patchers (layered cleanly on Gauntlet-patched menus)
+# ---------------------------------------------------------------------------
+
+
+def patch_main_menu_bz(source: str) -> str:
+    """Add Solo 'ENHANCEMENTS' launch entry and Classic bz_enabled=0 reset to ui/main.menu."""
+    newline = "\r\n" if "\r\n" in source else "\n"
+    text = source
+
+    # 1. Ensure LOCAL_ZOMBIE_RESET resets bz_enabled to 0 alongside gauntlet_enabled 0
+    if "set bz_enabled 0" not in text:
+        reset_re = re.compile(r'(set gauntlet_enabled 0)";')
+        new_text, count = reset_re.subn(r'\1; set bz_enabled 0";', text, count=1)
+        if count != 1:
+            raise ValueError("Could not locate LOCAL_ZOMBIE_RESET gauntlet_enabled reset in ui/main.menu")
+        text = new_text
+
+    # 2. Inject Solo "ENHANCEMENTS" button right after Solo "ZOMBIE GAUNTLET" button (slot 5)
+    if "BZ_SOLO_START_ACTION" not in text:
+        gauntlet_btn_re = re.compile(
+            r'^(?P<indent>[ \t]*)CHOICE_BUTTON_VIS\(\s*4,\s*"ZOMBIE GAUNTLET"[^\n]*$',
+            re.MULTILINE,
+        )
+        match = gauntlet_btn_re.search(text)
+        if match is None:
+            raise ValueError("Could not locate Solo ZOMBIE GAUNTLET button in ui/main.menu")
+        indent = match.group("indent")
+        bz_btn = (
+            f'{indent}CHOICE_BUTTON_VIS( 5, "ENHANCEMENTS", '
+            f'BZ_SOLO_START_ACTION, when( !localvarBool( ui_hideBack ) ); )'
+        )
+        text = text[: match.end()] + f"{newline}{bz_btn}" + text[match.end() :]
+
+    return text
+
+
+def patch_levels_menu_bz(source: str) -> str:
+    """Add Solo 'ENHANCEMENTS' launch button and Classic bz_enabled=0 guard to ui/levels.menu."""
+    newline = "\r\n" if "\r\n" in source else "\n"
+    text = source
+
+    # 1. Ensure Classic Solo Nazi Zombies map entries explicitly set bz_enabled "0"
+    if 'setdvar bz_enabled "0"' not in text:
+        gauntlet_zero_re = re.compile(
+            r'(setdvar gauntlet_enabled "0";[ \t]*\\\r?\n)',
+            re.MULTILINE,
+        )
+        new_text, count = gauntlet_zero_re.subn(
+            rf'\1\tsetdvar bz_enabled "0"; \\{newline}', text, count=1
+        )
+        if count != 1:
+            raise ValueError("Could not locate gauntlet_enabled reset in ui/levels.menu")
+        text = new_text
+
+    # 2. Inject Solo "ENHANCEMENTS" button at slot 6 alongside ZOMBIE GAUNTLET
+    if "BZ_SOLO_START_ACTION" not in text:
+        gauntlet_lvl_re = re.compile(
+            r'^(?P<indent>[ \t]*)ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
+            re.MULTILINE,
+        )
+        match = gauntlet_lvl_re.search(text)
+        if match is None:
+            raise ValueError("Could not locate levels_unlock ZOMBIE GAUNTLET entry in ui/levels.menu")
+        indent = match.group("indent")
+        bz_entry = (
+            f'{indent}ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS", BZ_SOLO_START_ACTION, '
+            f'"nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP).", '
+            f'18, exec "set ui_load_index 18" )'
+        )
+        text = text[: match.end()] + f"{newline}{bz_entry}" + text[match.end() :]
+
+    return text
+
+
+def _patch_coop_lobby_menu_bz(source: str, filename: str) -> str:
+    """Inject BZ_COOP_LOBBY_STATUS_PANEL into a Co-op lobby menu."""
+    newline = "\r\n" if "\r\n" in source else "\n"
+    text = source
+    if "BZ_COOP_LOBBY_STATUS_PANEL" not in text:
+        anchor_re = re.compile(
+            r"^(?P<indent>[ \t]*)GAUNTLET_COOP_LOBBY_STATUS_PANEL\([^\n]*$",
+            re.MULTILINE,
+        )
+        match = anchor_re.search(text)
+        if match is None:
+            raise ValueError(f"Could not locate GAUNTLET_COOP_LOBBY_STATUS_PANEL in {filename}")
+        indent = match.group("indent")
+        panel = f"{indent}BZ_COOP_LOBBY_STATUS_PANEL( 30, 178, 250, 44, HORIZONTAL_ALIGN_LEFT, VERTICAL_ALIGN_TOP )"
+        text = text[: match.end()] + f"{newline}{panel}" + text[match.end() :]
+    return text
+
+
+def patch_xboxlive_lobby_menu_bz(source: str) -> str:
+    return _patch_coop_lobby_menu_bz(source, "ui/xboxlive_lobby.menu")
+
+
+def patch_systemlink_lobby_menu_bz(source: str) -> str:
+    return _patch_coop_lobby_menu_bz(source, "ui/systemlink_lobby.menu")
+
+
+def apply_bz_menu_patches(stage_dir: Path) -> list[Path]:
+    """Apply Base Zombies Solo/Co-op menu patches to staged stock menus and validate braces."""
+    import verify_hud_menus
+
+    out_ui = stage_dir / "ui"
+    patchers = (
+        ("main.menu", patch_main_menu_bz),
+        ("levels.menu", patch_levels_menu_bz),
+        ("xboxlive_lobby.menu", patch_xboxlive_lobby_menu_bz),
+        ("systemlink_lobby.menu", patch_systemlink_lobby_menu_bz),
+    )
+    updated: list[Path] = []
+    for filename, patch_fn in patchers:
+        path = out_ui / filename
+        if not path.is_file():
+            raise FileNotFoundError(f"Staged menu missing before BZ patch: {path}")
+        patched = patch_fn(path.read_text(encoding="latin1"))
+        brace_errors = verify_hud_menus.validate_menu_braces(patched, filename=filename)
+        if brace_errors:
+            raise ValueError(f"BZ-patched menu {filename} failed brace validation: {brace_errors}")
+        path.write_text(patched, encoding="latin1")
+        updated.append(path)
+    return updated
 
 
 def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
@@ -266,26 +669,73 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_path, dst)
 
-    # Extract each stock map entry script and era-specific maps/_zombiemode.gsc
-    # (preferring <map>_patch.ff so DLC3 features and local waw_solo_fov() stay intact).
+    # Extract each stock map entry script and era-specific _zombiemode, _zombiemode_weapons,
+    # and _zombiemode_perks scripts (preferring <map>_patch.ff so DLC3 features and local
+    # waw_solo_fov() stay intact while preserving era parity across all 4 stock maps).
     for map_name in STOCK_MAPS:
+        weapons_mod: str | None = None
+        weapons_stock = try_extract_stock_script(
+            map_name, "maps/_zombiemode_weapons.gsc", steam_game, tools_root
+        )
+        if weapons_stock is not None:
+            weapons_mod = zombiemode_weapons_module_for_map(map_name)
+            weapons_patched = inject_zombiemode_weapons_hooks(weapons_stock)
+            weapons_dst = stage_dir / "maps" / f"{weapons_mod}.gsc"
+            weapons_dst.parent.mkdir(parents=True, exist_ok=True)
+            weapons_dst.write_bytes(weapons_patched)
+
+        perks_mod: str | None = None
+        perks_stock = try_extract_stock_script(
+            map_name, "maps/_zombiemode_perks.gsc", steam_game, tools_root
+        )
+        if perks_stock is not None:
+            perks_mod = zombiemode_perks_module_for_map(map_name)
+            perks_patched = inject_zombiemode_perks_hooks(perks_stock)
+            perks_dst = stage_dir / "maps" / f"{perks_mod}.gsc"
+            perks_dst.parent.mkdir(parents=True, exist_ok=True)
+            perks_dst.write_bytes(perks_patched)
+
         rawfile_rel = f"maps/{map_name}.gsc"
         ff_path = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
         stock_bytes = extract_rawfile_from_ff(ff_path, rawfile_rel)
-        patched_map_bytes = inject_map_hooks(stock_bytes, map_name)
+        patched_map_bytes = inject_map_hooks(
+            stock_bytes,
+            map_name,
+            rewire_weapons_module=weapons_mod,
+            rewire_perks_module=perks_mod,
+        )
         dst = stage_dir / rawfile_rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(patched_map_bytes)
 
         zm_stock_bytes = extract_stock_zombiemode(map_name, steam_game, tools_root)
-        zm_patched_bytes = inject_zombiemode_hooks(zm_stock_bytes, map_name)
+        zm_patched_bytes = inject_zombiemode_hooks(
+            zm_stock_bytes,
+            map_name,
+            rewire_weapons_module=weapons_mod,
+            rewire_perks_module=perks_mod,
+        )
         zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
         zm_dst.parent.mkdir(parents=True, exist_ok=True)
         zm_dst.write_bytes(zm_patched_bytes)
 
+    # Auto-register any tracked _bz_*.gsc and staged per-map BZ wrapper scripts in staged mod.csv
+    staged_mod_csv = stage_dir / "mod.csv"
+    if staged_mod_csv.is_file():
+        staged_gscs = [
+            p.relative_to(stage_dir).as_posix()
+            for p in sorted((stage_dir / "maps").rglob("*.gsc"))
+        ]
+        updated_csv = generate_staged_mod_csv(
+            staged_mod_csv.read_text(encoding="latin1"),
+            staged_gscs,
+        )
+        staged_mod_csv.write_text(updated_csv, encoding="latin1")
+
     import verify_hud_menus
 
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
+    apply_bz_menu_patches(stage_dir=stage_dir)
 
     return stage_dir
 
