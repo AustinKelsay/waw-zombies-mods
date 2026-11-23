@@ -266,6 +266,190 @@ class TestGauntletStatePersistence(unittest.TestCase):
             self.gsc.call(STATE_MOD, "resolve_player_starting_points", 901, "Other", 10), 7000
         )
 
+    def test_lobby_handoff_dvars_and_clear_run_state(self) -> None:
+        self.dvars.set("gauntlet_enabled", "1")
+        self.dvars.set("gauntlet_fresh_run", "1")
+        self.gsc.call(STATE_MOD, "init_fresh_run", "coop_handoff")
+
+        next_info = self.gsc.call("maps\\_gauntlet_rules", "get_stage_info", 2, 2)
+        status = self.gsc.call(STATE_MOD, "set_lobby_handoff_dvars", next_info)
+        self.assertEqual(status, "NEXT STAGE: C2 S2/4 - Verruckt (R10-R15)")
+        self.assertEqual(self.dvars.get("gauntlet_pending_transition"), "1")
+        self.assertEqual(self.dvars.get("gauntlet_next_map"), "nazi_zombie_asylum")
+        self.assertEqual(self.dvars.get("gauntlet_next_display"), "Verruckt")
+        self.assertEqual(
+            self.dvars.get("gauntlet_lobby_status"),
+            "NEXT STAGE: C2 S2/4 - Verruckt (R10-R15)",
+        )
+
+        # Mark disconnected and spectator flags to verify clear_run_state wipes them too
+        self.gsc.call(STATE_MOD, "mark_player_disconnected", 2001, "Dropper")
+        self.gsc.call(STATE_MOD, "mark_player_spectator", 2002, "Fallen")
+        self.assertTrue(self.gsc.call(STATE_MOD, "is_player_marked_disconnected", 2001, "Dropper"))
+        self.assertTrue(self.gsc.call(STATE_MOD, "is_player_marked_spectator", 2002, "Fallen"))
+
+        self.gsc.call(STATE_MOD, "clear_run_state")
+
+        # Mode gate untouched; all handoff, fresh-run, and roster-flag dvars cleared
+        self.assertEqual(self.dvars.get("gauntlet_enabled"), "1")
+        self.assertEqual(self.dvars.get("gauntlet_next_map"), "")
+        self.assertEqual(self.dvars.get("gauntlet_next_display"), "")
+        self.assertEqual(self.dvars.get("gauntlet_lobby_status"), "")
+        self.assertEqual(self.dvars.get("gauntlet_fresh_run"), "0")
+        self.assertEqual(self.dvars.get("gauntlet_disconnected_players"), "")
+        self.assertEqual(self.dvars.get("gauntlet_spectators"), "")
+        self.assertFalse(self.gsc.call(STATE_MOD, "is_player_marked_disconnected", 2001, "Dropper"))
+        self.assertFalse(self.gsc.call(STATE_MOD, "is_player_marked_spectator", 2002, "Fallen"))
+
+    def test_four_player_roster_resolution_roles_and_recovery(self) -> None:
+        self.gsc.call(STATE_MOD, "init_fresh_run", "coop_4p")
+
+        # 4-player squad snapshot on Stage Clear before Cycle 2 Stage 2 (start_round=10, floor=5000):
+        # P1: returning with surplus (12400)
+        self.assertTrue(self.gsc.call(STATE_MOD, "record_player_points", 30001, "Dempsey", 12400))
+        # P2: returning below floor (1650)
+        self.assertTrue(self.gsc.call(STATE_MOD, "record_player_points", 30002, "Nikolai", 1650))
+        # P3: dead/spectating at Stage Clear with 0 points
+        self.assertTrue(self.gsc.call(STATE_MOD, "record_player_points", 30003, "Takeo", 0))
+        self.assertTrue(self.gsc.call(STATE_MOD, "mark_player_spectator", 30003, "Takeo"))
+        # P4: disconnected mid-Stage with 8750 points (offline/LAN name fallback, guid=0)
+        self.assertTrue(self.gsc.call(STATE_MOD, "record_player_points", 0, "Richtofen", 8750))
+        self.assertTrue(self.gsc.call(STATE_MOD, "mark_player_disconnected", 0, "Richtofen"))
+
+        # 1. Returning player with surplus
+        e1 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 30001, "Dempsey", 10, False)
+        self.assertEqual(e1.player_key, "g_30001")
+        self.assertEqual(e1.role, "returning")
+        self.assertEqual(e1.points, 12400)
+        self.assertEqual(e1.carried, 12400)
+        self.assertEqual(e1.floor, 5000)
+
+        # 2. Returning player below Points Floor -> topped up to 5000
+        e2 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 30002, "Nikolai", 10, False)
+        self.assertEqual(e2.role, "returning")
+        self.assertEqual(e2.points, 5000)
+        self.assertEqual(e2.carried, 1650)
+        self.assertEqual(e2.floor, 5000)
+
+        # 3a. Spectator resolved via persisted spectator flag (spawning alive on next map: was_spectator=False)
+        e3 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 30003, "Takeo", 10, False)
+        self.assertEqual(e3.role, "spectator")
+        self.assertEqual(e3.points, 5000)
+        self.assertEqual(e3.carried, 0)
+        self.assertEqual(e3.floor, 5000)
+
+        # 3b. Spectator resolved via explicit was_spectator=True parameter even without marker
+        self.gsc.call(STATE_MOD, "clear_player_spectator", 30003, "Takeo")
+        e3_explicit = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 30003, "Takeo", 10, True)
+        self.assertEqual(e3_explicit.role, "spectator")
+        self.assertEqual(e3_explicit.points, 5000)
+        # And once cleared + alive on next Stage, classifies as returning
+        e3_after = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 30003, "Takeo", 10, False)
+        self.assertEqual(e3_after.role, "returning")
+
+        # 4. Disconnected player reconnecting recovers saved 8750 points with role="reconnecting"
+        e4 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 0, "Richtofen", 10, False)
+        self.assertEqual(e4.player_key, "n_richtofen")
+        self.assertEqual(e4.role, "reconnecting")
+        self.assertEqual(e4.points, 8750)
+        self.assertEqual(e4.carried, 8750)
+        self.assertEqual(e4.floor, 5000)
+
+        # Clearing disconnect flag restores normal returning classification on next Stage
+        self.gsc.call(STATE_MOD, "clear_player_disconnected", 0, "Richtofen")
+        e4_after = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 0, "Richtofen", 10, False)
+        self.assertEqual(e4_after.role, "returning")
+        self.assertEqual(e4_after.points, 8750)
+
+        # Mid-Stage reconnect with is_late_join=True and existing record classifies as reconnecting
+        e1_mid = self.gsc.call(
+            STATE_MOD, "resolve_player_roster_entry", 30001, "DempseyRenamed", 10, False, True
+        )
+        self.assertEqual(e1_mid.role, "reconnecting")
+        self.assertEqual(e1_mid.points, 12400)
+
+        # 5. Late joiner (unrecorded player) receives exact Stage Points Floor
+        e5 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 99999, "NewSquadmate", 10, False)
+        self.assertEqual(e5.player_key, "g_99999")
+        self.assertEqual(e5.role, "late_joiner")
+        self.assertEqual(e5.points, 5000)
+        self.assertIs(e5.carried, UNDEFINED)
+        self.assertEqual(e5.floor, 5000)
+
+        # Late joiner on Cycle 3 (Round 15) receives 7500 floor
+        e5_c3 = self.gsc.call(STATE_MOD, "resolve_player_roster_entry", 99999, "NewSquadmate", 15, False, True)
+        self.assertEqual(e5_c3.role, "late_joiner")
+        self.assertEqual(e5_c3.points, 7500)
+
+    def test_stale_run_reset_detection(self) -> None:
+        # Inactive Run without force_fresh_run -> not a stale reset
+        inactive = GscStruct()
+        inactive.set_field("active", False)
+        inactive.set_field("cycle", 1)
+        inactive.set_field("stage", 1)
+        inactive.set_field("pending_transition", False)
+        self.assertFalse(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", inactive, "nazi_zombie_prototype", False)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", inactive, "nazi_zombie_prototype", False),
+            "",
+        )
+
+        # Explicit gauntlet_fresh_run=1 always resets even if inactive or pending matches
+        self.assertTrue(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", inactive, "nazi_zombie_prototype", True)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", inactive, "nazi_zombie_prototype", True),
+            "fresh_run_requested",
+        )
+
+        # Active Run with pending_transition=True and matching map (case-insensitive) -> valid continuation
+        valid_next = GscStruct()
+        valid_next.set_field("active", True)
+        valid_next.set_field("cycle", 2)
+        valid_next.set_field("stage", 2)
+        valid_next.set_field("pending_transition", True)
+        self.assertFalse(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", valid_next, "NAZI_ZOMBIE_ASYLUM", False)
+        )
+        # Same valid state with force_fresh_run=True -> resets
+        self.assertTrue(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", valid_next, "nazi_zombie_asylum", True)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", valid_next, "nazi_zombie_asylum", True),
+            "fresh_run_requested",
+        )
+
+        # Active Run with pending_transition=True but host picked wrong map -> stale_map_mismatch
+        self.assertTrue(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", valid_next, "nazi_zombie_prototype", False)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", valid_next, "nazi_zombie_prototype", False),
+            "stale_map_mismatch",
+        )
+
+        # Active Run with pending_transition=False (host disbanded / quit mid-Stage) -> resets
+        stale_mid = GscStruct()
+        stale_mid.set_field("active", True)
+        stale_mid.set_field("cycle", 2)
+        stale_mid.set_field("stage", 3)
+        stale_mid.set_field("pending_transition", False)
+        self.assertTrue(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", stale_mid, "nazi_zombie_prototype", False)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", stale_mid, "nazi_zombie_prototype", False),
+            "stale_no_pending_transition",
+        )
+        # Even if host relaunched the same map after quitting mid-Stage without Stage Clear -> resets
+        self.assertTrue(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", stale_mid, "nazi_zombie_sumpf", False)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

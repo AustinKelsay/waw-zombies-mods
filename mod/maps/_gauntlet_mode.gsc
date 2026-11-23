@@ -27,6 +27,43 @@ is_gauntlet_enabled()
 	return GetDvarInt( "gauntlet_enabled" ) == 1;
 }
 
+is_coop_session()
+{
+	if ( GetDvarInt( "gauntlet_test_force_coop" ) == 1 )
+	{
+		return true;
+	}
+	return maps\_utility::coopGame();
+}
+
+ensure_handoff_dvars_registered()
+{
+	if ( GetDvar( "gauntlet_next_map" ) == "" )
+	{
+		SetDvar( "gauntlet_next_map", "" );
+	}
+	if ( GetDvar( "gauntlet_next_display" ) == "" )
+	{
+		SetDvar( "gauntlet_next_display", "" );
+	}
+	if ( GetDvar( "gauntlet_lobby_status" ) == "" )
+	{
+		SetDvar( "gauntlet_lobby_status", "" );
+	}
+	if ( GetDvar( "gauntlet_fresh_run" ) == "" )
+	{
+		SetDvar( "gauntlet_fresh_run", "0" );
+	}
+	if ( GetDvar( "gauntlet_disconnected_players" ) == "" )
+	{
+		SetDvar( "gauntlet_disconnected_players", "" );
+	}
+	if ( GetDvar( "gauntlet_spectators" ) == "" )
+	{
+		SetDvar( "gauntlet_spectators", "" );
+	}
+}
+
 get_current_map_name()
 {
 	if ( IsDefined( level.script ) && level.script != "" )
@@ -128,6 +165,33 @@ get_player_name( player )
 	return "player_" + player GetEntityNumber();
 }
 
+get_player_score_safe( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.score ) )
+	{
+		return 0;
+	}
+	pts = Int( player.score );
+	if ( pts < 0 )
+	{
+		return 0;
+	}
+	return pts;
+}
+
+is_player_spectating( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" )
+	{
+		return true;
+	}
+	return false;
+}
+
 // Seam called synchronously before maps\_zombiemode_gauntlet_<map>::main(...)
 // when Gauntlet is enabled. Reserved for Ticket #8 precaching.
 on_pre_zombiemode_init()
@@ -146,10 +210,33 @@ on_stage_init()
 		return;
 	}
 
+	ensure_handoff_dvars_registered();
+
 	current_map = get_current_map_name();
 	state = maps\_gauntlet_state::load_run_state();
+	force_fresh_run = ( GetDvarInt( "gauntlet_fresh_run" ) == 1 );
+	reset_reason = maps\_gauntlet_state::get_stale_run_reset_reason( state, current_map, force_fresh_run );
 
-	if ( !state.active )
+	if ( reset_reason != "" )
+	{
+		reset_fields = [];
+		reset_fields[0] = maps\_gauntlet_log::kv( "reason", reset_reason );
+		reset_fields[1] = maps\_gauntlet_log::kv( "prev_cycle", state.cycle );
+		reset_fields[2] = maps\_gauntlet_log::kv( "prev_stage", state.stage );
+		reset_fields[3] = maps\_gauntlet_log::kv( "prev_run_id", state.run_id );
+		reset_fields[4] = maps\_gauntlet_log::kv( "map", current_map );
+		maps\_gauntlet_log::emit( "RUN_RESET", maps\_gauntlet_log::join_fields( reset_fields ) );
+
+		maps\_gauntlet_state::clear_run_state();
+		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
+		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
+		if ( map_stage >= 1 && map_stage != state.stage )
+		{
+			state.stage = map_stage;
+			state = maps\_gauntlet_state::save_run_state( state );
+		}
+	}
+	else if ( !state.active )
 	{
 		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
 		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
@@ -163,6 +250,7 @@ on_stage_init()
 	{
 		state.pending_transition = false;
 		state = maps\_gauntlet_state::save_run_state( state );
+		maps\_gauntlet_state::clear_lobby_handoff_dvars();
 	}
 
 	stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage );
@@ -413,6 +501,80 @@ run_prep_phase( state, stage_info, duration )
 	maps\_gauntlet_log::emit( "PREP_PHASE_END", maps\_gauntlet_log::join_fields( end_fields ) );
 }
 
+register_player_tracking( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( IsDefined( player.gauntlet_tracked ) && player.gauntlet_tracked )
+	{
+		return;
+	}
+	player.gauntlet_tracked = true;
+	player thread watch_player_disconnect();
+}
+
+monitor_player_score_cache( cache )
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+	level endon( "gauntlet_stage_clear" );
+
+	for ( ;; )
+	{
+		if ( IsDefined( self ) )
+		{
+			cache.guid = get_player_guid( self );
+			cache.name = get_player_name( self );
+			if ( IsDefined( self.gauntlet_points_applied ) && self.gauntlet_points_applied )
+			{
+				cache.score = get_player_score_safe( self );
+			}
+		}
+		wait( 0.5 );
+	}
+}
+
+watch_player_disconnect()
+{
+	level endon( "end_game" );
+	level endon( "gauntlet_stage_clear" );
+
+	// Store identity/score in an independent struct so entity teardown on
+	// disconnect cannot wipe cached values before checkpointing.
+	cache = SpawnStruct();
+	cache.guid = get_player_guid( self );
+	cache.name = get_player_name( self );
+	cache.score = get_player_score_safe( self );
+
+	self thread monitor_player_score_cache( cache );
+
+	self waittill( "disconnect" );
+
+	if ( IsDefined( self ) && IsDefined( self.score ) )
+	{
+		live_score = Int( self.score );
+		if ( live_score >= 0 )
+		{
+			cache.score = live_score;
+		}
+	}
+
+	player_key = maps\_gauntlet_state::make_player_key( cache.guid, cache.name );
+	if ( player_key != "" )
+	{
+		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
+		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
+
+		fields = [];
+		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
+		fields[1] = maps\_gauntlet_log::kv( "points", cache.score );
+		fields[2] = maps\_gauntlet_log::kv( "map", get_current_map_name() );
+		maps\_gauntlet_log::emit( "PLAYER_DISCONNECTED", maps\_gauntlet_log::join_fields( fields ) );
+	}
+}
+
 apply_connected_players_starting_points( start_round, current_map )
 {
 	players = GetPlayers();
@@ -423,7 +585,7 @@ apply_connected_players_starting_points( start_round, current_map )
 		{
 			continue;
 		}
-		apply_player_starting_points( player, start_round, current_map );
+		apply_player_starting_points( player, start_round, current_map, false );
 	}
 }
 
@@ -437,14 +599,16 @@ watch_late_joining_players( start_round, current_map )
 		level waittill( "connecting", player );
 		if ( IsDefined( player ) )
 		{
-			level thread apply_player_starting_points( player, start_round, current_map );
+			level thread apply_player_starting_points( player, start_round, current_map, true );
 		}
 	}
 }
 
-apply_player_starting_points( player, start_round, current_map )
+apply_player_starting_points( player, start_round, current_map, is_late_join )
 {
 	player endon( "disconnect" );
+
+	register_player_tracking( player );
 
 	if ( IsDefined( player.gauntlet_points_applied ) && player.gauntlet_points_applied )
 	{
@@ -467,29 +631,40 @@ apply_player_starting_points( player, start_round, current_map )
 
 	guid = get_player_guid( player );
 	name = get_player_name( player );
-	player_key = maps\_gauntlet_state::make_player_key( guid, name );
-	recorded_points = maps\_gauntlet_state::get_recorded_player_points( guid, name );
-	floor_points = maps\_gauntlet_rules::get_points_floor( start_round );
-	target_points = maps\_gauntlet_state::resolve_player_starting_points( guid, name, start_round );
+	was_spectator = is_player_spectating( player );
+	roster_entry = maps\_gauntlet_state::resolve_player_roster_entry( guid, name, start_round, was_spectator, is_late_join );
+
+	// Clear one-shot recovery flags now that this player has entered the Stage.
+	maps\_gauntlet_state::clear_player_disconnected( guid, name );
+	maps\_gauntlet_state::clear_player_spectator( guid, name );
 
 	carried_label = "none";
-	if ( IsDefined( recorded_points ) )
+	if ( IsDefined( roster_entry.carried ) )
 	{
-		carried_label = "" + recorded_points;
+		carried_label = "" + roster_entry.carried;
 	}
 
-	player.score = target_points;
-	player.score_total = target_points;
-	player.old_score = target_points;
+	player.score = roster_entry.points;
+	player.score_total = roster_entry.points;
+	player.old_score = roster_entry.points;
 	player.gauntlet_points_applied = true;
 
+	roster_fields = [];
+	roster_fields[0] = maps\_gauntlet_log::kv( "player", roster_entry.player_key );
+	roster_fields[1] = maps\_gauntlet_log::kv( "role", roster_entry.role );
+	roster_fields[2] = maps\_gauntlet_log::kv( "points", roster_entry.points );
+	roster_fields[3] = maps\_gauntlet_log::kv( "carried", carried_label );
+	roster_fields[4] = maps\_gauntlet_log::kv( "floor", roster_entry.floor );
+	roster_fields[5] = maps\_gauntlet_log::kv( "map", current_map );
+	maps\_gauntlet_log::emit( "PLAYER_ROSTER_RESOLVED", maps\_gauntlet_log::join_fields( roster_fields ) );
+
 	fields = [];
-	fields[0] = maps\_gauntlet_log::kv( "player", player_key );
-	fields[1] = maps\_gauntlet_log::kv( "points", target_points );
+	fields[0] = maps\_gauntlet_log::kv( "player", roster_entry.player_key );
+	fields[1] = maps\_gauntlet_log::kv( "points", roster_entry.points );
 	fields[2] = maps\_gauntlet_log::kv( "start_round", start_round );
 	fields[3] = maps\_gauntlet_log::kv( "map", current_map );
 	fields[4] = maps\_gauntlet_log::kv( "carried", carried_label );
-	fields[5] = maps\_gauntlet_log::kv( "floor", floor_points );
+	fields[5] = maps\_gauntlet_log::kv( "floor", roster_entry.floor );
 	maps\_gauntlet_log::emit( "POINTS_APPLIED", maps\_gauntlet_log::join_fields( fields ) );
 }
 
@@ -665,6 +840,9 @@ on_round_completed( completed_round )
 
 	if ( !maps\_gauntlet_rules::is_target_round_reached( completed_round, level.gauntlet_effective_target_round ) )
 	{
+		// Mid-Stage round-end checkpoint so any player who disconnects before
+		// Stage Clear still has an up-to-date point balance in the host ledger.
+		checkpoint_all_players_points();
 		return false;
 	}
 
@@ -675,8 +853,66 @@ on_round_completed( completed_round )
 	return true;
 }
 
+checkpoint_all_players_points()
+{
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		player = players[i];
+		if ( !IsDefined( player ) )
+		{
+			continue;
+		}
+		register_player_tracking( player );
+		guid = get_player_guid( player );
+		name = get_player_name( player );
+		pts = get_player_score_safe( player );
+		maps\_gauntlet_state::record_player_points( guid, name, pts );
+	}
+}
+
+protect_players_for_stage_clear()
+{
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		player = players[i];
+		if ( !IsDefined( player ) )
+		{
+			continue;
+		}
+
+		if ( is_player_spectating( player ) )
+		{
+			continue;
+		}
+
+		if ( IsAlive( player ) && player maps\_laststand::player_is_in_laststand() )
+		{
+			player notify( "player_revived" );
+			player reviveplayer();
+			maps\_utility::setClientSysState( "lsm", "0", player );
+			if ( IsDefined( player.revivetrigger ) )
+			{
+				player.revivetrigger Delete();
+				player.revivetrigger = undefined;
+			}
+			player.ignoreme = false;
+		}
+
+		if ( IsAlive( player ) )
+		{
+			player EnableInvulnerability();
+		}
+	}
+}
+
 snapshot_all_players_points( current_map )
 {
+	// Reset previous Stage's spectator list so only players currently dead or
+	// spectating at THIS Stage Clear are tagged for the upcoming Stage.
+	maps\_gauntlet_state::clear_spectator_players();
+
 	// GetPlayers() returns all connected players including downed and spectating players.
 	players = GetPlayers();
 	for ( i = 0; i < players.size; i++ )
@@ -690,18 +926,14 @@ snapshot_all_players_points( current_map )
 		guid = get_player_guid( player );
 		name = get_player_name( player );
 		player_key = maps\_gauntlet_state::make_player_key( guid, name );
-
-		pts = 0;
-		if ( IsDefined( player.score ) )
-		{
-			pts = Int( player.score );
-		}
-		if ( pts < 0 )
-		{
-			pts = 0;
-		}
+		pts = get_player_score_safe( player );
 
 		maps\_gauntlet_state::record_player_points( guid, name, pts );
+
+		if ( is_player_spectating( player ) )
+		{
+			maps\_gauntlet_state::mark_player_spectator( guid, name );
+		}
 
 		fields = [];
 		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
@@ -717,11 +949,18 @@ handle_stage_clear( completed_round )
 	prev_state = level.gauntlet_state;
 	prev_info = level.gauntlet_stage_info;
 
+	// Protect squad during Stage Clear banner (revive downed players + invulnerability)
+	// so nobody can bleed out or wipe during the 5s celebration.
+	protect_players_for_stage_clear();
+
 	snapshot_all_players_points( current_map );
 
 	rounds_cleared = compute_rounds_cleared_in_stage( prev_info.start_round, completed_round );
 	next_state = maps\_gauntlet_state::advance_run_state( prev_state, rounds_cleared );
 	next_info = maps\_gauntlet_rules::get_stage_info( next_state.cycle, next_state.stage );
+
+	// Populate Co-op lobby handoff dvars for Ticket #8 UI and post-transition checks.
+	maps\_gauntlet_state::set_lobby_handoff_dvars( next_info );
 
 	level.gauntlet_state = next_state;
 
@@ -809,7 +1048,7 @@ show_stage_clear_banner( prev_state, prev_info, next_state, next_info, duration 
 
 execute_stage_transition( next_state, next_info )
 {
-	if ( !maps\_utility::coopGame() )
+	if ( !is_coop_session() )
 	{
 		trans_fields = [];
 		trans_fields[0] = maps\_gauntlet_log::kv( "mode", "solo" );
@@ -826,17 +1065,25 @@ execute_stage_transition( next_state, next_info )
 	}
 }
 
-// Co-op lobby-assisted Stage Transition seam (ADR-0001).
-// Full Co-op lobby UX and squad roster recovery will extend this in Ticket #6.
+// Co-op lobby-assisted Stage Transition (ADR-0001).
+// Never calls ChangeLevel() in Co-op: pre-selects the next stock map in the UI
+// and returns the entire connected party together to the Co-op lobby.
 execute_coop_stage_transition( next_state, next_info )
 {
+	players = GetPlayers();
+	player_count = players.size;
+
 	trans_fields = [];
 	trans_fields[0] = maps\_gauntlet_log::kv( "mode", "coop" );
 	trans_fields[1] = maps\_gauntlet_log::kv( "next_map", next_info.map_name );
 	trans_fields[2] = maps\_gauntlet_log::kv( "next_cycle", next_state.cycle );
 	trans_fields[3] = maps\_gauntlet_log::kv( "next_stage", next_state.stage );
+	trans_fields[4] = maps\_gauntlet_log::kv( "player_count", player_count );
 	maps\_gauntlet_log::emit( "STAGE_TRANSITION", maps\_gauntlet_log::join_fields( trans_fields ) );
 
+	// Pre-select the next stock map for the Co-op lobby via native SetUINextLevel()
+	// (WaW 1.7 forbids GSC SetDvar("ui_mapname", ...) as an internal UI dvar; Ticket #8
+	// lobby menus also read gauntlet_next_map / gauntlet_lobby_status directly).
 	SetUINextLevel( next_info.map_name );
 	exitLevel( false );
 }

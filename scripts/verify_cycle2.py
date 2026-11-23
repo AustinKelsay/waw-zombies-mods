@@ -596,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_cycle", "1"),
                 ("gauntlet_stage", "4"),
                 ("gauntlet_total_rounds", "30"),
-                ("gauntlet_pending_transition", "0"),
+                ("gauntlet_pending_transition", "1"),
                 ("gauntlet_player_points", ""),
                 ("gauntlet_test_target_round", "1"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
