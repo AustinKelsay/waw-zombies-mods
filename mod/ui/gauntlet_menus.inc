@@ -2,6 +2,8 @@
 // Included by mod/ui/pc_gamesetup_coop.menu and build-patched stock menus
 // (ui/main.menu, ui/levels.menu, ui/xboxlive_lobby.menu, ui/systemlink_lobby.menu).
 
+#include "ui/bz_menus.inc"
+
 #define GAUNTLET_COLOR_GOLD		0.95 0.85 0.45 1
 #define GAUNTLET_COLOR_SUBTEXT	0.85 0.92 1.0 0.9
 
@@ -9,25 +11,25 @@
 #define GAUNTLET_CLEAR_RUN_STATE_EXEC \
 	exec "set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"";
 
-// Solo entry: enables Zombie Gauntlet, clears stale Run state, and launches
-// Cycle 1, Stage 1 on Nacht der Untoten (nazi_zombie_prototype).
+// Solo entry: enables Zombie Gauntlet, clears stale Run state, disables Base Zombies,
+// and launches Cycle 1, Stage 1 on Nacht der Untoten (nazi_zombie_prototype).
 #define GAUNTLET_SOLO_START_ACTION \
 	setdvar credits "0"; \
 	setdvar credits_active "0"; \
-	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
+	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
 
-// Classic Mode guard: disables Zombie Gauntlet and clears stale lobby status.
+// Classic Mode guard: disables Zombie Gauntlet and Base Zombies, clearing stale lobby status.
 #define GAUNTLET_CLASSIC_MODE_ACTION \
-	exec "set gauntlet_enabled 0; set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
+	exec "set gauntlet_enabled 0; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
 
 // Co-op fresh Run lock: forces Nazi Zombies gametype and Nacht der Untoten
 // whenever Gauntlet is enabled with no pending Stage Transition.
 #define GAUNTLET_COOP_FRESH_LOCK_ACTION \
-	exec "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"";
+	exec "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"";
 
 // Action fired when the host toggles gauntlet_enabled in pc_gamesetup_coop.menu.
 #define GAUNTLET_COOP_TOGGLE_ACTION \
-	execOnDvarIntValue gauntlet_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
+	execOnDvarIntValue gauntlet_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
 	execOnDvarIntValue gauntlet_enabled 0 "set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
 
 // Co-op Host Setup mode toggle (0 = Classic Mode, 1 = Zombie Gauntlet).
