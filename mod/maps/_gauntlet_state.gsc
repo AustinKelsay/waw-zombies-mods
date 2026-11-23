@@ -236,6 +236,7 @@ clear_run_state()
 	SetDvar( "gauntlet_total_rounds", "" );
 	SetDvar( "gauntlet_pending_transition", "0" );
 	SetDvar( "gauntlet_player_points", "" );
+	SetDvar( "gauntlet_player_perks", "" );
 	SetDvar( "gauntlet_next_map", "" );
 	SetDvar( "gauntlet_next_display", "" );
 	SetDvar( "gauntlet_lobby_status", "" );

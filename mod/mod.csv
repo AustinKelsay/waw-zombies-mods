@@ -6,8 +6,15 @@
 rawfile,maps/_gauntlet_log.gsc
 rawfile,maps/_gauntlet_rules.gsc
 rawfile,maps/_gauntlet_state.gsc
+rawfile,maps/_gauntlet_perks.gsc
 rawfile,maps/_gauntlet_mode.gsc
 rawfile,maps/_gauntlet_bootstrap.gsc
+
+// Stock WaW perk HUD icon materials (ensures carried-over perk icons render on Nacht der Untoten)
+material,specialty_juggernaut_zombies
+material,specialty_fastreload_zombies
+material,specialty_doubletap_zombies
+material,specialty_quickrevive_zombies
 
 // Build-staged per-map hooked _zombiemode scripts (preserves era-specific stock/DLC3 code + waw_solo_fov)
 rawfile,maps/_zombiemode_gauntlet_prototype.gsc

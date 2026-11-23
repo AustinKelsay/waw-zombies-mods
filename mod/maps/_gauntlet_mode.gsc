@@ -200,6 +200,8 @@ on_pre_zombiemode_init()
 	{
 		return;
 	}
+
+	maps\_gauntlet_perks::precache_perk_shaders();
 }
 
 // Seam called inside round_start() immediately before level thread round_think().
@@ -566,6 +568,10 @@ watch_player_disconnect()
 	{
 		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
+		if ( IsDefined( self ) )
+		{
+			maps\_gauntlet_perks::snapshot_player_perks( self, get_current_map_name() );
+		}
 
 		fields = [];
 		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
@@ -666,6 +672,8 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 	fields[4] = maps\_gauntlet_log::kv( "carried", carried_label );
 	fields[5] = maps\_gauntlet_log::kv( "floor", roster_entry.floor );
 	maps\_gauntlet_log::emit( "POINTS_APPLIED", maps\_gauntlet_log::join_fields( fields ) );
+
+	maps\_gauntlet_perks::restore_player_perks( player, current_map );
 }
 
 // Seam threaded right before round_wait() in round_think() when Gauntlet is enabled.
@@ -868,6 +876,7 @@ checkpoint_all_players_points()
 		name = get_player_name( player );
 		pts = get_player_score_safe( player );
 		maps\_gauntlet_state::record_player_points( guid, name, pts );
+		maps\_gauntlet_perks::snapshot_player_perks( player, get_current_map_name() );
 	}
 }
 
@@ -940,6 +949,8 @@ snapshot_all_players_points( current_map )
 		fields[1] = maps\_gauntlet_log::kv( "points", pts );
 		fields[2] = maps\_gauntlet_log::kv( "map", current_map );
 		maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
+
+		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
 	}
 }
 
