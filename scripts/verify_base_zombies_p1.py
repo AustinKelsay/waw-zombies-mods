@@ -105,6 +105,11 @@ def _check_fatal_patterns(log_text: str, errors: list[str]) -> None:
             if pattern.search(line):
                 errors.append(f"{label}: {line.strip()}")
                 break
+    missing_bz_menu = re.compile(r'Could not load menufile\s+"[^"]*bz_station_', re.IGNORECASE)
+    for line in log_text.splitlines():
+        if missing_bz_menu.search(line):
+            errors.append(f"Missing Base Zombies station menufile: {line.strip()}")
+            break
 
 
 def analyze_bz_p1_log(

@@ -1389,7 +1389,50 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
     apply_bz_menu_patches(stage_dir=stage_dir)
 
+    # Mirror Base Zombies station popups under ui/scriptmenus/ so WaW 1.7 PrecacheMenu()
+    # and openMenu() resolve ui/scriptmenus/bz_station_*.menu cleanly in-game.
+    scriptmenus_dir = stage_dir / "ui" / "scriptmenus"
+    scriptmenus_dir.mkdir(parents=True, exist_ok=True)
+    for menu_src in sorted((stage_dir / "ui").glob("bz_station_*.menu")):
+        shutil.copy2(menu_src, scriptmenus_dir / menu_src.name)
+
     return stage_dir
+
+
+def _overlay_staged_ui_into_raw(stage_dir: Path, tools_root: Path) -> list[tuple[Path, bytes | None]]:
+    """Temporarily overlay staged ui/ files onto tools_root/raw/ui/ for linker_pc.exe.
+
+    In CoD:WaW 1.7, linker_pc.exe resolves menufile assets (and #include'd .inc files)
+    from raw/ ahead of mods/<moddir>/ whenever a stock file of the same name exists in
+    raw/. Overlaying staged ui/ files before linking and restoring them immediately
+    afterward guarantees mod.ff compiles our patched menus while leaving raw/ untouched.
+    """
+    staged_ui_dir = stage_dir / "ui"
+    raw_dir = tools_root / "raw"
+    backups: list[tuple[Path, bytes | None]] = []
+    if not staged_ui_dir.is_dir():
+        return backups
+
+    for src_path in sorted(staged_ui_dir.rglob("*")):
+        if not src_path.is_file():
+            continue
+        rel = src_path.relative_to(stage_dir)
+        dst_path = raw_dir / rel
+        prior = dst_path.read_bytes() if dst_path.is_file() else None
+        backups.append((dst_path, prior))
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dst_path)
+    return backups
+
+
+def _restore_raw_ui_overlay(backups: list[tuple[Path, bytes | None]]) -> None:
+    """Restore tools_root/raw/ui/ files backed up by _overlay_staged_ui_into_raw()."""
+    for dst_path, prior in reversed(backups):
+        if prior is not None:
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            dst_path.write_bytes(prior)
+        else:
+            dst_path.unlink(missing_ok=True)
 
 
 def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
@@ -1409,6 +1452,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
 
     prior_zone_csv = zone_csv.read_bytes() if zone_csv.exists() else None
     prior_assetlist_csv = assetlist_csv.read_bytes() if assetlist_csv.exists() else None
+    raw_ui_backups: list[tuple[Path, bytes | None]] = []
     if zone_out.exists():
         zone_out.unlink()
 
@@ -1416,6 +1460,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
         shutil.copy2(mod_csv_src, zone_csv)
         if not assetlist_csv.exists():
             assetlist_csv.write_bytes(b"")
+        raw_ui_backups = _overlay_staged_ui_into_raw(stage_dir=stage_dir, tools_root=tools_root)
 
         env = os.environ.copy()
         env["WAW_STEAM_ROOT"] = str(steam_root)
@@ -1459,6 +1504,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
         zone_out.unlink(missing_ok=True)
         return dist_ff
     finally:
+        _restore_raw_ui_overlay(raw_ui_backups)
         if prior_zone_csv is not None:
             zone_csv.write_bytes(prior_zone_csv)
         else:

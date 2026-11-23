@@ -28,11 +28,11 @@ rawfile,maps/_bz_special_weapons.gsc
 // Frontend Solo & Co-op menus (overrides stock ui/patch_menus.txt)
 menufile,ui/patch_menus.txt
 
-// Base Zombies in-world Station shop popups
-menufile,ui/bz_station_perks.menu
-menufile,ui/bz_station_class.menu
-menufile,ui/bz_station_arsenal.menu
-menufile,ui/bz_station_pap.menu
+// Base Zombies in-world Station shop popups (WaW PrecacheMenu resolves ui/scriptmenus/<name>.menu)
+menufile,ui/scriptmenus/bz_station_perks.menu
+menufile,ui/scriptmenus/bz_station_class.menu
+menufile,ui/scriptmenus/bz_station_arsenal.menu
+menufile,ui/scriptmenus/bz_station_pap.menu
 
 // Stock WaW perk HUD icon materials (ensures carried-over perk icons render on Nacht der Untoten)
 material,specialty_juggernaut_zombies
