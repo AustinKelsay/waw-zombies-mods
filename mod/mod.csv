@@ -1,0 +1,13 @@
+// Unified Zombie Gauntlet mod fastfile manifest (compiled into mod.ff)
+// Script-only package: zero custom FX, weapon, or model assets to stay well
+// below Call of Duty: World at War's 400-FX ceiling across all 4 stock maps.
+
+// Core Gauntlet scaffold scripts
+rawfile,maps/_gauntlet_log.gsc
+rawfile,maps/_gauntlet_bootstrap.gsc
+
+// Build-staged stock-safe entry hooks for all four stock Nazi Zombies maps
+rawfile,maps/nazi_zombie_prototype.gsc
+rawfile,maps/nazi_zombie_asylum.gsc
+rawfile,maps/nazi_zombie_sumpf.gsc
+rawfile,maps/nazi_zombie_factory.gsc
