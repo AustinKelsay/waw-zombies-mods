@@ -405,6 +405,11 @@ class PerksGscRuntime(GscRuntime):
                 thread.endons,
             )
 
+        # Match real WaW 1.7 GSC semantics: notifying an event that matches an
+        # active endon on the currently executing thread aborts it immediately.
+        if key in self._current_endons:
+            raise _EndonSignal()
+
 
 # ---------------------------------------------------------------------------
 # Contract Tests for mod/maps/_gauntlet_perks.gsc

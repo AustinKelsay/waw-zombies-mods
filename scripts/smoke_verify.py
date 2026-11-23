@@ -135,13 +135,28 @@ def kill_prefix_wineserver(proton: Path, playtest_prefix: Path) -> None:
     if wineserver.is_file() and pfx.is_dir():
         env = os.environ.copy()
         env["WINEPREFIX"] = str(pfx)
-        subprocess.run(
-            [str(wineserver), "-k"],
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                [str(wineserver), "-k"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            subprocess.run(
+                [str(wineserver), "-w"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def read_console_logs(appdata: Path) -> tuple[str, Path | None]:

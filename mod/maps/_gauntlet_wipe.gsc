@@ -263,9 +263,12 @@ handle_team_wipe()
 
 	level.gauntlet_wipe_handled = true;
 
-	// Notify persistent Gauntlet HUD (#8) and Prep Phase listeners to destroy
-	// active HUD elements cleanly before rendering the Run Summary overlay.
+	// Notify persistent Gauntlet HUD (#8), Prep Phase, and helper listeners to
+	// tear down cleanly before rendering the Run Summary overlay. Emit end_game
+	// as well because Nacht/Verruckt/Shi No Numa invoke end_game() directly
+	// without notifying "end_game".
 	level notify( "gauntlet_run_wipe" );
+	level notify( "end_game" );
 
 	current_map = maps\_gauntlet_mode::get_current_map_name();
 
@@ -370,7 +373,6 @@ should_trigger_test_wipe( round_num )
 // in-engine team wipe flows deterministically.
 maybe_run_test_force_wipe( round_num )
 {
-	level endon( "end_game" );
 	level endon( "gauntlet_stage_clear" );
 
 	if ( !should_trigger_test_wipe( round_num ) )
@@ -400,6 +402,26 @@ maybe_run_test_force_wipe( round_num )
 		return false;
 	}
 
+	if ( IsDefined( level.intermission ) && level.intermission )
+	{
+		return false;
+	}
+
+	// On Der Riese, stock end_game() listens on level waittill("end_game").
+	// On Nacht/Verruckt/Shi No Numa, stock end_game() is invoked directly from
+	// player_laststand(), so fall back to on_end_game() after one server frame
+	// if no stock end_game() listener handled the notification.
 	level notify( "end_game" );
+
+	if ( maps\_gauntlet_mode::is_gauntlet_enabled() )
+	{
+		wait( 0.05 );
+		if ( ( !IsDefined( level.gauntlet_stage_cleared ) || !level.gauntlet_stage_cleared ) && ( !IsDefined( level.gauntlet_wipe_handled ) || !level.gauntlet_wipe_handled ) )
+		{
+			level.intermission = true;
+			maps\_gauntlet_mode::on_end_game();
+		}
+	}
+
 	return true;
 }

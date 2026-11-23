@@ -14,13 +14,9 @@ Verifies real Steam/Proton CoD:WaW execution across:
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
-import subprocess
 import sys
-import time
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -123,225 +119,149 @@ def analyze_classic_perks_isolation_log(log_text: str) -> tuple[list[GauntletEve
     return events, errors
 
 
-def run_perk_scenario(
-    scenario_name: str,
-    launch_map: str,
-    extra_args: list[str],
-    stop_predicate,
-    display_num: int,
-    xdg_config_home: Path,
-    proton: Path,
-    steam_root: Path,
-    steam_game: Path,
-    playtest_prefix: Path,
-    log_dir: Path,
-    timeout_s: float,
-) -> tuple[str, Path]:
-    """Run a single CoDWaW.exe scenario and archive its console.log."""
-    appdata = smoke_verify.playtest_appdata(playtest_prefix)
-    mod_log = appdata / "mods" / build_mod.MOD_NAME / "console.log"
-    main_log = appdata / "main" / "console.log"
-    sentinel = appdata / "__CoDWaW"
-
-    for stale in (mod_log, main_log, sentinel):
-        stale.unlink(missing_ok=True)
-    mod_log.parent.mkdir(parents=True, exist_ok=True)
-
-    env = os.environ.copy()
-    env["DISPLAY"] = f":{display_num}"
-    env["XDG_CONFIG_HOME"] = str(xdg_config_home)
-    env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(steam_root)
-    env["STEAM_COMPAT_DATA_PATH"] = str(playtest_prefix)
-    env["SteamAppId"] = "10090"
-    env["SteamGameId"] = "10090"
-    env["PROTON_USE_WINED3D"] = "1"
-    env["PROTON_NO_ESYNC"] = "1"
-    env["PROTON_NO_FSYNC"] = "1"
-
-    cmd = [
-        str(proton),
-        "run",
-        str(steam_game / "CoDWaW.exe"),
-        "+set",
-        "r_fullscreen",
-        "0",
-        "+set",
-        "r_mode",
-        "800x600",
-        "+set",
-        "logfile",
-        "2",
-        "+set",
-        "fs_game",
-        f"mods/{build_mod.MOD_NAME}",
-        *extra_args,
-        "+map",
-        launch_map,
-    ]
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=steam_game,
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
+def _cycle2_nacht_perks_settled(events: list[GauntletEvent]) -> bool:
+    """Stop once Cycle 2 Nacht has restored perks AND spawned a Round 10 zombie."""
+    has_restored = any(
+        e.event_type == "PERKS_RESTORED" and e.fields.get("map") == "nazi_zombie_prototype"
+        for e in events
     )
-
-    log_text = ""
-    deadline = time.monotonic() + timeout_s
-    try:
-        while time.monotonic() < deadline:
-            if mod_log.is_file():
-                log_text = mod_log.read_text(encoding="latin1", errors="replace")
-            elif main_log.is_file():
-                log_text = main_log.read_text(encoding="latin1", errors="replace")
-
-            if log_text:
-                events = verify_cycle1.parse_gauntlet_events(log_text)
-                if stop_predicate(events, log_text):
-                    time.sleep(1.5)
-                    if mod_log.is_file():
-                        log_text = mod_log.read_text(encoding="latin1", errors="replace")
-                    break
-                if any(pat.search(log_text) for _, pat in smoke_verify.FATAL_LOG_PATTERNS):
-                    break
-
-            if proc.poll() is not None:
-                if mod_log.is_file():
-                    log_text = mod_log.read_text(encoding="latin1", errors="replace")
-                break
-            time.sleep(1.0)
-    finally:
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, 15)
-            except ProcessLookupError:
-                pass
-            try:
-                proc.wait(timeout=8)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(proc.pid, 9)
-                except ProcessLookupError:
-                    pass
-                proc.wait(timeout=5)
-        smoke_verify.kill_prefix_wineserver(proton, playtest_prefix)
-
-    log_dir.mkdir(parents=True, exist_ok=True)
-    saved_log = log_dir / f"perks_{scenario_name}.console.log"
-    saved_log.write_text(log_text, encoding="latin1", errors="replace")
-    return log_text, saved_log
+    if not has_restored:
+        return False
+    return any(
+        e.event_type == "ZOMBIE_SPAWNED_SAMPLE" and e.fields.get("round") == "10"
+        for e in events
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--tools-root", type=Path, default=build_mod.DEFAULT_TOOLS_ROOT)
     parser.add_argument("--steam-root", type=Path, default=build_mod.DEFAULT_STEAM_ROOT)
     parser.add_argument("--dev-root", type=Path, default=build_mod.DEFAULT_DEV_ROOT)
+    parser.add_argument("--steam-game", type=Path, default=build_mod.DEFAULT_STEAM_GAME)
+    parser.add_argument("--steam-appdata", type=Path, default=build_mod.DEFAULT_STEAM_APPDATA)
+    parser.add_argument("--playtest-prefix", type=Path, default=smoke_verify.DEFAULT_PLAYTEST_PREFIX)
     parser.add_argument("--proton", type=Path, default=smoke_verify.DEFAULT_PROTON)
-    parser.add_argument("--log-dir", type=Path, default=DEFAULT_LOG_DIR)
     args = parser.parse_args(argv)
 
-    steam_game = args.steam_root / "steamapps/common/Call of Duty World at War"
-    tools_root = args.dev_root / "game"
-    playtest_prefix = args.dev_root / "playtest"
-    playtest_app = smoke_verify.playtest_appdata(playtest_prefix)
-    steam_app = (
-        args.steam_root
-        / "steamapps/compatdata/10090/pfx/drive_c/users/steamuser/AppData/Local/Activision/CoDWaW"
+    import verify_cycle2
+
+    playtest_appdata = (
+        args.playtest_prefix
+        / "pfx/drive_c/users/steamuser/AppData/Local/Activision/CoDWaW"
     )
-
-    if not args.skip_build:
-        targets = [playtest_app]
-        if steam_app.is_dir():
-            targets.append(steam_app)
-        build_mod.build_and_optionally_deploy(
-            tools_root=tools_root,
-            steam_root=args.steam_root,
-            dev_root=args.dev_root,
-            steam_game=steam_game,
-            deploy_targets=targets,
-        )
-    else:
-        build_mod.deploy_mod(build_mod.DIST_DIR, playtest_app)
-
+    if not playtest_appdata.is_dir():
+        print(f"ERROR: Playtest AppData folder missing: {playtest_appdata}", file=sys.stderr)
+        return 1
+    if not args.proton.is_file():
+        print(f"ERROR: Proton launcher not found: {args.proton}", file=sys.stderr)
+        return 1
     if shutil.which("Xvfb") is None or shutil.which("xfwm4") is None:
         print("ERROR: Xvfb and xfwm4 must be installed for in-engine verification.", file=sys.stderr)
         return 1
 
-    all_errors: list[str] = []
-    with TemporaryDirectory(prefix="waw-perks-xdg-") as tmp_xdg:
-        xdg_path = Path(tmp_xdg)
-        display_num, xvfb_proc, wm_proc = smoke_verify.start_headless_display(xdg_path)
-        try:
-            # Scenario A: Der Riese (C1 S4) with Juggernog + Speed Cola -> Cycle 2 Nacht der Untoten
-            log_a, saved_a = run_perk_scenario(
-                scenario_name="c1s4_to_c2_nacht",
-                launch_map="nazi_zombie_factory",
-                extra_args=[
-                    "+set", "gauntlet_enabled", "1",
-                    "+set", "gauntlet_active", "1",
-                    "+set", "gauntlet_run_id", "verify_perks_run",
-                    "+set", "gauntlet_cycle", "1",
-                    "+set", "gauntlet_stage", "4",
-                    "+set", "gauntlet_total_rounds", "30",
-                    "+set", "gauntlet_pending_transition", "1",
-                    "+set", "gauntlet_test_grant_perks", "j,f",
-                    "+set", "gauntlet_test_target_round", "1",
-                    "+set", "gauntlet_test_autoclear", "1",
-                    "+set", "gauntlet_test_banner_delay", "1.0",
-                    "+set", "gauntlet_test_prep_duration", "2",
-                ],
-                stop_predicate=lambda evs, _txt: any(
-                    e.event_type == "PERKS_RESTORED" and e.fields.get("map") == "nazi_zombie_prototype"
-                    for e in evs
-                ),
-                display_num=display_num,
-                xdg_config_home=xdg_path,
-                proton=args.proton,
-                steam_root=args.steam_root,
-                steam_game=steam_game,
-                playtest_prefix=playtest_prefix,
-                log_dir=args.log_dir,
-                timeout_s=args.timeout,
-            )
-            _, errs_a = analyze_perk_carryover_log(log_a)
-            if errs_a:
-                print(f"[FAIL] Scenario A (Der Riese -> Cycle 2 Nacht perks) — {saved_a}")
-                for e in errs_a:
-                    print(f"  - {e}")
-                all_errors.extend(errs_a)
-            else:
-                print(f"[PASS] Scenario A (Der Riese -> Cycle 2 Nacht perks, Jugg 160 HP) — {saved_a}")
+    deploy_targets = [playtest_appdata]
+    if args.steam_appdata.is_dir():
+        deploy_targets.insert(0, args.steam_appdata)
 
-            # Scenario B: Classic Mode zero perk telemetry
-            log_b, saved_b = run_perk_scenario(
-                scenario_name="classic_isolation",
-                launch_map="nazi_zombie_prototype",
-                extra_args=["+set", "gauntlet_enabled", "0"],
-                stop_predicate=lambda evs, _txt: any(e.event_type == "MOD_LOADED" for e in evs),
-                display_num=display_num,
-                xdg_config_home=xdg_path,
-                proton=args.proton,
-                steam_root=args.steam_root,
-                steam_game=steam_game,
-                playtest_prefix=playtest_prefix,
-                log_dir=args.log_dir,
-                timeout_s=90.0,
+    if not args.skip_build:
+        print("=== Building and deploying waw_gauntlet (mod.ff + waw_gauntlet.iwd) ===")
+        artifacts, installed = build_mod.build_and_optionally_deploy(
+            tools_root=args.tools_root,
+            steam_root=args.steam_root,
+            dev_root=args.dev_root,
+            steam_game=args.steam_game,
+            deploy_targets=deploy_targets,
+        )
+        for artifact in artifacts:
+            print(f"Built {artifact} ({artifact.stat().st_size} bytes)")
+        for dest in installed:
+            print(f"Deployed {dest}")
+    else:
+        for target in deploy_targets:
+            for dest in build_mod.deploy_mod(build_mod.DIST_DIR, target):
+                print(f"Deployed {dest}")
+
+    print("\n=== Starting headless Xvfb display for Cross-map Perk Carryover verification ===")
+    display_num, xvfb, xfwm, xdg_tmp = smoke_verify.start_virtual_display()
+    all_errors: list[str] = []
+    try:
+        # Scenario A: Der Riese (C1 S4) with Juggernog + Speed Cola -> Cycle 2 Nacht der Untoten
+        print("\n--> Scenario A: Der Riese (C1 S4, Juggernog + Speed Cola) -> Cycle 2 Nacht der Untoten")
+        res_a = verify_cycle2.run_waw_scenario(
+            name="Der Riese -> Cycle 2 Nacht perk carryover",
+            log_filename="perks_c1s4_to_c2_nacht.console.log",
+            start_map="nazi_zombie_factory",
+            extra_dvars=[
+                ("gauntlet_active", "1"),
+                ("gauntlet_run_id", "verify_perks_run"),
+                ("gauntlet_cycle", "1"),
+                ("gauntlet_stage", "4"),
+                ("gauntlet_total_rounds", "30"),
+                ("gauntlet_pending_transition", "1"),
+                ("gauntlet_player_perks", ""),
+                ("gauntlet_test_grant_perks", "j,f"),
+                ("gauntlet_test_target_round", "1"),
+                ("gauntlet_test_autoclear", "1"),
+                ("gauntlet_test_banner_delay", "1.0"),
+                ("gauntlet_test_prep_duration", "2"),
+            ],
+            stop_predicate=_cycle2_nacht_perks_settled,
+            analyzer=analyze_perk_carryover_log,
+            display_num=display_num,
+            xdg_config_home=xdg_tmp.name,
+            proton=args.proton,
+            steam_root=args.steam_root,
+            steam_game=args.steam_game,
+            playtest_prefix=args.playtest_prefix,
+            timeout_s=args.timeout,
+        )
+        if res_a.passed:
+            print(
+                f"  [PASS] Scenario A (Der Riese -> Cycle 2 Nacht perks, Jugg 160 HP) "
+                f"({res_a.duration_s:.1f}s) — {res_a.saved_log}"
             )
-            _, errs_b = analyze_classic_perks_isolation_log(log_b)
-            if errs_b:
-                print(f"[FAIL] Scenario B (Classic Mode perk isolation) — {saved_b}")
-                for e in errs_b:
-                    print(f"  - {e}")
-                all_errors.extend(errs_b)
-            else:
-                print(f"[PASS] Scenario B (Classic Mode perk isolation) — {saved_b}")
-        finally:
-            smoke_verify.stop_headless_display(xvfb_proc, wm_proc)
+        else:
+            print(f"  [FAIL] Scenario A (Der Riese -> Cycle 2 Nacht perks) — {res_a.saved_log}")
+            for err in res_a.errors:
+                print(f"        ERROR: {err}", file=sys.stderr)
+            all_errors.extend(res_a.errors)
+
+        # Scenario B: Classic Mode zero perk telemetry
+        print("\n--> Scenario B: Classic Mode (gauntlet_enabled=0) zero perk carryover telemetry")
+        res_b = smoke_verify.smoke_map(
+            map_name="nazi_zombie_prototype",
+            gauntlet_enabled=0,
+            display_num=display_num,
+            xdg_config_home=xdg_tmp.name,
+            proton=args.proton,
+            steam_root=args.steam_root,
+            steam_game=args.steam_game,
+            playtest_prefix=args.playtest_prefix,
+            timeout_s=min(args.timeout, 90.0),
+            settle_s=2.5,
+        )
+        log_b = (
+            res_b.saved_log.read_text(encoding="utf-8", errors="replace")
+            if res_b.saved_log and res_b.saved_log.is_file()
+            else ""
+        )
+        _, errs_b = analyze_classic_perks_isolation_log(log_b)
+        combined_b = list(res_b.errors) + errs_b
+        if not combined_b:
+            print(
+                f"  [PASS] Scenario B (Classic Mode perk isolation) "
+                f"({res_b.duration_s:.1f}s) — {res_b.saved_log}"
+            )
+        else:
+            print(f"  [FAIL] Scenario B (Classic Mode perk isolation) — {res_b.saved_log}")
+            for err in combined_b:
+                print(f"        ERROR: {err}", file=sys.stderr)
+            all_errors.extend(combined_b)
+    finally:
+        smoke_verify.stop_virtual_display(xvfb, xfwm, xdg_tmp)
 
     return 1 if all_errors else 0
 

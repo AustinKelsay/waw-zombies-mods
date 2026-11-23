@@ -706,14 +706,13 @@ on_round_started( round_num )
 		level thread sample_first_spawned_zombie( round_num );
 	}
 
-	if ( GetDvarInt( "gauntlet_test_autoclear" ) == 1 )
-	{
-		level thread run_test_autoclear( round_num );
-	}
-
-	if ( GetDvarInt( "gauntlet_test_force_wipe" ) == 1 )
+	if ( maps\_gauntlet_wipe::should_trigger_test_wipe( round_num ) )
 	{
 		level thread maps\_gauntlet_wipe::maybe_run_test_force_wipe( round_num );
+	}
+	else if ( GetDvarInt( "gauntlet_test_autoclear" ) == 1 )
+	{
+		level thread run_test_autoclear( round_num );
 	}
 }
 

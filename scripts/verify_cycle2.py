@@ -445,66 +445,90 @@ def run_waw_scenario(
     cmd.extend(["+map", start_map])
 
     t0 = time.monotonic()
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(steam_game),
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-
     log_text = ""
     timed_out = False
-    last_event_count = 0
-    try:
-        while True:
-            now = time.monotonic()
-            log_text, _ = smoke_verify.read_console_logs(appdata)
-            parsed = verify_cycle1.parse_gauntlet_events(log_text)
-            if len(parsed) > last_event_count:
-                for ev in parsed[last_event_count:]:
-                    print(f"    [{now - t0:5.1f}s] {ev.raw}")
-                last_event_count = len(parsed)
+    for attempt in range(2):
+        smoke_verify.clear_previous_run_state(appdata)
+        attempt_t0 = time.monotonic()
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(steam_game),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
-            if any(pat.search(log_text) for _, pat in smoke_verify.FATAL_LOG_PATTERNS):
-                break
-
-            if stop_predicate(parsed):
-                time.sleep(0.8)
+        log_text = ""
+        timed_out = False
+        init_stall_retry = False
+        init_stall_seen_at: float | None = None
+        last_event_count = 0
+        try:
+            while True:
+                now = time.monotonic()
                 log_text, _ = smoke_verify.read_console_logs(appdata)
-                break
+                parsed = verify_cycle1.parse_gauntlet_events(log_text)
+                if len(parsed) > last_event_count:
+                    for ev in parsed[last_event_count:]:
+                        print(f"    [{now - attempt_t0:5.1f}s] {ev.raw}")
+                    last_event_count = len(parsed)
 
-            if proc.poll() is not None:
-                time.sleep(0.3)
-                log_text, _ = smoke_verify.read_console_logs(appdata)
-                break
+                if any(pat.search(log_text) for _, pat in smoke_verify.FATAL_LOG_PATTERNS):
+                    break
 
-            if now - t0 >= timeout_s:
-                timed_out = True
-                break
+                if stop_predicate(parsed):
+                    time.sleep(0.8)
+                    log_text, _ = smoke_verify.read_console_logs(appdata)
+                    break
 
-            time.sleep(0.4)
-    finally:
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
+                # Detect transient Proton/Wine DB-thread startup deadlock on $init
+                # ("Waiting for $init to finish.") and retry once cleanly.
+                if (
+                    attempt == 0
+                    and "Waiting for $init to finish." in log_text
+                    and "end $init" not in log_text
+                ):
+                    if init_stall_seen_at is None:
+                        init_stall_seen_at = now
+                    elif now - init_stall_seen_at >= 10.0:
+                        print("    [WARN] Transient Wine $init startup stall detected; retrying once...")
+                        init_stall_retry = True
+                        break
+
+                if proc.poll() is not None:
+                    time.sleep(0.3)
+                    log_text, _ = smoke_verify.read_console_logs(appdata)
+                    break
+
+                if now - attempt_t0 >= timeout_s:
+                    timed_out = True
+                    break
+
+                time.sleep(0.4)
+        finally:
+            if proc.poll() is None:
                 try:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    os.killpg(proc.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
-                proc.wait(timeout=5)
-        smoke_verify.kill_prefix_wineserver(proton, playtest_prefix)
-        time.sleep(0.5)
-        final_log, _ = smoke_verify.read_console_logs(appdata)
-        if len(final_log) >= len(log_text):
-            log_text = final_log
-        (appdata / "__CoDWaW").unlink(missing_ok=True)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait(timeout=5)
+            smoke_verify.kill_prefix_wineserver(proton, playtest_prefix)
+            time.sleep(0.5)
+            final_log, _ = smoke_verify.read_console_logs(appdata)
+            if len(final_log) >= len(log_text):
+                log_text = final_log
+            (appdata / "__CoDWaW").unlink(missing_ok=True)
+
+        if not init_stall_retry:
+            break
 
     duration_s = time.monotonic() - t0
     smoke_verify.SMOKE_LOG_DIR.mkdir(parents=True, exist_ok=True)

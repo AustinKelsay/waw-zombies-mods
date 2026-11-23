@@ -162,6 +162,10 @@ class WipeGscRuntime(GscRuntime):
                 if lvl_script is not UNDEFINED and _waw_to_str(lvl_script) != "":
                     return _waw_to_str(lvl_script).lower()
                 return self.dvars.get("mapname").lower()
+            if fn_lower == "on_end_game":
+                if self.dvars.get_int("gauntlet_enabled") != 1:
+                    return False
+                return self.call(WIPE_MOD, "handle_team_wipe")
 
         return super().call(module_path, func_name, *args)
 
@@ -546,6 +550,34 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("gauntlet_stage_cleared", True)
         self.assertFalse(self.gsc.call(WIPE_MOD, "maybe_run_test_force_wipe", 12))
         self.assertEqual(self.gsc.notifications, [])
+
+    def test_maybe_run_test_force_wipe_invokes_on_end_game_fallback_on_direct_call_maps(self) -> None:
+        # On Nacht/Verruckt/Shi No Numa, stock end_game() does NOT waittill("end_game"),
+        # so maybe_run_test_force_wipe must fall back to maps\_gauntlet_mode::on_end_game().
+        self.dvars.set("gauntlet_enabled", "1")
+        self.dvars.set("gauntlet_test_force_wipe", "1")
+        self.dvars.set("gauntlet_test_wipe_round", "12")
+        self.dvars.set("gauntlet_test_summary_delay", "0.5")
+        state = self.gsc.call(STATE_MOD, "init_fresh_run", "run_asylum_wipe")
+        state.set_field("cycle", 2)
+        state.set_field("stage", 2)
+        state.set_field("total_rounds", 45)
+        state = self.gsc.call(STATE_MOD, "save_run_state", state)
+
+        self.gsc.level.set_field("script", "nazi_zombie_asylum")
+        self.gsc.level.set_field("round_number", 12)
+        self.gsc.level.set_field("gauntlet_state", state)
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_cleared", False)
+
+        self.assertTrue(self.gsc.call(WIPE_MOD, "maybe_run_test_force_wipe", 12))
+        self.assertTrue(self.gsc.level.get_field("intermission"))
+        self.assertTrue(self.gsc.level.get_field("gauntlet_wipe_handled"))
+        self.assertIn(
+            "GAUNTLET_EVENT|RUN_WIPE|cycle=2;stage=2;map=nazi_zombie_asylum;display=Verruckt;final_round=12;total_rounds=47;run_id=run_asylum_wipe",
+            self.gsc.emitted_events,
+        )
+        self.assertEqual(self.gsc.exit_level_calls, [False])
 
 
 # ---------------------------------------------------------------------------

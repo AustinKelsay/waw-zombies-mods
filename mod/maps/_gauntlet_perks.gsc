@@ -490,8 +490,6 @@ handle_carried_perk_lost( player, perk )
 		return;
 	}
 
-	player notify( "gauntlet_perk_lost_" + perk );
-
 	if ( player HasPerk( perk ) )
 	{
 		player UnsetPerk( perk );
@@ -503,6 +501,11 @@ handle_carried_perk_lost( player, perk )
 	}
 
 	destroy_perk_hud_icon( player, perk );
+
+	// Notify AFTER cleanup: watch_carried_perk_loss_event() registers
+	// player endon("gauntlet_perk_lost_" + perk), so in WaW 1.7 GSC notifying
+	// first terminates the calling thread before cleanup runs.
+	player notify( "gauntlet_perk_lost_" + perk );
 }
 
 watch_carried_perk_loss_event( player, perk, event_name )

@@ -370,6 +370,11 @@ class HudGscRuntime(GscRuntime):
         for th in to_resume:
             self._run_thread_from(th.mod_key, th.fn, th.stmt_index, th.env, th.endons)
 
+        # Match real WaW 1.7 GSC semantics: notifying an event that matches an
+        # active endon on the currently executing thread aborts it immediately.
+        if key in self._current_endons:
+            raise _EndonSignal()
+
     def notify_level(self, event_name: str) -> None:
         self.notify(self.level, event_name)
 

@@ -233,11 +233,14 @@ destroy_gauntlet_hud( reason )
 
 	if ( destroyed_any )
 	{
-		level notify( "gauntlet_hud_destroyed" );
-
 		fields = [];
 		fields[0] = maps\_gauntlet_log::kv( "reason", reason );
 		maps\_gauntlet_log::emit( "HUD_DESTROYED", maps\_gauntlet_log::join_fields( fields ) );
+
+		// Notify AFTER emitting telemetry: watch_hud_cleanup_event() registers
+		// level endon("gauntlet_hud_destroyed"), so in WaW 1.7 GSC notifying
+		// first terminates the calling thread before subsequent lines run.
+		level notify( "gauntlet_hud_destroyed" );
 	}
 
 	return destroyed_any;
