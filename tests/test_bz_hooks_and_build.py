@@ -321,6 +321,7 @@ class BzGscRuntime(GscRuntime):
         self._current_self: Any = self.level
         self._threads: list[tuple[Any, str, list[Any]]] = []
         self.precached_menus: list[str] = []
+        self.precached_items: list[str] = []
         self.spawned_entities: list[FakeEntity] = []
         self.world_entities: dict[tuple[str, str], list[FakeEntity]] = {}
         self.bullet_trace_fn: Callable[[GscArray, GscArray], dict[str, Any]] | None = None
@@ -385,6 +386,10 @@ class BzGscRuntime(GscRuntime):
         if name_lower == "precachemenu":
             menu = _waw_to_str(args[0]) if args else ""
             self.precached_menus.append(menu)
+            return True, UNDEFINED
+        if name_lower == "precacheitem":
+            item = _waw_to_str(args[0]) if args else ""
+            self.precached_items.append(item)
             return True, UNDEFINED
         if name_lower == "spawn":
             classname = _waw_to_str(args[0]) if args else "script_origin"

@@ -226,6 +226,95 @@ bz_ensure_default_modules_registered()
 	maps\_bz_perks::bz_perks_register();
 	maps\_bz_classes::bz_classes_register();
 	maps\_bz_pap::bz_pap_register();
+	// Phase 2 integration seam: T2/T3/T4 element modules register here under gate "elements".
+}
+
+// Canonical Phase 2 zero-FX cloned primary weapon names (ADR-0003).
+bz_get_element_primary_weapons()
+{
+	ids = maps\_bz_rules::bz_get_element_weapon_ids();
+	weaps = [];
+	for ( i = 0; i < ids.size; i++ )
+	{
+		weaps[i] = maps\_bz_rules::bz_get_element_weapon_name( ids[i] );
+	}
+	return weaps;
+}
+
+// Precaches the 4 zero-FX cloned Phase 2 primaries during pre_init when bz_elements_enabled == 1.
+bz_precache_element_weapons()
+{
+	if ( !bz_elements_enabled() )
+	{
+		return;
+	}
+	if ( IsDefined( level.bz_element_weapons_precached ) && level.bz_element_weapons_precached )
+	{
+		return;
+	}
+	level.bz_element_weapons_precached = true;
+
+	weaps = bz_get_element_primary_weapons();
+	for ( i = 0; i < weaps.size; i++ )
+	{
+		PrecacheItem( weaps[i] );
+	}
+}
+
+// Registers the 4 zero-FX cloned Phase 2 primaries in level.zombie_weapons with is_in_box = true
+// so the Mystery Box pool includes them whenever bz_elements_enabled == 1. Idempotent.
+bz_register_box_weapons()
+{
+	if ( !bz_elements_enabled() )
+	{
+		return false;
+	}
+	if ( IsDefined( level.bz_box_weapons_registered ) && level.bz_box_weapons_registered )
+	{
+		return true;
+	}
+	level.bz_box_weapons_registered = true;
+
+	if ( !IsDefined( level.zombie_weapons ) )
+	{
+		level.zombie_weapons = [];
+	}
+
+	weaps = bz_get_element_primary_weapons();
+	weap_csv = "";
+	for ( i = 0; i < weaps.size; i++ )
+	{
+		weap = weaps[i];
+		entry = SpawnStruct();
+		entry.weapon_name = weap;
+		entry.hint = "Press &&1 for " + weap;
+		entry.cost = 950;
+		entry.vox = "";
+		entry.is_in_box = true;
+		entry.upgrade_name = "";
+		entry.is_upgraded = false;
+		level.zombie_weapons[weap] = entry;
+
+		if ( IsDefined( level.zombie_include_weapons ) )
+		{
+			level.zombie_include_weapons[weap] = true;
+		}
+
+		if ( weap_csv == "" )
+		{
+			weap_csv = weap;
+		}
+		else
+		{
+			weap_csv = weap_csv + "," + weap;
+		}
+	}
+
+	fields = [];
+	fields[0] = maps\_bz_log::kv( "count", weaps.size );
+	fields[1] = maps\_bz_log::kv( "weapons", weap_csv );
+	maps\_bz_log::emit( "ELEMENTS_BOX_REGISTER", maps\_bz_log::join_fields( fields ) );
+	return true;
 }
 
 // Synchronous pre-zombiemode init seam (for precaching in downstream modules).
@@ -240,6 +329,7 @@ bz_pre_init()
 	ensure_bz_dvars();
 	ensure_hook_registry();
 	bz_ensure_default_modules_registered();
+	bz_precache_element_weapons();
 
 	entries = get_hook_entries( "pre_init" );
 	if ( IsDefined( entries ) )
@@ -289,6 +379,7 @@ bz_init()
 	// Chain stock zombie actor damage callbacks (level.global_damage_func & _ads)
 	// across all 4 stock maps without missing stock symbols.
 	bz_install_actor_damage_hooks();
+	bz_register_box_weapons();
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
@@ -389,6 +480,47 @@ bz_on_player_connect( player )
 	player thread bz_watch_player_spawned();
 	player thread bz_watch_player_downed();
 	player thread bz_watch_player_menu_response();
+	if ( bz_elements_enabled() )
+	{
+		player thread bz_watch_player_weapon_fired();
+	}
+}
+
+bz_watch_player_weapon_fired()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "weapon_fired" );
+		weap = self GetCurrentWeapon();
+		if ( IsDefined( weap ) && weap != "" && weap != "none" )
+		{
+			bz_on_weapon_fired( self, weap );
+		}
+	}
+}
+
+bz_on_weapon_fired( player, weapon_name )
+{
+	if ( !bz_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	entries = get_hook_entries( "weapon_fired" );
+	if ( IsDefined( entries ) )
+	{
+		for ( i = 0; i < entries.size; i++ )
+		{
+			entry = entries[i];
+			if ( bz_is_gate_open( entry.gate ) )
+			{
+				[[ entry.fn ]]( player, weapon_name );
+			}
+		}
+	}
 }
 
 bz_watch_player_spawned()
