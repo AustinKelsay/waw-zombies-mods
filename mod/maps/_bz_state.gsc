@@ -325,8 +325,9 @@ bz_state_sync_bowie_ownership( player, has_bowie )
 	}
 	if ( IsDefined( has_bowie ) && has_bowie )
 	{
+		was_owned = IsDefined( player.bz_owns_bowie ) && player.bz_owns_bowie;
 		player.bz_owns_bowie = true;
-		if ( bz_state_get_melee_slot( player ) == "knife" )
+		if ( !was_owned || bz_state_get_melee_slot( player ) == "knife" )
 		{
 			player.bz_melee_slot = "bowie";
 		}
@@ -658,6 +659,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
+	prev_slot = bz_state_get_melee_slot( player );
 	if ( IsDefined( owns_bowie_override ) && owns_bowie_override )
 	{
 		bz_state_sync_bowie_ownership( player, true );
@@ -698,7 +700,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 		{
 			return bz_make_purchase_result( "missing_prereq", id, 0, score );
 		}
-		if ( bz_state_get_melee_slot( player ) == "bowie" )
+		if ( prev_slot == "bowie" )
 		{
 			return bz_make_purchase_result( "already_owned", id, 0, score );
 		}

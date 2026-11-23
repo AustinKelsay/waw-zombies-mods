@@ -331,6 +331,41 @@ class TestBzElemNewRegistrationAndZeroFxResolver(unittest.TestCase):
         gsc_nacht.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", gsc_nacht.players[0], "bz_cryo_cannon")
         self.assertEqual(len(gsc_nacht.loaded_fx), loaded_count_before_fire)
 
+    def test_post_init_fx_resolvers_never_call_loadfx_even_without_pre_init(self) -> None:
+        # Fresh runtime with NO bz_pre_init() call: resolvers must ONLY read cached handles
+        # and trigger 0 LoadFX calls (strict WaW 1.7 post-wait LoadFX ban).
+        dvars = FakeDvarStore()
+        dvars.set("bz_enabled", "1")
+        dvars.set("bz_elements_enabled", "1")
+        gsc = ElemNewGscRuntime(MOD_ROOT, dvars)
+        gsc.level.set_field("script", "nazi_zombie_prototype")
+        gsc.level.set_field("_effect", GscArray())
+
+        acid = gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_resolve_acid_fx")
+        cryo = gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_resolve_cryo_fx")
+        self.assertEqual(gsc.loaded_fx, [])
+        self.assertIs(acid.get_field("puddle_fx"), UNDEFINED)
+        self.assertIs(acid.get_field("impact_fx"), UNDEFINED)
+        self.assertIs(cryo.get_field("freeze_fx"), UNDEFINED)
+        self.assertIs(cryo.get_field("shatter_fx"), UNDEFINED)
+
+        # Static AST verification: LoadFX() appears ONLY inside bz_elem_new_on_pre_init()
+        mod = gsc.load_module(BZ_ELEM_NEW_MOD)
+        for fn_name, fn_def in mod.items():
+            # Check source lines via re on AST-free or simple Call check
+            has_loadfx = _ast_contains_method_call(fn_def.body, "loadfx")
+            self.assertFalse(has_loadfx, f"Unexpected method LoadFX on {fn_name}")
+        source = BZ_ELEM_NEW_PATH.read_text(encoding="latin1")
+        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        # Every LoadFX( occurrence must lie strictly inside bz_elem_new_on_pre_init()
+        pre_init_m = re.search(r"bz_elem_new_on_pre_init\(\)\s*\{.*?\n\}", code_only, re.DOTALL)
+        self.assertIsNotNone(pre_init_m)
+        outside_pre_init = code_only[: pre_init_m.start()] + code_only[pre_init_m.end() :]
+        self.assertIsNone(
+            re.search(r"\bLoadFX\s*\(", outside_pre_init, re.IGNORECASE),
+            "LoadFX() must ONLY be called inside bz_elem_new_on_pre_init()",
+        )
+
 
 class TestAcidSprayerWeapon(unittest.TestCase):
     """Seam 2: Acid Sprayer floor-snapped puddle, 40% slow, 50% brittle, tick damage, PaP & cap."""
@@ -499,11 +534,75 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         self.assertEqual(z_ring.damage_events[0]["damage"], 45)
         self.assertAlmostEqual(float(z_ring.get_field("moveplaybackrate")), 0.60)
 
-        # Double PaP keeps 168 radius and scales tick damage to 75
+        # Double PaP keeps 168 radius and scales tick damage to 75, setting bz_in_damage_dispatch
+        # so global actor_damage / _bz_pap NEVER double-multiplies acid puddle ticks!
         gsc.call(BZ_PAP_MOD, "bz_pap_apply_double_pap", player, "bz_acid_sprayer")
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
         self.assertEqual(len(z_ring.damage_events), 2)
         self.assertEqual(z_ring.damage_events[1]["damage"], 75)
+        self.assertTrue(z_ring.get_field("bz_in_damage_dispatch"))
+
+        # Even if MOD_UNKNOWN reached _bz_pap directly while holding Double-PaP bz_acid_sprayer,
+        # _bz_pap MUST ignore MOD_UNKNOWN and never multiply it!
+        z_clean = ElemNewFakeEntity("ZClean", ent_num=21, is_player=False, origin=(900.0, 0.0, 0.0))
+        z_clean.set_field("health", 1000)
+        unk_dmg = gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_actor_damage_dispatch",
+            z_clean,
+            player,
+            player,
+            75,
+            0,
+            "MOD_UNKNOWN",
+            "bz_acid_sprayer",
+            UNDEFINED,
+            UNDEFINED,
+            "none",
+            0,
+        )
+        self.assertEqual(unk_dmg, 75)
+
+        # Shared helper bz_elem_new_apply_status_damage_mult composes Acid Brittle (1.5x) + Cryo Shatter (2.5x)
+        # for scripted MOD_GRENADE_SPLASH (PaP Cluster) and MOD_EXPLOSIVE (Multi-Crossbow)!
+        z_combo = ElemNewFakeEntity("ZCombo", ent_num=22, is_player=False, origin=(200.0, 0.0, 0.0))
+        z_combo.set_field("health", 5000)
+        gsc.sim_time_ms = 5000
+        z_combo.set_field("bz_acid_brittle_until", 9000)
+        z_combo.set_field("bz_is_frozen", True)
+        z_combo.set_field("bz_cryo_frozen_until", 9000)
+        scaled = gsc.call(
+            BZ_ELEM_NEW_MOD,
+            "bz_elem_new_apply_status_damage_mult",
+            z_combo,
+            1000,
+            "MOD_EXPLOSIVE",
+            "bz_multi_crossbow",
+        )
+        self.assertEqual(scaled, 3750)  # 1000 * 1.50 * 2.50
+        self.assertFalse(bool(z_combo.get_field("bz_is_frozen")))
+
+        # PaP Cluster Grenade blast triggers Cryo Shatter (2.5x) + Acid Brittle (1.5x) cleanly!
+        gsc.call(BZ_PAP_MOD, "bz_pap_apply_cluster_upgrade", player)
+        z_cluster = ElemNewFakeEntity("ZCluster", ent_num=23, is_player=False, origin=(200.0, 0.0, 0.0))
+        z_cluster.set_field("health", 10000)
+        z_cluster.set_field("bz_acid_brittle_until", 9000)
+        z_cluster.set_field("bz_is_frozen", True)
+        z_cluster.set_field("bz_cryo_frozen_until", 9000)
+        gsc.ai_enemies.append(z_cluster)
+        gsc.call(
+            BZ_PAP_MOD,
+            "bz_pap_apply_radial_blast",
+            player,
+            GscArray([200.0, 0.0, 0.0]),
+            160,
+            1000,
+            0,
+            True,
+        )
+        self.assertEqual(z_cluster.damage_events[0]["damage"], 3750)  # 1000 * 1.50 * 2.50
+        self.assertFalse(bool(z_cluster.get_field("bz_is_frozen")))
+        self.assertTrue(z_cluster.get_field("bz_in_damage_dispatch"))
 
     def test_acid_puddle_cap_evicts_oldest_puddle_cleanly_to_prevent_entity_spam(self) -> None:
         _, gsc, player = _setup_elem_new_env(map_name="nazi_zombie_factory")
@@ -680,6 +779,10 @@ class TestCryoCannonWeapon(unittest.TestCase):
 
         for z in (z_bullet, z_melee, z_expl):
             self.assertFalse(bool(z.get_field("bz_is_frozen")))
+            # Active Flamethrower burn DOT from the MOD_BURNED check keeps 0.80 until burn ends
+            self.assertAlmostEqual(float(z.get_field("moveplaybackrate")), 0.8)
+            z.set_field("bz_flame_dot_active", False)
+            gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", z)
             self.assertAlmostEqual(float(z.get_field("moveplaybackrate")), 1.0)
 
         # Follow-up hit after shatter does NOT get shatter multiplier again

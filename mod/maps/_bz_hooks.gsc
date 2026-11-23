@@ -282,18 +282,25 @@ bz_register_box_weapons()
 		level.zombie_weapons = [];
 	}
 
-	weaps = bz_get_element_primary_weapons();
+	ids = maps\_bz_rules::bz_get_element_weapon_ids();
 	weap_csv = "";
-	for ( i = 0; i < weaps.size; i++ )
+	for ( i = 0; i < ids.size; i++ )
 	{
-		weap = weaps[i];
+		id = ids[i];
+		weap = maps\_bz_rules::bz_get_element_weapon_name( id );
+		disp = maps\_bz_rules::bz_get_item_display_name( "element_weapon", id );
+		if ( !IsDefined( disp ) || disp == "" )
+		{
+			disp = weap;
+		}
 		entry = SpawnStruct();
 		entry.weapon_name = weap;
-		entry.hint = "Press &&1 for " + weap;
+		entry.hint = "Press &&1 for " + disp;
 		entry.cost = 950;
 		entry.vox = "";
 		entry.is_in_box = true;
-		entry.upgrade_name = "";
+		// Leave entry.upgrade_name undefined so stock Der Riese can_upgrade_weapon()
+		// never mistakes "" for a valid native upgrade asset and eats the weapon.
 		entry.is_upgraded = false;
 		level.zombie_weapons[weap] = entry;
 
@@ -313,7 +320,7 @@ bz_register_box_weapons()
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "count", weaps.size );
+	fields[0] = maps\_bz_log::kv( "count", ids.size );
 	fields[1] = maps\_bz_log::kv( "weapons", weap_csv );
 	maps\_bz_log::emit( "ELEMENTS_BOX_REGISTER", maps\_bz_log::join_fields( fields ) );
 	return true;
@@ -874,7 +881,17 @@ bz_handle_global_actor_damage( prev_cb, mod, hit_location, hit_origin, player, i
 		}
 	}
 
-	if ( !bz_enabled() || !IsDefined( self ) || !IsAlive( self ) || !IsDefined( player ) || !IsPlayer( player ) )
+	if ( !bz_enabled() || !IsDefined( self ) || !IsDefined( player ) || !IsPlayer( player ) )
+	{
+		return;
+	}
+
+	is_alive_target = IsAlive( self );
+	is_war_club_melee = IsDefined( mod ) && tolower( "" + mod ) == "mod_melee" &&
+		bz_elements_enabled() &&
+		maps\_bz_state::bz_state_get_melee_slot( player ) == "war_club";
+
+	if ( !is_alive_target && !is_war_club_melee )
 	{
 		return;
 	}
@@ -1426,6 +1443,93 @@ bz_recompute_player_max_health( player )
 		}
 	}
 	return max_hp;
+}
+
+// ---------------------------------------------------------------------------
+// Unified Zombie Move-Rate & Stun/Freeze/Slow Composition
+// Priority: Frozen/Stunned (0.01 + ignoreall) > Acid Slow (0.60) > Flame (0.80) > Base.
+// Prevents Flamethrower 0.80 from overwriting Cryo/Acid and keeps overlapping stuns intact.
+// ---------------------------------------------------------------------------
+
+bz_save_zombie_base_move_rate( zombie )
+{
+	if ( !IsDefined( zombie ) )
+	{
+		return 1.0;
+	}
+	if ( !IsDefined( zombie.bz_base_moveplaybackrate ) )
+	{
+		base_rate = 1.0;
+		if ( IsDefined( zombie.moveplaybackrate ) && zombie.moveplaybackrate > 0.0 )
+		{
+			base_rate = zombie.moveplaybackrate;
+		}
+		zombie.bz_base_moveplaybackrate = base_rate;
+	}
+	return zombie.bz_base_moveplaybackrate;
+}
+
+bz_recompute_zombie_move_rate( zombie )
+{
+	if ( !IsDefined( zombie ) )
+	{
+		return 1.0;
+	}
+
+	base_rate = bz_save_zombie_base_move_rate( zombie );
+	now = GetTime();
+
+	frozen = IsDefined( zombie.bz_is_frozen ) && zombie.bz_is_frozen &&
+		IsDefined( zombie.bz_cryo_frozen_until ) && now < Int( zombie.bz_cryo_frozen_until );
+	if ( !frozen && IsDefined( zombie.bz_is_frozen ) && zombie.bz_is_frozen )
+	{
+		zombie.bz_is_frozen = false;
+	}
+
+	tesla_stunned = IsDefined( zombie.bz_tesla_stun_until ) && now < Int( zombie.bz_tesla_stun_until );
+	if ( !tesla_stunned && IsDefined( zombie.bz_tesla_stunned ) && zombie.bz_tesla_stunned )
+	{
+		zombie.bz_tesla_stunned = false;
+	}
+
+	war_club_staggered = IsDefined( zombie.bz_war_club_stagger_until ) && now < Int( zombie.bz_war_club_stagger_until );
+	if ( !war_club_staggered && IsDefined( zombie.bz_war_club_staggered ) && zombie.bz_war_club_staggered )
+	{
+		zombie.bz_war_club_staggered = false;
+	}
+
+	second_chance_stunned = IsDefined( zombie.bz_second_chance_stun_until ) && now < Int( zombie.bz_second_chance_stun_until );
+
+	is_stunned = tesla_stunned || war_club_staggered || second_chance_stunned;
+	zombie.bz_stunned = is_stunned;
+
+	if ( frozen || is_stunned )
+	{
+		zombie.moveplaybackrate = 0.01;
+		zombie.ignoreall = true;
+		return 0.01;
+	}
+
+	zombie.ignoreall = false;
+
+	acid_slowed = IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until );
+	if ( acid_slowed )
+	{
+		slow_rate = base_rate * maps\_bz_rules::bz_get_acid_slow_scale();
+		zombie.moveplaybackrate = slow_rate;
+		return slow_rate;
+	}
+
+	flame_burning = IsDefined( zombie.bz_flame_dot_active ) && zombie.bz_flame_dot_active;
+	if ( flame_burning )
+	{
+		burn_rate = base_rate * 0.8;
+		zombie.moveplaybackrate = burn_rate;
+		return burn_rate;
+	}
+
+	zombie.moveplaybackrate = base_rate;
+	return base_rate;
 }
 
 // ---------------------------------------------------------------------------

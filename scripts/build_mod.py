@@ -189,7 +189,13 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "inventoryType": "primary",
             "ammoName": "bz_acid",
             "clipName": "bz_acid",
-            "displayName": "BZ_ACID_SPRAYER",
+            "displayName": "Acid Sprayer",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
             "clipSize": "20",
             "maxAmmo": "120",
             "startAmmo": "120",
@@ -206,7 +212,13 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "inventoryType": "primary",
             "ammoName": "bz_cryo",
             "clipName": "bz_cryo",
-            "displayName": "BZ_CRYO_CANNON",
+            "displayName": "Cryo Cannon",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
             "clipSize": "16",
             "maxAmmo": "96",
             "startAmmo": "96",
@@ -223,7 +235,13 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "inventoryType": "primary",
             "ammoName": "bz_xbow",
             "clipName": "bz_xbow",
-            "displayName": "BZ_MULTI_CROSSBOW",
+            "displayName": "Multi-Crossbow",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
             "clipSize": "6",
             "maxAmmo": "36",
             "startAmmo": "36",
@@ -238,7 +256,13 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "inventoryType": "primary",
             "ammoName": "bz_blade",
             "clipName": "bz_blade",
-            "displayName": "BZ_BLADE_BOOMERANG",
+            "displayName": "Blade Boomerang",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
             "clipSize": "1",
             "maxAmmo": "20",
             "startAmmo": "20",
@@ -868,25 +892,28 @@ def stage_bz_tesla_script(
 ) -> Path | None:
     """Patch and stage maps/_zombiemode_tesla.gsc when stock Tesla script is available.
 
-    Prefers `tools_root/raw/maps/_zombiemode_tesla.gsc` (Mod Tools raw tree) and falls back
-    to extracting from `nazi_zombie_factory` / `nazi_zombie_sumpf` fastfiles when present.
+    Prefers installed stock fastfile archives (`nazi_zombie_factory_patch.ff`,
+    `nazi_zombie_factory.ff`, `nazi_zombie_sumpf_patch.ff`, `nazi_zombie_sumpf.ff`)
+    before falling back to `tools_root/raw/maps/_zombiemode_tesla.gsc`.
     Returns the staged Path, or None if no stock `_zombiemode_tesla.gsc` exists on this host.
     """
     stock_bytes: bytes | None = None
-    raw_tesla = tools_root / "raw" / "maps" / "_zombiemode_tesla.gsc"
-    if raw_tesla.is_file():
-        stock_bytes = raw_tesla.read_bytes()
-    elif steam_game is not None:
-        for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
-            try:
-                extracted = try_extract_stock_script(
-                    map_name, "maps/_zombiemode_tesla.gsc", steam_game, tools_root
-                )
-            except FileNotFoundError:
-                extracted = None
-            if extracted is not None:
-                stock_bytes = extracted
-                break
+    search_steam = steam_game if steam_game is not None else tools_root
+    for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
+        try:
+            extracted = try_extract_stock_script(
+                map_name, "maps/_zombiemode_tesla.gsc", search_steam, tools_root
+            )
+        except FileNotFoundError:
+            extracted = None
+        if extracted is not None:
+            stock_bytes = extracted
+            break
+
+    if stock_bytes is None:
+        raw_tesla = tools_root / "raw" / "maps" / "_zombiemode_tesla.gsc"
+        if raw_tesla.is_file():
+            stock_bytes = raw_tesla.read_bytes()
 
     if stock_bytes is None:
         return None
@@ -954,7 +981,9 @@ def clone_zero_fx_weapon_file(
     sanitized: list[tuple[str, str]] = []
     for key, val in updated:
         key_lower = key.lower()
-        if key_lower.endswith("effect") or key_lower.endswith("fx"):
+        if key_lower == "altweapon":
+            val = ""
+        elif key_lower.endswith("effect") or key_lower.endswith("fx"):
             norm_val = val.strip().replace("\\", "/").lower()
             if norm_val and norm_val not in allowed:
                 val = ""

@@ -1085,8 +1085,7 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 		if ( dist <= radius )
 		{
 			z.bz_second_chance_stun_until = stun_until;
-			z.bz_stunned = true;
-			z.ignoreall = true;
+			maps\_bz_hooks::bz_recompute_zombie_move_rate( z );
 
 			dx = z.origin[0] - p_org[0];
 			dy = z.origin[1] - p_org[1];
@@ -1113,7 +1112,7 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 				push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
 			}
 			z SetOrigin( push_org );
-			z thread bz_perks_second_chance_stun_zombie( stun_sec );
+			z thread bz_perks_second_chance_stun_zombie( stun_sec, stun_until );
 			count++;
 		}
 	}
@@ -1121,7 +1120,7 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 	return count;
 }
 
-bz_perks_second_chance_stun_zombie( stun_sec )
+bz_perks_second_chance_stun_zombie( stun_sec, expected_until )
 {
 	self endon( "death" );
 	level endon( "end_game" );
@@ -1129,8 +1128,12 @@ bz_perks_second_chance_stun_zombie( stun_sec )
 	wait( stun_sec );
 	if ( IsDefined( self ) )
 	{
-		self.bz_stunned = false;
-		self.ignoreall = false;
+		if ( IsDefined( expected_until ) && IsDefined( self.bz_second_chance_stun_until ) && self.bz_second_chance_stun_until > expected_until )
+		{
+			return;
+		}
+		self.bz_second_chance_stun_until = 0;
+		maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
 	}
 }
 

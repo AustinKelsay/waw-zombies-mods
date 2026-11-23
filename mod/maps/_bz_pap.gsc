@@ -514,7 +514,10 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 			dist = Distance( enemy.origin, center );
 			if ( dist <= radius )
 			{
-				enemy DoDamage( damage, center, player );
+				final_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( enemy, damage, "MOD_GRENADE_SPLASH", "stielhandgranate", player, center );
+				enemy.bz_in_damage_dispatch = true;
+				enemy.bz_damage_dispatch_time = GetTime();
+				enemy DoDamage( final_dmg, center, player );
 				hits++;
 			}
 		}
@@ -1088,7 +1091,7 @@ bz_pap_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	if ( mod == "mod_grenade" || mod == "mod_grenade_splash" || mod == "mod_falling" || mod == "mod_trigger_hurt" )
+	if ( mod == "mod_unknown" || mod == "mod_grenade" || mod == "mod_grenade_splash" || mod == "mod_falling" || mod == "mod_trigger_hurt" )
 	{
 		return;
 	}

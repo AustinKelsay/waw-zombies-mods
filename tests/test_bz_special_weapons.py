@@ -109,6 +109,8 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
         self.hud_elems: list[SpecialHudElem] = []
         self.earthquakes: list[dict[str, Any]] = []
         self.played_fx: list[dict[str, Any]] = []
+        self.spawned_fx_entities: list[SpecialFakeEntity] = []
+        self.triggered_fx_entities: list[SpecialFakeEntity] = []
         self.load_fx_calls: list[str] = []
         self.trace_handler: Callable[[GscArray, GscArray, bool, Any], dict[str, Any]] | None = None
         self.spawned_special_ents: list[SpecialFakeEntity] = []
@@ -122,6 +124,28 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
             fx_id = args[0] if len(args) > 0 else UNDEFINED
             pos = args[1] if len(args) > 1 else GscArray([0, 0, 0])
             self.played_fx.append({"fx": fx_id, "pos": (float(pos[0]), float(pos[1]), float(pos[2]))})
+            return True, UNDEFINED
+        if name_lower == "spawnfx":
+            fx_id = args[0] if len(args) > 0 else UNDEFINED
+            pos = args[1] if len(args) > 1 else GscArray([0, 0, 0])
+            ent = SpecialFakeEntity(
+                name="script_fx",
+                ent_num=600 + len(self.spawned_fx_entities),
+                is_player=False,
+            )
+            ent.classname = "script_fx"
+            ent.set_field("classname", "script_fx")
+            ent.set_field("fx_handle", fx_id)
+            ent.set_field("origin", pos)
+            self.spawned_fx_entities.append(ent)
+            self.spawned_entities.append(ent)
+            self.spawned_special_ents.append(ent)
+            return True, ent
+        if name_lower == "triggerfx":
+            ent = args[0] if args else UNDEFINED
+            if isinstance(ent, SpecialFakeEntity):
+                ent.set_field("triggered", True)
+                self.triggered_fx_entities.append(ent)
             return True, UNDEFINED
         if name_lower == "earthquake":
             scale = float(args[0]) if len(args) > 0 else 0.0
@@ -437,6 +461,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         gsc.trace_handler = wall_trace
 
         # Base War Club hit: max(150*4=600, 2500*0.5=1250) = 1250
+        # Base War Club is heavy frontal cleave damage ONLY: NO knockback, NO stagger, NO shockwave FX, NO Earthquake!
         base_wc_dmg = gsc.call(
             BZ_HOOKS_MOD,
             "bz_actor_damage_dispatch",
@@ -453,21 +478,22 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
             0,
         )
         self.assertEqual(base_wc_dmg, 1250)
-        self.assertEqual(len(gsc.earthquakes), 1)
-        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.35)
-        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.3)
-        self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 128.0)
-        self.assertGreater(len(gsc.played_fx), 0)
+        self.assertEqual(len(gsc.earthquakes), 0)
+        self.assertEqual(len(gsc.played_fx), 0)
+        self.assertEqual(z_cone.get_pos(), (90.0, 30.0, 0.0))  # NOT knocked back by base War Club
+        self.assertNotEqual(z_cone.get_field("bz_stunned"), True)
+        self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 96)
         self.assertTrue(
             all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
 
-        # Reset positions & upgrade to PaP War Club -> radius expands to 160, heavy damage = 2500, AOE knockback smash
+        # Reset positions & upgrade to PaP War Club -> radius expands to 160, heavy damage = 2500, AOE knockback smash + FX + Earthquake
         z_primary.set_pos(48.0, 0.0, 0.0)
         z_primary.set_field("health", 2500)
         z_cone.set_pos(90.0, 30.0, 0.0)
         z_cone.set_field("health", 2500)
+        z_cone.damage_events.clear()
         z_walled.set_pos(110.0, -25.0, 0.0)
         z_walled.set_field("health", 2500)
         z_behind.set_pos(-120.0, 0.0, 0.0)
@@ -479,6 +505,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertTrue(
             gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:pap_war_club")
         )
+        gsc.sim_time_ms = 5000
         pap_wc_dmg = gsc.call(
             BZ_HOOKS_MOD,
             "bz_actor_damage_dispatch",
@@ -496,6 +523,11 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         )
         # PaP War Club: max(150*8=1200, 1500, zhp=2500) = 2500
         self.assertEqual(pap_wc_dmg, 2500)
+        self.assertEqual(len(gsc.earthquakes), 1)
+        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.35)
+        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.3)
+        self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 128.0)
+        self.assertGreater(len(gsc.played_fx), 0)
 
         # z_cone pushed far back cleanly (~112 units away from player) and staggered
         self.assertGreater(z_cone.get_pos()[0], 180.0)
@@ -541,6 +573,71 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
             0,
         )
         self.assertEqual(bowie_dmg, 1000)
+
+    def test_war_club_lethal_primary_hit_still_cleaves_and_wall_buy_bowie_prevents_stacking(self) -> None:
+        _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")
+        self.assertTrue(
+            gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:war_club")
+        )
+        self.assertTrue(
+            gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:pap_war_club")
+        )
+
+        # Primary zombie is ALREADY dead (health == 0) from initial lethal melee hit,
+        # while adjacent zombie in frontal cone is alive!
+        z_dead_primary = SpecialFakeEntity("ZDeadPrimary", ent_num=70, is_player=False)
+        z_dead_primary.set_field("health", 0)
+        z_dead_primary.set_field("maxhealth", 1000)
+        z_dead_primary.set_field("damagetaken", 150)
+        z_dead_primary.set_pos(48.0, 0.0, 0.0)
+
+        z_neighbor = SpecialFakeEntity("ZNeighbor", ent_num=71, is_player=False)
+        z_neighbor.set_field("health", 2500)
+        z_neighbor.set_pos(90.0, 20.0, 0.0)
+        gsc.ai_enemies.extend([z_dead_primary, z_neighbor])
+
+        gsc.sim_time_ms = 5000
+        gsc.call_on(
+            z_dead_primary,
+            BZ_HOOKS_MOD,
+            "bz_global_damage_wrapper",
+            "MOD_MELEE",
+            "torso_upper",
+            GscArray([48.0, 0.0, 0.0]),
+            p1,
+        )
+        # Dead primary took zero extra DoDamage, while alive neighbor was cleaved & knocked back!
+        self.assertEqual(z_dead_primary.damage_events, [])
+        self.assertEqual(len(z_neighbor.damage_events), 1)
+        self.assertGreater(z_neighbor.get_pos()[0], 150.0)
+        self.assertEqual(len(gsc.earthquakes), 1)
+
+        # Now simulate buying stock Bowie Knife off the wall AFTER equipping War Club
+        p1.give_perk("specialty_altmelee")
+        p1.set_field("has_altmelee", True)
+        z_check = SpecialFakeEntity("ZCheck", ent_num=72, is_player=False)
+        z_check.set_field("health", 3000)
+        z_check.set_pos(48.0, 0.0, 0.0)
+        gsc.earthquakes.clear()
+        dmg_after_bowie_wallbuy = gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_actor_damage_dispatch",
+            z_check,
+            p1,
+            p1,
+            1000,
+            0,
+            "MOD_MELEE",
+            "bowie_knife",
+            GscArray([48.0, 0.0, 0.0]),
+            UNDEFINED,
+            "torso_upper",
+            0,
+        )
+        # Switched cleanly to "bowie": NO War Club damage stacking and NO smash!
+        self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
+        self.assertEqual(dmg_after_bowie_wallbuy, 1000)
+        self.assertEqual(gsc.earthquakes, [])
 
 
 class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
@@ -677,6 +774,61 @@ class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
         gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(third_bolt.deleted)
         self.assertTrue(all(b.delete_count == 1 for b in bolts))
+
+    def test_crossbow_and_boomerang_trigger_cryo_shatter_acid_brittle_without_double_pap_double_mult(self) -> None:
+        _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_factory")
+        gsc.level.set_field("round_number", 16)
+        gsc.level.set_field("zombie_health", 2000)
+        gsc.sim_time_ms = 5000
+
+        # Double-PaP both Multi-Crossbow and Blade Boomerang
+        gsc.call(BZ_STATE_MOD, "bz_state_mark_weapon_double_pap", player, "bz_multi_crossbow")
+        gsc.call(BZ_STATE_MOD, "bz_state_mark_weapon_double_pap", player, "bz_blade_boomerang")
+
+        # Frozen + Acid-brittle zombie hit by Double-PaP Multi-Crossbow bolt:
+        # bolt_dmg = 1600 * 1.75 = 2800; status mult = 1.50 (Brittle) * 2.50 (Shatter) -> 10500 (NOT double-PaP'd twice!)
+        z_xbow = SpecialFakeEntity("ZXbowShatter", ent_num=80, is_player=False)
+        z_xbow.set_field("health", 20000)
+        z_xbow.set_pos(200.0, 0.0, 0.0)
+        z_xbow.set_field("bz_acid_brittle_until", 9000)
+        z_xbow.set_field("bz_is_frozen", True)
+        z_xbow.set_field("bz_cryo_frozen_until", 9000)
+        gsc.ai_enemies.append(z_xbow)
+
+        bolt = SpecialFakeEntity("TestBolt", ent_num=81, is_player=False)
+        bolt.set_pos(200.0, 0.0, 0.0)
+        bolt.set_field("bz_detonated", False)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, bolt, True, 16)
+        self.assertEqual(z_xbow.damage_events[0]["damage"], 10500)  # 2800 * 1.5 * 2.5
+        self.assertFalse(bool(z_xbow.get_field("bz_is_frozen")))
+        self.assertTrue(z_xbow.get_field("bz_in_damage_dispatch"))
+        self.assertTrue(
+            any(e.startswith("BZ_EVENT|ELEM_CRYO_SHATTER|") and "weapon=bz_multi_crossbow" in e for e in gsc.emitted_events)
+        )
+
+        # Frozen + Acid-brittle zombie hit by Double-PaP Blade Boomerang:
+        # dmg = 1500 * 1.75 = 2625; status mult = 1.50 * 2.50 -> 9843
+        z_blade = SpecialFakeEntity("ZBladeShatter", ent_num=82, is_player=False)
+        z_blade.set_field("health", 20000)
+        z_blade.set_pos(400.0, 0.0, 0.0)
+        z_blade.set_field("bz_acid_brittle_until", 9000)
+        z_blade.set_field("bz_is_frozen", True)
+        z_blade.set_field("bz_cryo_frozen_until", 9000)
+        gsc.ai_enemies.append(z_blade)
+
+        pierced = GscArray()
+        gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_boomerang_pierce_at",
+            player,
+            GscArray([400.0, 0.0, 0.0]),
+            2625,
+            6,
+            pierced,
+        )
+        self.assertEqual(z_blade.damage_events[0]["damage"], 9843)  # int(2625 * 1.5 * 2.5)
+        self.assertFalse(bool(z_blade.get_field("bz_is_frozen")))
+        self.assertTrue(z_blade.get_field("bz_in_damage_dispatch"))
 
 
 class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
@@ -871,6 +1023,12 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
         self.assertAlmostEqual(float(portal.get_field("bz_duration")), 8.0)
         self.assertEqual(portal.get_field("bz_fx_name"), "transporter_ambient")
+        # Portal looping FX MUST use tracked SpawnFx + TriggerFx (never unmanaged PlayFX!)
+        portal_fx_ent = portal.get_field("bz_fx_ent")
+        self.assertIsNot(portal_fx_ent, UNDEFINED)
+        self.assertEqual(portal_fx_ent.get_field("fx_handle"), "stock_fx:transporter_ambient")
+        self.assertTrue(portal_fx_ent.get_field("triggered"))
+        self.assertEqual(gsc.played_fx, [])
         self.assertTrue(
             all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
@@ -928,12 +1086,17 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         teleport_events = [e for e in gsc.emitted_events if e.startswith("BZ_EVENT|SPECIAL_PORTAL_TELEPORT|")]
         self.assertEqual(len(teleport_events), 2)
 
-        # Cross-map fallback FX (Nacht der Untoten without transporter_ambient)
+        # Cross-map fallback FX (Nacht der Untoten without transporter_ambient -> uses deletable powerup_on SpawnFx)
         _dvars_n, gsc_n, pn = _setup_special_env(map_name="nazi_zombie_prototype")
         gsc_n.call(BZ_HOOKS_MOD, "bz_on_menu_response", pn, "bz_station_arsenal", "buy_gear:portal_grenade")
         gsc_n.sim_time_ms = 5000
         portal_n = gsc_n.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", pn)
         self.assertEqual(portal_n.get_field("bz_fx_name"), "misc/fx_zombie_powerup_wave")
+        portal_n_fx = portal_n.get_field("bz_fx_ent")
+        self.assertIsNot(portal_n_fx, UNDEFINED)
+        self.assertEqual(portal_n_fx.get_field("fx_handle"), "stock_fx:powerup_on")
+        self.assertTrue(portal_n_fx.get_field("triggered"))
+        self.assertEqual(gsc_n.played_fx, [])
         self.assertTrue(
             all(
                 fx in (
@@ -953,16 +1116,24 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         gsc.sim_time_ms = 31000  # 26s after first throw (>= 25s)
         portal2 = gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1)
         self.assertIsNot(portal2, UNDEFINED)
+        portal2_fx_ent = portal2.get_field("bz_fx_ent")
+        self.assertIsNot(portal2_fx_ent, UNDEFINED)
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
 
-        # Close portal1 explicitly, then end_game cleans up portal2 with zero double-deletes
+        # Close portal1 explicitly (deletes both portal AND portal.bz_fx_ent cleanly),
+        # then end_game cleans up portal2 + portal2.bz_fx_ent with zero double-deletes
         gsc.call(BZ_SPECIAL_MOD, "bz_special_close_portal", portal)
         self.assertTrue(portal.deleted)
+        self.assertTrue(portal_fx_ent.deleted)
         self.assertFalse(portal2.deleted)
+        self.assertFalse(portal2_fx_ent.deleted)
         gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(portal2.deleted)
+        self.assertTrue(portal2_fx_ent.deleted)
         self.assertEqual(portal.delete_count, 1)
+        self.assertEqual(portal_fx_ent.delete_count, 1)
         self.assertEqual(portal2.delete_count, 1)
+        self.assertEqual(portal2_fx_ent.delete_count, 1)
 
 
 class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
@@ -1025,16 +1196,41 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(hud2.get_field("y"), 86)
         self.assertEqual(hud2.current_text, "MELEE: WAR CLUB")
 
-        # Disconnect destroys p1's HUD without touching p2's HUD
+        # Disconnect destroys p1's HUD without touching p2's HUD, and compacts level.bz_special_hud_elems
         gsc.call(BZ_SPECIAL_MOD, "bz_special_destroy_player_hud", p1)
         self.assertTrue(hud1.destroyed)
         self.assertEqual(hud1.destroy_count, 1)
         self.assertFalse(hud2.destroyed)
+        compacted_huds = gsc.level.get_field("bz_special_hud_elems")
+        self.assertEqual(compacted_huds.size, 1)
+        self.assertIs(compacted_huds[0], hud2)
 
         # end_game destroys all remaining HUDs with zero leaks and zero double-destroys
         gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(all(h.destroyed for h in gsc.hud_elems))
         self.assertTrue(all(h.destroy_count == 1 for h in gsc.hud_elems))
+
+    def test_tracked_entity_compaction_never_leaves_undefined_holes_or_skips_trailing_entities(self) -> None:
+        _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")
+        ents = []
+        for idx in range(3):
+            e = SpecialFakeEntity(f"E{idx}", ent_num=120 + idx, is_player=False)
+            e.set_field("bz_owner", p1)
+            gsc.call(BZ_SPECIAL_MOD, "bz_special_track_entity", e)
+            ents.append(e)
+
+        # Untracking index 0 compacts [E1, E2] densely (no UNDEFINED hole at index 0)
+        self.assertTrue(gsc.call(BZ_SPECIAL_MOD, "bz_special_untrack_and_delete_entity", ents[0]))
+        tracked = gsc.level.get_field("bz_special_entities")
+        self.assertEqual(tracked.size, 2)
+        self.assertIs(tracked[0], ents[1])
+        self.assertIs(tracked[1], ents[2])
+
+        # Destroying remaining player entities deletes BOTH E1 and E2 without skipping trailing entries
+        removed = gsc.call(BZ_SPECIAL_MOD, "bz_special_destroy_player_entities", p1)
+        self.assertEqual(removed, 2)
+        self.assertTrue(all(e.deleted and e.delete_count == 1 for e in ents))
+        self.assertEqual(gsc.level.get_field("bz_special_entities").size, 0)
 
     def test_gate_disabled_is_complete_noop_even_when_bz_enabled(self) -> None:
         _dvars, gsc, p = _setup_special_env(
@@ -1055,6 +1251,16 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
         self.assertIsNone(re.search(r"\bforeach\b", code_only), "Forbidden foreach in _bz_special_weapons.gsc")
         self.assertIsNone(re.search(r"\bLoadFX\s*\(", code_only, re.IGNORECASE), "Forbidden LoadFX() in _bz_special_weapons.gsc (must use 0 new FX)")
+        # Must use array compaction rather than sparse `arr[i] = undefined` holes
+        self.assertIsNone(
+            re.search(r"level\.bz_special_(?:entities|hud_elems)\s*\[[^\]]+\]\s*=\s*undefined", code_only),
+            "Must compact level.bz_special_entities / level.bz_special_hud_elems instead of assigning undefined",
+        )
+        # Round-start portal refill delegates to _bz_state::bz_state_on_round_start (no direct write)
+        self.assertIsNone(
+            re.search(r"\.bz_portal_charges\s*=", code_only),
+            "Portal charge refill must delegate to maps\\_bz_state::bz_state_on_round_start()",
+        )
 
         non_ascii = [ch for ch in source if ord(ch) > 126 or (ord(ch) < 32 and ch not in "\t\r\n")]
         self.assertEqual(non_ascii, [], f"Non-ASCII characters in _bz_special_weapons.gsc: {non_ascii!r}")

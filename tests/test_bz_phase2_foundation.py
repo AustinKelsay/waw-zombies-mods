@@ -43,6 +43,11 @@ SYNTHETIC_RAY_GUN = (
     "\\inventoryType\\primary"
     "\\ammoName\\ray_gun"
     "\\clipName\\ray_gun"
+    "\\damage\\1500"
+    "\\minDamage\\1000"
+    "\\explosionInnerDamage\\1500"
+    "\\explosionOuterDamage\\300"
+    "\\explosionRadius\\128"
     "\\clipSize\\20"
     "\\maxAmmo\\160"
     "\\startAmmo\\160"
@@ -59,12 +64,37 @@ SYNTHETIC_RAY_GUN = (
     "\\customTracerFx\\weapon/tracers/fx_not_in_intersection"
 )
 
+SYNTHETIC_M1GARAND_GL = (
+    "WEAPONFILE"
+    "\\displayName\\WEAPON_M1GARAND_GL"
+    "\\inventoryType\\primary"
+    "\\altWeapon\\m7_launcher"
+    "\\ammoName\\m1garand"
+    "\\clipName\\m1garand"
+    "\\damage\\180"
+    "\\minDamage\\120"
+    "\\explosionInnerDamage\\250"
+    "\\explosionOuterDamage\\50"
+    "\\explosionRadius\\96"
+    "\\clipSize\\8"
+    "\\maxAmmo\\80"
+    "\\startAmmo\\80"
+    "\\dropAmmoMin\\8"
+    "\\dropAmmoMax\\24"
+    "\\gunModel\\viewmodel_usa_m1garand_rifle"
+    "\\worldModel\\weapon_usa_m1garand_rifle"
+    "\\viewFlashEffect\\weapon/muzzleflashes/rifleflash"
+    "\\worldFlashEffect\\weapon/muzzleflashes/rifleflash_world"
+)
+
 SYNTHETIC_KAR98K = (
     "WEAPONFILE"
     "\\displayName\\WEAPON_KAR98K"
     "\\inventoryType\\primary"
     "\\ammoName\\kar98k"
     "\\clipName\\kar98k"
+    "\\damage\\160"
+    "\\minDamage\\100"
     "\\clipSize\\5"
     "\\maxAmmo\\50"
     "\\startAmmo\\50"
@@ -82,6 +112,8 @@ SYNTHETIC_ZOMBIE_COLT = (
     "\\inventoryType\\primary"
     "\\ammoName\\colt"
     "\\clipName\\colt"
+    "\\damage\\40"
+    "\\minDamage\\20"
     "\\clipSize\\8"
     "\\maxAmmo\\80"
     "\\startAmmo\\32"
@@ -164,14 +196,19 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bm.clone_zero_fx_weapon_file("NOT_A_WEAPONFILE\\foo\\bar", {}, allowed)
 
+        # Explicitly strips altWeapon (e.g. m1garand_gl -> m7_launcher) so no alt-weapon assets leak into mod.ff
+        cloned_gl = self.bm.clone_zero_fx_weapon_file(SYNTHETIC_M1GARAND_GL, {}, allowed)
+        gl_pairs = dict(self.bm.parse_weapon_file(cloned_gl))
+        self.assertEqual(gl_pairs["altWeapon"], "")
+
     def test_stage_bz_element_weapons_generates_all_four_distinct_zero_fx_primaries_and_mod_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             raw_sp = root / "tools" / "raw" / "weapons" / "sp"
             raw_sp.mkdir(parents=True)
             (raw_sp / "ray_gun").write_text(SYNTHETIC_RAY_GUN, encoding="latin1")
-            # Intentionally only provide kar98k fallback to verify multi-template fallback resolution
-            (raw_sp / "kar98k").write_text(SYNTHETIC_KAR98K, encoding="latin1")
+            # Provide m1garand_gl with altWeapon=m7_launcher to prove altWeapon & splash are sanitized
+            (raw_sp / "m1garand_gl").write_text(SYNTHETIC_M1GARAND_GL, encoding="latin1")
             (raw_sp / "zombie_colt").write_text(SYNTHETIC_ZOMBIE_COLT, encoding="latin1")
 
             stage_dir = root / "stage"
@@ -189,10 +226,10 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             )
 
             expected_specs = {
-                "bz_acid_sprayer": ("bz_acid", "BZ_ACID_SPRAYER", "20", "120", "120"),
-                "bz_cryo_cannon": ("bz_cryo", "BZ_CRYO_CANNON", "16", "96", "96"),
-                "bz_multi_crossbow": ("bz_xbow", "BZ_MULTI_CROSSBOW", "6", "36", "36"),
-                "bz_blade_boomerang": ("bz_blade", "BZ_BLADE_BOOMERANG", "1", "20", "20"),
+                "bz_acid_sprayer": ("bz_acid", "Acid Sprayer", "20", "120", "120"),
+                "bz_cryo_cannon": ("bz_cryo", "Cryo Cannon", "16", "96", "96"),
+                "bz_multi_crossbow": ("bz_xbow", "Multi-Crossbow", "6", "36", "36"),
+                "bz_blade_boomerang": ("bz_blade", "Blade Boomerang", "1", "20", "20"),
             }
             seen_ammo: set[str] = set()
             allowed_norm = {fx.lower() for fx in self.bm.VERIFIED_ALL_4_MAP_FX}
@@ -205,6 +242,13 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 self.assertEqual(pairs["ammoName"], ammo)
                 self.assertEqual(pairs["clipName"], ammo)
                 self.assertEqual(pairs["displayName"], disp)
+                self.assertTrue(disp.isascii())
+                self.assertEqual(pairs["altWeapon"], "")
+                self.assertEqual(pairs["damage"], "1")
+                self.assertEqual(pairs["minDamage"], "1")
+                self.assertEqual(pairs["explosionInnerDamage"], "0")
+                self.assertEqual(pairs["explosionOuterDamage"], "0")
+                self.assertEqual(pairs["explosionRadius"], "0")
                 self.assertEqual(pairs["clipSize"], clip)
                 self.assertEqual(pairs["maxAmmo"], max_ammo)
                 self.assertEqual(pairs["startAmmo"], start_ammo)
@@ -284,16 +328,20 @@ class TestMysteryBoxAndElementHookSeams(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_init")
         zw = self.gsc.level.get_field("zombie_weapons")
         inc = self.gsc.level.get_field("zombie_include_weapons")
-        for weap in (
-            "bz_acid_sprayer",
-            "bz_cryo_cannon",
-            "bz_multi_crossbow",
-            "bz_blade_boomerang",
-        ):
+        expected_hints = {
+            "bz_acid_sprayer": "Press &&1 for Acid Sprayer",
+            "bz_cryo_cannon": "Press &&1 for Cryo Cannon",
+            "bz_multi_crossbow": "Press &&1 for Multi-Crossbow",
+            "bz_blade_boomerang": "Press &&1 for Blade Boomerang",
+        }
+        for weap, expected_hint in expected_hints.items():
             entry = zw[weap]
             self.assertIsNot(entry, UNDEFINED, f"{weap} missing from level.zombie_weapons")
             self.assertTrue(entry.get_field("is_in_box"), f"{weap} must have is_in_box=true")
             self.assertEqual(entry.get_field("weapon_name"), weap)
+            self.assertEqual(entry.get_field("hint"), expected_hint)
+            # upgrade_name MUST stay undefined so stock Der Riese can_upgrade_weapon() never eats the weapon
+            self.assertIs(entry.get_field("upgrade_name"), UNDEFINED, f"{weap} must leave upgrade_name undefined")
             self.assertTrue(inc[weap], f"{weap} missing from level.zombie_include_weapons")
 
         # Calling again is idempotent
@@ -541,6 +589,27 @@ class TestPhase2PlayerStateAndTransitions(unittest.TestCase):
         self.assertTrue(swap_wc.swapped)
         self.assertEqual(self.player.get_field("bz_melee_slot"), "war_club")
         self.assertEqual(self.player.get_field("score"), 30000)
+
+    def test_sync_bowie_ownership_switches_war_club_to_bowie_only_on_first_wall_buy_acquisition(self) -> None:
+        # Player acquires War Club FIRST without owning Bowie
+        buy_wc = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "war_club", False)
+        self.assertTrue(buy_wc.ok)
+        self.assertEqual(self.player.get_field("bz_melee_slot"), "war_club")
+        self.assertFalse(self.player.get_field("bz_owns_bowie"))
+
+        # Newly acquiring stock Bowie Knife off the wall transitions bz_owns_bowie false -> true
+        # and switches bz_melee_slot to "bowie" so Bowie + War Club never stack.
+        self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_sync_bowie_ownership", self.player, True))
+        self.assertTrue(self.player.get_field("bz_owns_bowie"))
+        self.assertEqual(self.player.get_field("bz_melee_slot"), "bowie")
+
+        # After player explicitly free-swaps back to War Club, subsequent sync calls preserve "war_club"
+        swap_back = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "war_club", True)
+        self.assertTrue(swap_back.ok)
+        self.assertTrue(swap_back.swapped)
+        self.assertEqual(self.player.get_field("bz_melee_slot"), "war_club")
+        self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_sync_bowie_ownership", self.player, True))
+        self.assertEqual(self.player.get_field("bz_melee_slot"), "war_club")
 
     def test_portal_grenade_purchase_consumption_round_recharge_and_down_persistence(self) -> None:
         # Buy perks + War Club + PaP War Club + Portal Grenade

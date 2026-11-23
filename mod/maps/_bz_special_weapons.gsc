@@ -80,13 +80,16 @@ bz_special_untrack_and_delete_entity( ent )
 
 	if ( IsDefined( level.bz_special_entities ) )
 	{
+		kept = [];
 		for ( i = 0; i < level.bz_special_entities.size; i++ )
 		{
-			if ( IsDefined( level.bz_special_entities[i] ) && level.bz_special_entities[i] == ent )
+			cur = level.bz_special_entities[i];
+			if ( IsDefined( cur ) && cur != ent )
 			{
-				level.bz_special_entities[i] = undefined;
+				kept[kept.size] = cur;
 			}
 		}
+		level.bz_special_entities = kept;
 	}
 
 	ent Delete();
@@ -101,9 +104,10 @@ bz_special_destroy_player_entities( player )
 	}
 
 	removed = 0;
-	for ( i = 0; i < level.bz_special_entities.size; i++ )
+	snapshot = level.bz_special_entities;
+	for ( i = 0; i < snapshot.size; i++ )
 	{
-		ent = level.bz_special_entities[i];
+		ent = snapshot[i];
 		if ( IsDefined( ent ) && IsDefined( ent.bz_owner ) && ent.bz_owner == player )
 		{
 			if ( bz_special_untrack_and_delete_entity( ent ) )
@@ -119,9 +123,10 @@ bz_special_cleanup_all_entities()
 {
 	if ( IsDefined( level.bz_special_entities ) )
 	{
-		for ( i = 0; i < level.bz_special_entities.size; i++ )
+		snapshot = level.bz_special_entities;
+		for ( i = 0; i < snapshot.size; i++ )
 		{
-			ent = level.bz_special_entities[i];
+			ent = snapshot[i];
 			if ( IsDefined( ent ) )
 			{
 				bz_special_untrack_and_delete_entity( ent );
@@ -218,6 +223,10 @@ bz_special_resolve_stock_fx( kind )
 		{
 			return level._effect["transporter_ambient"];
 		}
+		if ( IsDefined( level._effect["powerup_on"] ) )
+		{
+			return level._effect["powerup_on"];
+		}
 		if ( IsDefined( level._effect["transporter_beam"] ) )
 		{
 			return level._effect["transporter_beam"];
@@ -225,10 +234,6 @@ bz_special_resolve_stock_fx( kind )
 		if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
 		{
 			return level._effect["powerup_grabbed_wave"];
-		}
-		if ( IsDefined( level._effect["powerup_on"] ) )
-		{
-			return level._effect["powerup_on"];
 		}
 		return undefined;
 	}
@@ -274,7 +279,7 @@ bz_special_sync_melee_slot_perk( player )
 	}
 }
 
-bz_special_war_club_stagger_timer( stagger_sec )
+bz_special_war_club_stagger_timer( stagger_sec, expected_until )
 {
 	self endon( "death" );
 	level endon( "end_game" );
@@ -282,9 +287,13 @@ bz_special_war_club_stagger_timer( stagger_sec )
 	wait( stagger_sec );
 	if ( IsDefined( self ) )
 	{
+		if ( IsDefined( expected_until ) && IsDefined( self.bz_war_club_stagger_until ) && self.bz_war_club_stagger_until > expected_until )
+		{
+			return;
+		}
+		self.bz_war_club_stagger_until = 0;
 		self.bz_war_club_staggered = false;
-		self.bz_stunned = false;
-		self.ignoreall = false;
+		maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
 	}
 }
 
@@ -357,14 +366,12 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	}
 	fallback_fwd = ( fx, fy, 0 );
 
-	push_dist = 56;
-	stagger_sec = 0.75;
+	push_dist = 112;
+	stagger_sec = 1.5;
 	min_dot = 0.25;
 	cleave_dmg = Int( smash_damage * 0.75 );
 	if ( has_pap_wc )
 	{
-		push_dist = 112;
-		stagger_sec = 1.5;
 		min_dot = 0.0;
 		cleave_dmg = Int( smash_damage * 0.85 );
 	}
@@ -375,6 +382,8 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 
 	cleave_hits = 0;
 	knockbacks = 0;
+	now = GetTime();
+	stagger_until = now + Int( stagger_sec * 1000 );
 	enemies = GetAiSpeciesArray( "axis", "all" );
 	attacker.bz_war_club_cleaving = true;
 
@@ -410,28 +419,36 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 
 			if ( !is_primary )
 			{
-				z DoDamage( cleave_dmg, smash_pos, attacker );
+				final_cleave_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, cleave_dmg, "MOD_MELEE", "war_club", attacker, smash_pos );
+				z.bz_in_damage_dispatch = true;
+				z.bz_damage_dispatch_time = now;
+				z DoDamage( final_cleave_dmg, smash_pos, attacker );
 				cleave_hits++;
 			}
 
-			if ( IsAlive( z ) )
+			// Radial knockback push & stagger are strictly PaP War Club features;
+			// un-upgraded War Club stays heavy frontal melee cleave damage only.
+			if ( has_pap_wc && IsAlive( z ) )
 			{
 				if ( bz_special_push_zombie_safely( z, p_org, fallback_fwd, push_dist ) )
 				{
 					knockbacks++;
 				}
+				z.bz_war_club_stagger_until = stagger_until;
 				z.bz_war_club_staggered = true;
-				z.bz_stunned = true;
-				z.ignoreall = true;
-				z thread bz_special_war_club_stagger_timer( stagger_sec );
+				maps\_bz_hooks::bz_recompute_zombie_move_rate( z );
+				z thread bz_special_war_club_stagger_timer( stagger_sec, stagger_until );
 			}
 		}
 	}
 
 	attacker.bz_war_club_cleaving = false;
 
-	bz_special_play_stock_fx( "war_club", smash_pos );
-	Earthquake( 0.35, 0.3, p_org, 128 );
+	if ( has_pap_wc )
+	{
+		bz_special_play_stock_fx( "war_club", smash_pos );
+		Earthquake( 0.35, 0.3, p_org, 128 );
+	}
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
@@ -625,7 +642,10 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 			}
 			if ( Distance( z.origin, center ) <= radius )
 			{
-				z DoDamage( bolt_dmg, center, player );
+				final_bolt_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, bolt_dmg, "MOD_EXPLOSIVE", "bz_multi_crossbow", player, center );
+				z.bz_in_damage_dispatch = true;
+				z.bz_damage_dispatch_time = GetTime();
+				z DoDamage( final_bolt_dmg, center, player );
 				hits++;
 			}
 		}
@@ -757,7 +777,10 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 		if ( hdist <= 56.0 && dz <= 72.0 )
 		{
 			pierced_list[pierced_list.size] = z;
-			z DoDamage( dmg, pos, player );
+			final_blade_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, dmg, "MOD_PROJECTILE", "bz_blade_boomerang", player, pos );
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = GetTime();
+			z DoDamage( final_blade_dmg, pos, player );
 			bz_special_play_stock_fx( "boomerang", pos );
 			hits++;
 		}
@@ -1134,7 +1157,21 @@ bz_special_try_activate_portal( player )
 	bz_special_track_entity( portal );
 	level.bz_special_portals[level.bz_special_portals.size] = portal;
 
-	bz_special_play_stock_fx( "portal", land_pos );
+	// Use deletable SpawnFx + TriggerFx for looping portal FX so closing or end_game stops it cleanly.
+	portal_fx = bz_special_resolve_stock_fx( "portal" );
+	fx_ent = undefined;
+	if ( IsDefined( portal_fx ) )
+	{
+		fx_ent = SpawnFx( portal_fx, land_pos );
+		if ( IsDefined( fx_ent ) )
+		{
+			fx_ent.bz_special_kind = "portal_fx";
+			fx_ent.bz_owner = player;
+			TriggerFx( fx_ent );
+			bz_special_track_entity( fx_ent );
+		}
+	}
+	portal.bz_fx_ent = fx_ent;
 
 	charges_left = maps\_bz_state::bz_state_get_portal_charges( player );
 	fields = [];
@@ -1225,6 +1262,25 @@ bz_special_close_portal( portal )
 		return false;
 	}
 	portal.bz_active = false;
+	if ( IsDefined( portal.bz_fx_ent ) )
+	{
+		fx_ent = portal.bz_fx_ent;
+		portal.bz_fx_ent = undefined;
+		bz_special_untrack_and_delete_entity( fx_ent );
+	}
+	if ( IsDefined( level.bz_special_portals ) )
+	{
+		kept_portals = [];
+		for ( i = 0; i < level.bz_special_portals.size; i++ )
+		{
+			cur_p = level.bz_special_portals[i];
+			if ( IsDefined( cur_p ) && cur_p != portal )
+			{
+				kept_portals[kept_portals.size] = cur_p;
+			}
+		}
+		level.bz_special_portals = kept_portals;
+	}
 	return bz_special_untrack_and_delete_entity( portal );
 }
 
@@ -1244,18 +1300,11 @@ bz_special_portal_think( portal, owner )
 	}
 
 	elapsed = 0.0;
-	fx_pulse = 0.0;
 	while ( elapsed < duration && IsDefined( portal ) && IsDefined( portal.bz_active ) && portal.bz_active )
 	{
 		bz_special_portal_tick( portal, owner );
 		wait( 0.1 );
 		elapsed = elapsed + 0.1;
-		fx_pulse = fx_pulse + 0.1;
-		if ( fx_pulse >= 1.5 && IsDefined( portal ) && IsDefined( portal.origin ) )
-		{
-			fx_pulse = 0.0;
-			bz_special_play_stock_fx( "portal", portal.origin );
-		}
 	}
 
 	bz_special_close_portal( portal );
@@ -1375,13 +1424,16 @@ bz_special_destroy_player_hud( player )
 
 		if ( IsDefined( level.bz_special_hud_elems ) )
 		{
+			kept = [];
 			for ( i = 0; i < level.bz_special_hud_elems.size; i++ )
 			{
-				if ( IsDefined( level.bz_special_hud_elems[i] ) && level.bz_special_hud_elems[i] == hud )
+				cur = level.bz_special_hud_elems[i];
+				if ( IsDefined( cur ) && cur != hud )
 				{
-					level.bz_special_hud_elems[i] = undefined;
+					kept[kept.size] = cur;
 				}
 			}
+			level.bz_special_hud_elems = kept;
 		}
 
 		hud Destroy();
@@ -1518,13 +1570,12 @@ bz_special_on_round_start( round_num )
 	players = GetPlayers();
 	if ( IsDefined( players ) )
 	{
-		max_charges = maps\_bz_rules::bz_get_portal_max_charges();
 		for ( i = 0; i < players.size; i++ )
 		{
 			p = players[i];
 			if ( IsDefined( p ) && maps\_bz_state::bz_state_owns_portal_grenade( p ) )
 			{
-				p.bz_portal_charges = max_charges;
+				maps\_bz_state::bz_state_on_round_start( p );
 				bz_special_update_hud( p );
 			}
 		}
@@ -1585,6 +1636,18 @@ bz_special_on_actor_damage( zombie, ctx )
 		return;
 	}
 
+	// If the player picked up stock Bowie Knife off the wall after equipping War Club,
+	// sync ownership & switch melee slot to Bowie so Bowie + War Club never stack.
+	if ( attacker HasPerk( "specialty_altmelee" ) || ( IsDefined( attacker.has_altmelee ) && attacker.has_altmelee ) )
+	{
+		maps\_bz_state::bz_state_sync_bowie_ownership( attacker, true );
+		if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) == "war_club" )
+		{
+			attacker.bz_melee_slot = "bowie";
+			bz_special_update_hud( attacker );
+		}
+	}
+
 	if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) != "war_club" )
 	{
 		return;
@@ -1605,6 +1668,10 @@ bz_special_on_actor_damage( zombie, ctx )
 	if ( IsDefined( zombie ) && IsDefined( zombie.health ) && Int( zombie.health ) > 0 )
 	{
 		zhp = Int( zombie.health );
+	}
+	else if ( IsDefined( zombie ) && IsDefined( zombie.maxhealth ) && Int( zombie.maxhealth ) > 0 )
+	{
+		zhp = Int( zombie.maxhealth );
 	}
 
 	has_pap_wc = maps\_bz_state::bz_state_has_pap_war_club( attacker );

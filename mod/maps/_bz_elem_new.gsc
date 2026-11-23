@@ -52,7 +52,8 @@ bz_elem_new_ensure_level_tables()
 // Section 2 Zero-Added-FX Stock FX Resolver (0 New mod.csv FX Slots)
 // ---------------------------------------------------------------------------
 
-bz_elem_new_load_stock_fx( fx_path )
+// Read-only FX cache lookup: LoadFX() is strictly restricted to bz_elem_new_on_pre_init().
+bz_elem_new_get_cached_fx( fx_path )
 {
 	bz_elem_new_ensure_level_tables();
 	if ( !IsDefined( fx_path ) || fx_path == "" )
@@ -63,9 +64,7 @@ bz_elem_new_load_stock_fx( fx_path )
 	{
 		return level.bz_elem_new_fx[fx_path];
 	}
-	handle = LoadFX( fx_path );
-	level.bz_elem_new_fx[fx_path] = handle;
-	return handle;
+	return undefined;
 }
 
 bz_elem_new_resolve_acid_fx()
@@ -74,7 +73,7 @@ bz_elem_new_resolve_acid_fx()
 	map_name = maps\_bz_hooks::bz_get_map_name();
 	res = SpawnStruct();
 
-	// Puddle ambient glow: Der Riese prefers zapper_light_ready -> powerup_on -> all-4-map fallback.
+	// Puddle ambient glow: Der Riese prefers zapper_light_ready -> powerup_on -> all-4-map cached fallback.
 	if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["zapper_light_ready"] ) )
 	{
 		res.puddle_fx = level._effect["zapper_light_ready"];
@@ -89,13 +88,13 @@ bz_elem_new_resolve_acid_fx()
 	}
 	else
 	{
-		res.puddle_fx = bz_elem_new_load_stock_fx( "misc/fx_zombie_powerup_on" );
+		res.puddle_fx = bz_elem_new_get_cached_fx( "misc/fx_zombie_powerup_on" );
 		res.puddle_fx_path = "misc/fx_zombie_powerup_on";
 		res.puddle_fx_source = "stock_fallback";
 	}
 
 	// Impact burst: all-4-map verified raygun green plasma impact (0 added FX slots).
-	res.impact_fx = bz_elem_new_load_stock_fx( "misc/fx_exp_raygun_impact" );
+	res.impact_fx = bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
 	res.impact_fx_path = "misc/fx_exp_raygun_impact";
 	res.impact_fx_source = "stock_fallback";
 	return res;
@@ -107,7 +106,7 @@ bz_elem_new_resolve_cryo_fx()
 	map_name = maps\_bz_hooks::bz_get_map_name();
 	res = SpawnStruct();
 
-	// Freeze aura/burst: Der Riese prefers zombie_mainframe_steam -> tesla_shock_secondary -> all-4-map fallback.
+	// Freeze aura/burst: Der Riese prefers zombie_mainframe_steam -> tesla_shock_secondary -> all-4-map cached fallback.
 	if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["zombie_mainframe_steam"] ) )
 	{
 		res.freeze_fx = level._effect["zombie_mainframe_steam"];
@@ -122,12 +121,12 @@ bz_elem_new_resolve_cryo_fx()
 	}
 	else
 	{
-		res.freeze_fx = bz_elem_new_load_stock_fx( "env/electrical/fx_elec_short_oneshot" );
+		res.freeze_fx = bz_elem_new_get_cached_fx( "env/electrical/fx_elec_short_oneshot" );
 		res.freeze_fx_path = "env/electrical/fx_elec_short_oneshot";
 		res.freeze_fx_source = "stock_fallback";
 	}
 
-	// Shatter burst: Der Riese prefers tesla_shock_secondary -> zombie_mainframe_steam -> all-4-map water/ice burst.
+	// Shatter burst: Der Riese prefers tesla_shock_secondary -> zombie_mainframe_steam -> all-4-map cached water/ice burst.
 	if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["tesla_shock_secondary"] ) )
 	{
 		res.shatter_fx = level._effect["tesla_shock_secondary"];
@@ -142,7 +141,7 @@ bz_elem_new_resolve_cryo_fx()
 	}
 	else
 	{
-		res.shatter_fx = bz_elem_new_load_stock_fx( "bio/player/fx_footstep_water" );
+		res.shatter_fx = bz_elem_new_get_cached_fx( "bio/player/fx_footstep_water" );
 		res.shatter_fx_path = "bio/player/fx_footstep_water";
 		res.shatter_fx_source = "stock_fallback";
 	}
@@ -290,20 +289,7 @@ bz_elem_new_snap_to_floor( origin )
 
 bz_elem_new_save_zombie_base_move_rate( zombie )
 {
-	if ( !IsDefined( zombie ) )
-	{
-		return 1.0;
-	}
-	if ( !IsDefined( zombie.bz_base_moveplaybackrate ) )
-	{
-		base_rate = 1.0;
-		if ( IsDefined( zombie.moveplaybackrate ) && zombie.moveplaybackrate > 0.0 )
-		{
-			base_rate = zombie.moveplaybackrate;
-		}
-		zombie.bz_base_moveplaybackrate = base_rate;
-	}
-	return zombie.bz_base_moveplaybackrate;
+	return maps\_bz_hooks::bz_save_zombie_base_move_rate( zombie );
 }
 
 bz_elem_new_is_acid_slow_active( zombie )
@@ -337,38 +323,10 @@ bz_elem_new_is_cryo_frozen( zombie )
 	return GetTime() < Int( zombie.bz_cryo_frozen_until );
 }
 
-// Single source of truth for zombie movement playback rate across Acid slow and
-// Cryo freeze so neither debuff ever corrupts the saved base rate or clobbers the other.
+// Delegates to unified zombie move-rate & stun/freeze/slow composition in _bz_hooks.
 bz_elem_new_recompute_zombie_move_rate( zombie )
 {
-	if ( !IsDefined( zombie ) )
-	{
-		return 1.0;
-	}
-
-	base_rate = bz_elem_new_save_zombie_base_move_rate( zombie );
-	frozen = bz_elem_new_is_cryo_frozen( zombie );
-	if ( !frozen && IsDefined( zombie.bz_is_frozen ) && zombie.bz_is_frozen )
-	{
-		zombie.bz_is_frozen = false;
-	}
-
-	slowed = bz_elem_new_is_acid_slow_active( zombie );
-	if ( frozen )
-	{
-		zombie.moveplaybackrate = 0.01;
-		return 0.01;
-	}
-
-	if ( slowed )
-	{
-		slow_rate = base_rate * maps\_bz_rules::bz_get_acid_slow_scale();
-		zombie.moveplaybackrate = slow_rate;
-		return slow_rate;
-	}
-
-	zombie.moveplaybackrate = base_rate;
-	return base_rate;
+	return maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
 }
 
 // ---------------------------------------------------------------------------
@@ -463,6 +421,8 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 
 	if ( IsDefined( puddle.tick_damage ) && Int( puddle.tick_damage ) > 0 )
 	{
+		zombie.bz_in_damage_dispatch = true;
+		zombie.bz_damage_dispatch_time = GetTime();
 		zombie DoDamage( Int( puddle.tick_damage ), puddle.origin, puddle.owner );
 	}
 }
@@ -844,9 +804,9 @@ bz_elem_new_watch_cryo_thaw()
 // Lifecycle Hooks (Synchronous - Zero endon() Allowed Here)
 // ---------------------------------------------------------------------------
 
-// Pre-loads the 4 verified all-4-map fallback stock FX handles during pre_init
-// (strictly before first wait / maps\_load::main()) so runtime firing and shatter
-// never invoke LoadFX() post-wait (WaW 1.7 engine requirement, 0 added FX slots).
+// Pre-loads the 4 verified all-4-map fallback stock FX handles strictly during pre_init
+// (before first wait / maps\_load::main()) so runtime firing and shatter never call LoadFX()
+// post-wait (WaW 1.7 engine requirement, 0 added FX slots).
 bz_elem_new_on_pre_init()
 {
 	if ( !maps\_bz_hooks::bz_elements_enabled() )
@@ -854,10 +814,22 @@ bz_elem_new_on_pre_init()
 		return;
 	}
 	bz_elem_new_ensure_level_tables();
-	bz_elem_new_load_stock_fx( "misc/fx_zombie_powerup_on" );
-	bz_elem_new_load_stock_fx( "misc/fx_exp_raygun_impact" );
-	bz_elem_new_load_stock_fx( "env/electrical/fx_elec_short_oneshot" );
-	bz_elem_new_load_stock_fx( "bio/player/fx_footstep_water" );
+	if ( !IsDefined( level.bz_elem_new_fx["misc/fx_zombie_powerup_on"] ) )
+	{
+		level.bz_elem_new_fx["misc/fx_zombie_powerup_on"] = LoadFX( "misc/fx_zombie_powerup_on" );
+	}
+	if ( !IsDefined( level.bz_elem_new_fx["misc/fx_exp_raygun_impact"] ) )
+	{
+		level.bz_elem_new_fx["misc/fx_exp_raygun_impact"] = LoadFX( "misc/fx_exp_raygun_impact" );
+	}
+	if ( !IsDefined( level.bz_elem_new_fx["env/electrical/fx_elec_short_oneshot"] ) )
+	{
+		level.bz_elem_new_fx["env/electrical/fx_elec_short_oneshot"] = LoadFX( "env/electrical/fx_elec_short_oneshot" );
+	}
+	if ( !IsDefined( level.bz_elem_new_fx["bio/player/fx_footstep_water"] ) )
+	{
+		level.bz_elem_new_fx["bio/player/fx_footstep_water"] = LoadFX( "bio/player/fx_footstep_water" );
+	}
 }
 
 bz_elem_new_on_init()
@@ -891,6 +863,74 @@ bz_elem_new_on_weapon_fired( player, weapon_name )
 	}
 }
 
+bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
+{
+	shatter_mult = maps\_bz_rules::bz_get_cryo_shatter_mult();
+	bz_elem_new_thaw_zombie( zombie );
+
+	cryo_fx = bz_elem_new_resolve_cryo_fx();
+	shatter_pos = point;
+	if ( !IsDefined( shatter_pos ) && IsDefined( zombie ) && IsDefined( zombie.origin ) )
+	{
+		shatter_pos = ( zombie.origin[0], zombie.origin[1], zombie.origin[2] + 36 );
+	}
+	if ( IsDefined( cryo_fx.shatter_fx ) && IsDefined( shatter_pos ) )
+	{
+		PlayFX( cryo_fx.shatter_fx, shatter_pos );
+	}
+
+	weap_lbl = maps\_bz_rules::bz_normalize_id( weapon );
+	if ( weap_lbl == "" )
+	{
+		weap_lbl = "unknown";
+	}
+	mod_lbl = maps\_bz_rules::bz_normalize_id( mod );
+	if ( mod_lbl == "" )
+	{
+		mod_lbl = "unknown";
+	}
+
+	fields = [];
+	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
+	fields[1] = maps\_bz_log::kv( "weapon", weap_lbl );
+	fields[2] = maps\_bz_log::kv( "mod", mod_lbl );
+	fields[3] = maps\_bz_log::kv( "mult", shatter_mult );
+	fields[4] = maps\_bz_log::kv( "fx", cryo_fx.shatter_fx_path );
+	maps\_bz_log::emit( "ELEM_CRYO_SHATTER", maps\_bz_log::join_fields( fields ) );
+	return shatter_mult;
+}
+
+// Shared helper for scripted damage sources (Multi-Crossbow, Blade Boomerang, PaP Cluster,
+// Flamethrower DOT, War Club cleave) to compose Acid Brittle (1.5x) and Cryo Shatter (2.5x)
+// before guarded DoDamage() calls without double-multiplying through _bz_pap.
+bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point )
+{
+	if ( !IsDefined( dmg ) || Int( dmg ) <= 0 )
+	{
+		return 0;
+	}
+	base_dmg = Int( dmg );
+	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) )
+	{
+		return base_dmg;
+	}
+
+	mult = 1.0;
+	if ( bz_elem_new_is_acid_brittle_active( zombie ) )
+	{
+		mult = mult * maps\_bz_rules::bz_get_acid_brittle_mult();
+	}
+
+	norm_weap = maps\_bz_rules::bz_normalize_id( weapon );
+	if ( bz_elem_new_is_cryo_frozen( zombie ) && norm_weap != "bz_cryo_cannon" && bz_elem_new_is_shatter_mod( mod ) )
+	{
+		shatter_mult = bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point );
+		mult = mult * shatter_mult;
+	}
+
+	return Int( base_dmg * mult );
+}
+
 bz_elem_new_on_actor_damage( zombie, ctx )
 {
 	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
@@ -908,40 +948,8 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 	// clears freeze cleanly, plays shatter burst FX, and emits structured telemetry.
 	if ( bz_elem_new_can_shatter_hit( zombie, ctx ) )
 	{
-		shatter_mult = maps\_bz_rules::bz_get_cryo_shatter_mult();
+		shatter_mult = bz_elem_new_execute_cryo_shatter( zombie, ctx.attacker, ctx.weapon, ctx.mod, ctx.point );
 		ctx.damage_mult = ctx.damage_mult * shatter_mult;
-
-		bz_elem_new_thaw_zombie( zombie );
-
-		cryo_fx = bz_elem_new_resolve_cryo_fx();
-		shatter_pos = ctx.point;
-		if ( !IsDefined( shatter_pos ) && IsDefined( zombie.origin ) )
-		{
-			shatter_pos = ( zombie.origin[0], zombie.origin[1], zombie.origin[2] + 36 );
-		}
-		if ( IsDefined( cryo_fx.shatter_fx ) && IsDefined( shatter_pos ) )
-		{
-			PlayFX( cryo_fx.shatter_fx, shatter_pos );
-		}
-
-		weap_lbl = maps\_bz_rules::bz_normalize_id( ctx.weapon );
-		if ( weap_lbl == "" )
-		{
-			weap_lbl = "unknown";
-		}
-		mod_lbl = maps\_bz_rules::bz_normalize_id( ctx.mod );
-		if ( mod_lbl == "" )
-		{
-			mod_lbl = "unknown";
-		}
-
-		fields = [];
-		fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( ctx.attacker ) );
-		fields[1] = maps\_bz_log::kv( "weapon", weap_lbl );
-		fields[2] = maps\_bz_log::kv( "mod", mod_lbl );
-		fields[3] = maps\_bz_log::kv( "mult", shatter_mult );
-		fields[4] = maps\_bz_log::kv( "fx", cryo_fx.shatter_fx_path );
-		maps\_bz_log::emit( "ELEM_CRYO_SHATTER", maps\_bz_log::join_fields( fields ) );
 	}
 }
 

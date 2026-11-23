@@ -265,22 +265,8 @@ bz_elem_stock_apply_tesla_stun_to_zombie( zombie, stun_sec, stun_until )
 	}
 
 	zombie.bz_tesla_stun_until = stun_until;
-	zombie.bz_stunned = true;
 	zombie.bz_tesla_stunned = true;
-	zombie.ignoreall = true;
-
-	if ( !IsDefined( zombie.bz_tesla_saved_move_rate ) )
-	{
-		if ( IsDefined( zombie.moveplaybackrate ) && zombie.moveplaybackrate > 0 )
-		{
-			zombie.bz_tesla_saved_move_rate = zombie.moveplaybackrate;
-		}
-		else
-		{
-			zombie.bz_tesla_saved_move_rate = 1.0;
-		}
-	}
-	zombie.moveplaybackrate = 0.0;
+	maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
 	zombie thread bz_elem_stock_tesla_stun_timer( stun_sec, stun_until );
 	return true;
 }
@@ -370,18 +356,9 @@ bz_elem_stock_tesla_stun_timer( stun_sec, expected_until )
 		return;
 	}
 
+	self.bz_tesla_stun_until = 0;
 	self.bz_tesla_stunned = false;
-	self.bz_stunned = false;
-	self.ignoreall = false;
-	if ( IsDefined( self.bz_tesla_saved_move_rate ) )
-	{
-		self.moveplaybackrate = self.bz_tesla_saved_move_rate;
-		self.bz_tesla_saved_move_rate = undefined;
-	}
-	else
-	{
-		self.moveplaybackrate = 1.0;
-	}
+	maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
 }
 
 // ---------------------------------------------------------------------------
@@ -492,10 +469,7 @@ bz_flame_apply_dot_tick( zombie, player, tick_dmg, is_close_range, is_upgraded, 
 		return false;
 	}
 
-	if ( !IsDefined( zombie.bz_stunned ) || !zombie.bz_stunned )
-	{
-		zombie.moveplaybackrate = 0.8;
-	}
+	maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
 
 	origin = zombie.origin;
 	if ( !IsDefined( origin ) )
@@ -503,14 +477,16 @@ bz_flame_apply_dot_tick( zombie, player, tick_dmg, is_close_range, is_upgraded, 
 		origin = ( 0, 0, 0 );
 	}
 
+	final_tick_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( zombie, tick_dmg, "MOD_BURNED", "m2_flamethrower_zombie", player, origin );
+
 	// Prevent recursive actor_damage re-entry on our own DOT tick
 	zombie.bz_in_damage_dispatch = true;
 	zombie.bz_damage_dispatch_time = GetTime();
-	zombie DoDamage( tick_dmg, origin, player );
+	zombie DoDamage( final_tick_dmg, origin, player );
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "damage", tick_dmg );
+	fields[1] = maps\_bz_log::kv( "damage", final_tick_dmg );
 	fields[2] = maps\_bz_log::kv( "close", maps\_bz_hooks::bz_bool_int( is_close_range ) );
 	fields[3] = maps\_bz_log::kv( "upgraded", maps\_bz_hooks::bz_bool_int( is_upgraded ) );
 	fields[4] = maps\_bz_log::kv( "tick", tick_index );
@@ -543,6 +519,7 @@ bz_flame_start_burn_dot( zombie, player, round_num, zombie_hp, is_close_range, i
 	zombie.bz_flame_dot_close = is_close_range;
 	zombie.bz_flame_dot_upgraded = is_upgraded;
 	zombie.bz_flame_last_ignite_ms = now;
+	maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
 
 	zombie notify( "bz_flame_dot_restart" );
 	zombie thread bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgraded );
@@ -633,5 +610,9 @@ bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgra
 	if ( IsDefined( self ) )
 	{
 		self.bz_flame_dot_active = false;
+		if ( IsAlive( self ) )
+		{
+			maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
+		}
 	}
 }

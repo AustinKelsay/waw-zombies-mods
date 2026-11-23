@@ -29,6 +29,7 @@ import sys
 import tempfile
 from typing import Any
 import unittest
+import zlib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MOD_ROOT = REPO_ROOT / "mod"
@@ -421,6 +422,68 @@ class TestTeslaBuildPatcherAndStaging(unittest.TestCase):
             )
             self.assertEqual(updated_csv_2.count("rawfile,maps/_zombiemode_tesla.gsc"), 1)
 
+    def test_stage_bz_tesla_script_prefers_fastfiles_over_raw_tree(self) -> None:
+        def _make_fake_ff(path: Path, rawfile_name: str, payload: bytes) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            blob = rawfile_name.encode("ascii") + b"\x00" + payload + b"\x00"
+            path.write_bytes(b"IWffu100\x00\x00\x00\x00" + zlib.compress(blob))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools_root = root / "tools"
+            steam_game = root / "steam"
+            stage_dir = root / "stage"
+            stage_dir.mkdir(parents=True)
+
+            # Seed raw tree with a distinct marker
+            raw_tesla = tools_root / "raw" / "maps" / "_zombiemode_tesla.gsc"
+            raw_tesla.parent.mkdir(parents=True)
+            raw_tesla.write_text("// SOURCE: RAW_TREE\n" + SYNTHETIC_FACTORY_TESLA_GSC, encoding="latin1")
+
+            # Seed sumpf.ff, factory.ff, and factory_patch.ff with distinct markers
+            sumpf_ff = steam_game / "zone" / "english" / "nazi_zombie_sumpf.ff"
+            factory_ff = steam_game / "zone" / "english" / "nazi_zombie_factory.ff"
+            factory_patch_ff = steam_game / "zone" / "english" / "nazi_zombie_factory_patch.ff"
+
+            _make_fake_ff(
+                sumpf_ff,
+                "maps/_zombiemode_tesla.gsc",
+                ("// SOURCE: SUMPF_FF\n" + SYNTHETIC_SUMPF_TESLA_GSC).encode("latin1"),
+            )
+            _make_fake_ff(
+                factory_ff,
+                "maps/_zombiemode_tesla.gsc",
+                ("// SOURCE: FACTORY_FF\n" + SYNTHETIC_FACTORY_TESLA_GSC).encode("latin1"),
+            )
+            _make_fake_ff(
+                factory_patch_ff,
+                "maps/_zombiemode_tesla.gsc",
+                ("// SOURCE: FACTORY_PATCH_FF\n" + SYNTHETIC_FACTORY_TESLA_GSC).encode("latin1"),
+            )
+
+            # 1. Prefers nazi_zombie_factory_patch.ff over factory.ff, sumpf.ff, and raw tree
+            staged = self.bm.stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+            assert staged is not None
+            self.assertIn("SOURCE: FACTORY_PATCH_FF", staged.read_text(encoding="latin1"))
+
+            # 2. Without factory_patch.ff, prefers nazi_zombie_factory.ff over raw tree
+            factory_patch_ff.unlink()
+            staged = self.bm.stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+            assert staged is not None
+            self.assertIn("SOURCE: FACTORY_FF", staged.read_text(encoding="latin1"))
+
+            # 3. Without factory fastfiles, prefers nazi_zombie_sumpf.ff over raw tree
+            factory_ff.unlink()
+            staged = self.bm.stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+            assert staged is not None
+            self.assertIn("SOURCE: SUMPF_FF", staged.read_text(encoding="latin1"))
+
+            # 4. Only falls back to raw tree when no fastfile contains _zombiemode_tesla.gsc
+            sumpf_ff.unlink()
+            staged = self.bm.stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+            assert staged is not None
+            self.assertIn("SOURCE: RAW_TREE", staged.read_text(encoding="latin1"))
+
     def test_patched_tesla_pvp_preserves_jugg1_jugg2_and_titan_440_hp_and_classic_untouched(self) -> None:
         patched_factory = self.bm.inject_zombiemode_tesla_hooks(SYNTHETIC_FACTORY_TESLA_GSC)
         assert isinstance(patched_factory, str)
@@ -560,7 +623,7 @@ class TestWunderwaffeChainStunAndSplashGuard(unittest.TestCase):
             self.assertTrue(z.get_field("bz_stunned"))
             self.assertTrue(z.get_field("bz_tesla_stunned"))
             self.assertTrue(z.get_field("ignoreall"))
-            self.assertAlmostEqual(float(z.get_field("moveplaybackrate")), 0.0, places=6)
+            self.assertAlmostEqual(float(z.get_field("moveplaybackrate")), 0.01, places=6)
             self.assertEqual(z.get_field("bz_tesla_stun_until"), 8500)
 
         self.assertNotEqual(z_far.get_field("bz_stunned"), True)
@@ -915,6 +978,65 @@ class TestEnhancedFlamethrower(unittest.TestCase):
             gsc.call_on(z_post_end, BZ_ELEM_STOCK_MOD, "bz_flame_burn_dot_thread", player, 10, 1045, False, False)
             self.assertEqual(z_post_end.damage_events, [])
             self.assertEqual(z_post_end.get_field("health"), 1045)
+
+    def test_flame_dot_respects_acid_brittle_and_never_overwrites_cryo_or_acid_move_rate(self) -> None:
+        _dvars, gsc, player = _setup_elem_stock_env(map_name="nazi_zombie_factory")
+        gsc.sim_time_ms = 5000
+
+        # 1. Acid brittle (1.5x) amplifies Flamethrower burn DOT tick without overwriting Acid slow (0.60)
+        z_acid = ElemStockFakeEntity("ZAcidBurn", ent_num=60, is_player=False)
+        z_acid.set_field("health", 2000)
+        z_acid.set_field("origin", GscArray([250, 0, 0]))
+        z_acid.set_field("bz_acid_slow_until", 9000)
+        z_acid.set_field("bz_acid_brittle_until", 9000)
+        z_acid.set_field("bz_flame_dot_active", True)
+
+        ok = gsc.call(BZ_ELEM_STOCK_MOD, "bz_flame_apply_dot_tick", z_acid, player, 200, False, False, 1)
+        self.assertTrue(ok)
+        self.assertEqual(z_acid.damage_events[0]["damage"], 300)  # 200 * 1.50 Acid Brittle
+        self.assertAlmostEqual(float(z_acid.get_field("moveplaybackrate")), 0.60, places=6)
+
+        # 2. Cryo freeze (0.01 + ignoreall=true) is NEVER overwritten by Flamethrower burn (0.80)
+        #    and MOD_BURNED does NOT shatter Cryo freeze!
+        z_cryo = ElemStockFakeEntity("ZCryoBurn", ent_num=61, is_player=False)
+        z_cryo.set_field("health", 2000)
+        z_cryo.set_field("origin", GscArray([250, 0, 0]))
+        z_cryo.set_field("bz_is_frozen", True)
+        z_cryo.set_field("bz_cryo_frozen_until", 9000)
+        z_cryo.set_field("bz_flame_dot_active", True)
+
+        ok2 = gsc.call(BZ_ELEM_STOCK_MOD, "bz_flame_apply_dot_tick", z_cryo, player, 200, False, False, 1)
+        self.assertTrue(ok2)
+        self.assertEqual(z_cryo.damage_events[0]["damage"], 200)  # no shatter on MOD_BURNED
+        self.assertTrue(z_cryo.get_field("bz_is_frozen"))
+        self.assertTrue(z_cryo.get_field("ignoreall"))
+        self.assertAlmostEqual(float(z_cryo.get_field("moveplaybackrate")), 0.01, places=6)
+
+        # 3. Overlapping stuns: Tesla stun expiring while Second Chance stun is still active keeps 0.01 & ignoreall=true
+        z_overlap = ElemStockFakeEntity("ZOverlap", ent_num=62, is_player=False)
+        z_overlap.set_field("health", 2000)
+        z_overlap.set_field("origin", GscArray([200, 0, 0]))
+        z_overlap.set_field("bz_tesla_stun_until", 8500)
+        z_overlap.set_field("bz_tesla_stunned", True)
+        z_overlap.set_field("bz_second_chance_stun_until", 11000)
+        gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", z_overlap)
+        self.assertAlmostEqual(float(z_overlap.get_field("moveplaybackrate")), 0.01, places=6)
+        self.assertTrue(z_overlap.get_field("ignoreall"))
+
+        # Tesla timer finishes at t=8500 while Second Chance lasts until 11000 -> MUST stay stunned!
+        gsc.sim_time_ms = 8500
+        gsc.call_on(z_overlap, BZ_ELEM_STOCK_MOD, "bz_elem_stock_tesla_stun_timer", 3.5, 8500)
+        self.assertFalse(z_overlap.get_field("bz_tesla_stunned"))
+        self.assertTrue(z_overlap.get_field("bz_stunned"))
+        self.assertTrue(z_overlap.get_field("ignoreall"))
+        self.assertAlmostEqual(float(z_overlap.get_field("moveplaybackrate")), 0.01, places=6)
+
+        # Once Second Chance expires too (at t=11000), restores cleanly to base rate 1.0 & ignoreall=false
+        gsc.sim_time_ms = 11000
+        gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", z_overlap)
+        self.assertFalse(z_overlap.get_field("bz_stunned"))
+        self.assertFalse(z_overlap.get_field("ignoreall"))
+        self.assertAlmostEqual(float(z_overlap.get_field("moveplaybackrate")), 1.0, places=6)
 
 
 class TestClassicModeIsolationAndWaw17Compliance(unittest.TestCase):
