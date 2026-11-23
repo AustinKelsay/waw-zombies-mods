@@ -195,9 +195,13 @@ class BzPerksRuntime(BzGscRuntime):
             if isinstance(receiver, PerksFakeEntity):
                 return receiver.ads_frac
             return 0.0
-        if method == "setorigin":
+        if method in ("setorigin", "forceteleport"):
             if isinstance(receiver, FakeEntity) and args:
+                if method == "setorigin" and not getattr(receiver, "is_player", False):
+                    raise RuntimeError(f"WaW 1.7 forbids SetOrigin() on AI actor {receiver}; use ForceTeleport()")
                 receiver.set_field("origin", args[0])
+                if method == "forceteleport" and len(args) > 1:
+                    receiver.set_field("angles", args[1])
             return UNDEFINED
         return super()._exec_method(receiver, method, args, line)
 

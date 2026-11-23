@@ -391,6 +391,10 @@ class BzGscRuntime(GscRuntime):
             item = _waw_to_str(args[0]) if args else ""
             self.precached_items.append(item)
             return True, UNDEFINED
+        if name_lower == "precachemodel":
+            model = _waw_to_str(args[0]) if args else ""
+            self.__dict__.setdefault("precached_models", []).append(model)
+            return True, UNDEFINED
         if name_lower == "spawn":
             classname = _waw_to_str(args[0]) if args else "script_origin"
             ent = FakeEntity(name=classname, ent_num=100 + len(self.spawned_entities), is_player=False)

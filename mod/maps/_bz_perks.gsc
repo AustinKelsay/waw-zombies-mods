@@ -1111,7 +1111,12 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 				}
 				push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
 			}
-			z SetOrigin( push_org );
+			z_ang = ( 0, 0, 0 );
+			if ( IsDefined( z.angles ) )
+			{
+				z_ang = z.angles;
+			}
+			z ForceTeleport( push_org, z_ang );
 			z thread bz_perks_second_chance_stun_zombie( stun_sec, stun_until );
 			count++;
 		}

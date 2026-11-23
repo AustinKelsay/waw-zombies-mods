@@ -882,6 +882,61 @@ def inject_zombiemode_tesla_hooks(source_text: str | bytes) -> str | bytes:
     )
     text = text[: chain_match.end()] + chain_hook + text[chain_match.end() :]
 
+    # 3. Cross-map DLC2/DLC3 era parity (Shi No Numa + Der Riese):
+    #    - Shi No Numa's maps/_zombiemode_net.gsc defines init(), which collides with
+    #      maps/_zombiemode_tesla.gsc's init() if `#include maps\_zombiemode_net;` is kept.
+    #    - Replace network_safe_play_fx_on_tag(...) with PlayFxOnTag(...) (stock Sumpf path).
+    #    - Guard DLC3-only upgraded viewmodel FX loadfx() calls to nazi_zombie_factory.
+    #    - Support both Sumpf's flat level._zombie_tesla_death arrays and Factory's
+    #      animname-indexed dictionaries.
+    text = re.sub(
+        r"^[ \t]*#include[ \t]+maps\\_zombiemode_net;[ \t]*\r?\n?",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'network_safe_play_fx_on_tag\(\s*"[^"]*"\s*,\s*\d+\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^)]+?)\s*\)',
+        r"PlayFxOnTag( \1, \2, \3 )",
+        text,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)(?P<stmt>level\._effect\["tesla_viewmodel_[^"]+_upgraded"\][^\r\n]+)',
+        rf'\g<indent>if ( IsDefined( level.script ) && tolower( level.script ) == "nazi_zombie_factory" ) {{ \g<stmt> }}',
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)self\.deathanim\s*=\s*random\(\s*level\._zombie_tesla_death\[self\.animname\]\s*\);',
+        (
+            rf"\g<indent>if ( IsDefined( self.animname ) && IsDefined( level._zombie_tesla_death[self.animname] ) ){newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_death[self.animname] );{newline}"
+            rf"\g<indent>}}{newline}"
+            rf"\g<indent>else{newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_death );{newline}"
+            rf"\g<indent>}}"
+        ),
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)self\.deathanim\s*=\s*random\(\s*level\._zombie_tesla_crawl_death\[self\.animname\]\s*\);',
+        (
+            rf"\g<indent>if ( IsDefined( self.animname ) && IsDefined( level._zombie_tesla_crawl_death[self.animname] ) ){newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_crawl_death[self.animname] );{newline}"
+            rf"\g<indent>}}{newline}"
+            rf"\g<indent>else{newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_crawl_death );{newline}"
+            rf"\g<indent>}}"
+        ),
+        text,
+        flags=re.MULTILINE,
+    )
+
     return text.encode("latin1") if is_bytes else text
 
 

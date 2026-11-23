@@ -245,11 +245,15 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
                 if args:
                     receiver.set_field("angles", args[0])
                 return UNDEFINED
-            if method == "setorigin":
+            if method in ("setorigin", "forceteleport"):
                 if args:
+                    if method == "setorigin" and not receiver.is_player:
+                        raise RuntimeError(f"WaW 1.7 forbids SetOrigin() on AI actor {receiver}; use ForceTeleport()")
                     pos = args[0]
                     receiver.set_field("origin", GscArray([float(pos[0]), float(pos[1]), float(pos[2])]))
                     receiver.origin_history.append((float(pos[0]), float(pos[1]), float(pos[2])))
+                    if method == "forceteleport" and len(args) > 1:
+                        receiver.set_field("angles", args[1])
                 return UNDEFINED
             if method == "notsolid":
                 receiver.not_solid = True
@@ -364,6 +368,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
 
         hooks = gsc.level.get_field("bz_hooks")
         for hook_name in (
+            "pre_init",
             "init",
             "player_connect",
             "player_spawned",
@@ -998,11 +1003,15 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         gsc.players.append(p2)
         gsc.call(BZ_HOOKS_MOD, "bz_on_player_connect", p2)
 
-        # Dedicated child watcher thread was spawned on connect AND bound +actionslot 2
+        # Dedicated Coop-safe child watcher threads were spawned on connect (zero NotifyOnCommand in Coop)
         p1_threads = {t[1] for t in gsc._threads if t[0] is p1}
+        p2_threads = {t[1] for t in gsc._threads if t[0] is p2}
         self.assertIn("bz_special_watch_portal_command", p1_threads)
-        self.assertIn(("bz_portal_throw", "+actionslot 2"), p1.notify_commands)
-        self.assertIn(("bz_portal_throw", "+actionslot 2"), p2.notify_commands)
+        self.assertIn("bz_special_watch_portal_notify", p1_threads)
+        self.assertIn("bz_special_watch_portal_command", p2_threads)
+        self.assertIn("bz_special_watch_portal_notify", p2_threads)
+        self.assertEqual(p1.notify_commands, [])
+        self.assertEqual(p2.notify_commands, [])
 
         # Cannot activate before purchasing Portal Grenade
         self.assertIs(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1), UNDEFINED)
@@ -1250,6 +1259,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         tokenize(source, filename=str(BZ_SPECIAL_PATH))
         code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
         self.assertIsNone(re.search(r"\bforeach\b", code_only), "Forbidden foreach in _bz_special_weapons.gsc")
+        self.assertIsNone(re.search(r"\bNotifyOnCommand\s*\(", code_only, re.IGNORECASE), "Forbidden NotifyOnCommand() in WaW 1.7 Coop zombies (_bz_special_weapons.gsc)")
         self.assertIsNone(re.search(r"\bLoadFX\s*\(", code_only, re.IGNORECASE), "Forbidden LoadFX() in _bz_special_weapons.gsc (must use 0 new FX)")
         # Must use array compaction rather than sparse `arr[i] = undefined` holes
         self.assertIsNone(
@@ -1270,6 +1280,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
 
         sync_funcs = (
             "bz_special_weapons_register",
+            "bz_special_on_pre_init",
             "bz_special_on_init",
             "bz_special_on_player_connect",
             "bz_special_on_player_spawned",
@@ -1298,7 +1309,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             )
 
         # Dedicated child watchers MUST hold endon() guards
-        for child_fn in ("bz_special_watch_portal_command", "bz_special_watch_player_disconnect"):
+        for child_fn in ("bz_special_watch_portal_command", "bz_special_watch_portal_notify", "bz_special_watch_player_disconnect"):
             self.assertIn(child_fn, mod)
             self.assertTrue(
                 _ast_contains_method_call(mod[child_fn].body, "endon"),

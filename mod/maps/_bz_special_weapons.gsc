@@ -4,7 +4,7 @@
 //     and PaP War Club frontal AOE knockback smash with BulletTrace wall safety.
 //   - Multi-Crossbow (bz_multi_crossbow): 3-bolt sticky explosive spread.
 //   - Blade Boomerang (bz_blade_boomerang): spinning stock blade primary slot.
-//   - Portal Grenade: dedicated tactical key (+actionslot 2) squad warp.
+//   - Portal Grenade: Coop-safe tactical chord (USE+MELEE) squad warp.
 //   - Top-right ASCII HUD badge on lane y = bz_get_hud_lane_y(68) with zero leaks.
 //
 // Strictly WaW 1.7 GSC compliant:
@@ -26,6 +26,7 @@ bz_special_weapons_register()
 	}
 	level.bz_special_weapons_registered = true;
 
+	maps\_bz_hooks::bz_register_hook( "pre_init", ::bz_special_on_pre_init, "elements" );
 	maps\_bz_hooks::bz_register_hook( "init", ::bz_special_on_init, "elements" );
 	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_special_on_player_connect, "elements" );
 	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_special_on_player_spawned, "elements" );
@@ -335,7 +336,12 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 		);
 	}
 
-	zombie SetOrigin( push_org );
+	z_ang = ( 0, 0, 0 );
+	if ( IsDefined( zombie.angles ) )
+	{
+		z_ang = zombie.angles;
+	}
+	zombie ForceTeleport( push_org, z_ang );
 	return true;
 }
 
@@ -681,12 +687,8 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	bz_special_play_stock_fx( "crossbow", center );
 	Earthquake( 0.25, 0.25, center, 192 );
 
-	if ( IsDefined( bolt.bz_stuck_entity ) )
-	{
-		bolt Unlink();
-	}
-	bz_special_untrack_and_delete_entity( bolt );
-
+	// Emit telemetry BEFORE deleting bolt so bolt Delete() firing notify("death")
+	// inside bz_special_crossbow_bolt_fuse() cannot abort telemetry emission.
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
 	fields[1] = maps\_bz_log::kv( "round", r );
@@ -696,6 +698,12 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	fields[5] = maps\_bz_log::kv( "double_pap", maps\_bz_hooks::bz_bool_int( dpap ) );
 	fields[6] = maps\_bz_log::kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
 	maps\_bz_log::emit( "SPECIAL_CROSSBOW_DETONATE", maps\_bz_log::join_fields( fields ) );
+
+	if ( IsDefined( bolt.bz_stuck_entity ) )
+	{
+		bolt Unlink();
+	}
+	bz_special_untrack_and_delete_entity( bolt );
 
 	res = SpawnStruct();
 	res.damage = bolt_dmg;
@@ -960,7 +968,7 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 }
 
 // ---------------------------------------------------------------------------
-// 4. Portal Grenade (Dedicated Tactical Key +actionslot 2, Squad Spawn Warp)
+// 4. Portal Grenade (Coop-Safe Tactical Chord USE+MELEE, Squad Spawn Warp)
 // ---------------------------------------------------------------------------
 
 bz_special_resolve_portal_fx_name()
@@ -1482,8 +1490,6 @@ bz_special_ensure_player_watchers( player )
 		return;
 	}
 
-	player NotifyOnCommand( "bz_portal_throw", "+actionslot 2" );
-
 	if ( IsDefined( player.bz_special_watchers_started ) && player.bz_special_watchers_started )
 	{
 		return;
@@ -1491,15 +1497,41 @@ bz_special_ensure_player_watchers( player )
 	player.bz_special_watchers_started = true;
 
 	player thread bz_special_watch_portal_command();
+	player thread bz_special_watch_portal_notify();
 	player thread bz_special_watch_player_disconnect();
 }
 
+// Coop-safe tactical trigger (WaW 1.7 Coop rejects NotifyOnCommand()):
+// pressing USE + MELEE together activates Portal Grenade for any player without
+// colliding with Frag Grenades, Monkey Bombs, Bouncing Betties, or weapon slots.
 bz_special_watch_portal_command()
 {
 	self endon( "disconnect" );
 	level endon( "end_game" );
 
-	self NotifyOnCommand( "bz_portal_throw", "+actionslot 2" );
+	for ( ;; )
+	{
+		if ( maps\_bz_hooks::bz_elements_enabled() &&
+			IsAlive( self ) &&
+			( !IsDefined( self.bz_station_open ) || !self.bz_station_open ) &&
+			maps\_bz_state::bz_state_owns_portal_grenade( self ) &&
+			self UseButtonPressed() &&
+			self MeleeButtonPressed() )
+		{
+			bz_special_try_activate_portal( self );
+			while ( IsAlive( self ) && self UseButtonPressed() && self MeleeButtonPressed() )
+			{
+				wait( 0.05 );
+			}
+		}
+		wait( 0.05 );
+	}
+}
+
+bz_special_watch_portal_notify()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
 
 	for ( ;; )
 	{
@@ -1522,6 +1554,21 @@ bz_special_watch_player_disconnect()
 // ---------------------------------------------------------------------------
 // Lifecycle & Damage Hooks (Synchronous - Zero endon() Allowed Here)
 // ---------------------------------------------------------------------------
+
+bz_special_on_pre_init()
+{
+	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	{
+		return;
+	}
+	PrecacheModel( "weapon_usa_kbar_knife" );
+	map_name = maps\_bz_hooks::bz_get_map_name();
+	boom_model = bz_special_get_boomerang_model( map_name );
+	if ( IsDefined( boom_model ) && boom_model != "" && boom_model != "weapon_usa_kbar_knife" )
+	{
+		PrecacheModel( boom_model );
+	}
+}
 
 bz_special_on_init()
 {

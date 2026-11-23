@@ -384,6 +384,32 @@ class TestTeslaBuildPatcherAndStaging(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bm.inject_zombiemode_tesla_hooks("init()\n{\n}\n")
 
+    def test_inject_zombiemode_tesla_hooks_preserves_sumpf_dlc2_era_parity(self) -> None:
+        factory_with_dlc3 = (
+            "#include maps\\_utility;\n"
+            "#include maps\\_zombiemode_net;\n"
+            "init()\n{\n"
+            '\tlevel._effect["tesla_viewmodel_rail_upgraded"] = loadfx( "maps/zombie/fx_zombie_tesla_rail_view_ug" );\n'
+            "}\n"
+            "tesla_play_death_fx( fx, tag )\n{\n"
+            '\tnetwork_safe_play_fx_on_tag( "tesla_death_fx", 2, level._effect[fx], self, tag );\n'
+            "\tself.deathanim = random( level._zombie_tesla_death[self.animname] );\n"
+            "\tself.deathanim = random( level._zombie_tesla_crawl_death[self.animname] );\n"
+            "}\n"
+            + SYNTHETIC_FACTORY_TESLA_GSC
+        )
+        patched = self.bm.inject_zombiemode_tesla_hooks(factory_with_dlc3)
+        assert isinstance(patched, str)
+        self.assertNotIn("#include maps\\_zombiemode_net;", patched)
+        self.assertNotIn("network_safe_play_fx_on_tag", patched)
+        self.assertIn("PlayFxOnTag( level._effect[fx], self, tag )", patched)
+        self.assertIn('tolower( level.script ) == "nazi_zombie_factory"', patched)
+        self.assertIn("random( level._zombie_tesla_death )", patched)
+        self.assertIn("random( level._zombie_tesla_crawl_death )", patched)
+        code_no_pp = "\n".join(line for line in patched.splitlines() if not line.lstrip().startswith("#"))
+        tokens = tokenize(code_no_pp, filename="era_safe_tesla.gsc")
+        BzGscParser(tokens, filename="era_safe_tesla.gsc").parse_module()
+
     def test_stage_bz_tesla_script_and_generate_staged_mod_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

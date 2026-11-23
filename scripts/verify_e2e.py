@@ -215,6 +215,14 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         script_relpath="scripts/verify_base_zombies_p1.py",
         description="Verify Der Riese Base Zombies Phase 1 (4 Stations, Perks, 6 Classes, PaP, HUD) and Classic Mode isolation.",
     ),
+    StageSpec(
+        stage_id="base-zombies-p2",
+        name="Base Zombies Phase 2 Der Riese E2E",
+        category="engine",
+        args=("scripts/verify_base_zombies_p2.py", "--skip-build"),
+        script_relpath="scripts/verify_base_zombies_p2.py",
+        description="Verify Der Riese Base Zombies Phase 2 (4 cloned weapons, Wunderwaffe HP fix & stun, Flamethrower, Acid, Cryo, War Club, Crossbow, Boomerang, Portal) and Classic Mode isolation.",
+    ),
 )
 
 

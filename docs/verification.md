@@ -52,6 +52,7 @@ python3 scripts/verify_e2e.py --offline-only
 | 8 | `hud-menus` | `python3 scripts/verify_hud_menus.py --skip-build` | Persistent Gauntlet corner HUD overlay (`GAUNTLET - C<cycle> S<stage>/4 - TARGET R<target>`) and Solo / Co-op menu mode entry points. | Issue #1 User Stories #1–3, #18, #23 |
 | 9 | `perk-carryover` | `python3 scripts/verify_perks.py --skip-build` | Cross-map Perk Carryover (Der Riese → Cycle 2 Nacht der Untoten with Juggernog `160` HP and stock perk HUD icons) plus Classic Mode isolation. | ADR-0004 |
 | 10 | `base-zombies-p1` | `python3 scripts/verify_base_zombies_p1.py --skip-build` | Der Riese Base Zombies Phase 1 live self-test (4 Stations, Perks + Tier 2 + Apex, 6 Classes, Pack-a-Punch Expansion, down-reset persistence boundary, HUD cleanup) plus Classic Mode (`bz_enabled 0`) isolation. | Issue #18 (P1-T7) |
+| 11 | `base-zombies-p2` | `python3 scripts/verify_base_zombies_p2.py --skip-build` | Der Riese Base Zombies Phase 2 live self-test (4 zero-FX cloned primaries in Mystery Box + Arsenal + Mule Kick II 4-slot, Wunderwaffe DG-2 Juggernog/Titan 440 HP fix & 3.5s stun, Enhanced Flamethrower melt + % burn DOT, Acid Sprayer slow + 1.5x brittle, Cryo Cannon freeze + 2.5x shatter, War Club Bowie swap + PaP AOE smash, Multi-Crossbow 3 sticky bolts, Blade Boomerang flight/return, Portal Grenade spawn warp & zombie exclusion) plus Classic Mode (`bz_enabled 0`, `bz_elements_enabled 0`) isolation. | Issue #27 (P2-T5) |
 
 ---
 

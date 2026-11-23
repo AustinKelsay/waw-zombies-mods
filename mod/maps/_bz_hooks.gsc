@@ -427,6 +427,10 @@ bz_init()
 	{
 		level thread bz_run_test_selftest();
 	}
+	if ( GetDvarInt( "bz_test_p2_selftest" ) == 1 )
+	{
+		level thread bz_run_test_p2_selftest();
+	}
 }
 
 bz_watch_connecting_players()
@@ -1867,5 +1871,436 @@ bz_run_test_selftest()
 		ffields[2] = maps\_bz_log::kv( "failed", st.failed );
 		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
 		maps\_bz_log::emit( "BZ_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Gated Live Phase 2 Self-Test (Only Runs When bz_test_p2_selftest == 1)
+// ---------------------------------------------------------------------------
+
+bz_run_test_p2_selftest()
+{
+	if ( !bz_enabled() || !bz_elements_enabled() || GetDvarInt( "bz_test_p2_selftest" ) != 1 )
+	{
+		return;
+	}
+
+	// Wait for first alive spawned player (up to 20s)
+	p = undefined;
+	elapsed = 0.0;
+	while ( !IsDefined( p ) && elapsed < 20.0 )
+	{
+		players = GetPlayers();
+		if ( IsDefined( players ) && players.size > 0 )
+		{
+			for ( i = 0; i < players.size; i++ )
+			{
+				if ( IsDefined( players[i] ) && IsAlive( players[i] ) )
+				{
+					p = players[i];
+					break;
+				}
+			}
+		}
+		if ( !IsDefined( p ) )
+		{
+			wait( 0.25 );
+			elapsed = elapsed + 0.25;
+		}
+	}
+
+	if ( !IsDefined( p ) )
+	{
+		maps\_bz_log::emit( "BZ_P2_SELFTEST_FAIL", "reason=no_alive_player" );
+		return;
+	}
+
+	// Let initial spawn, stations, and stock tesla_pvp_thread settle
+	wait( 1.5 );
+
+	st = SpawnStruct();
+	st.passed = 0;
+	st.failed = 0;
+	st.fail_list = "";
+
+	map_name = bz_get_map_name();
+	p.score = 400000;
+
+	// 1. Verify all 4 zero-FX cloned Phase 2 primaries are precached & registered in Mystery Box
+	//    with is_in_box == true and upgrade_name undefined.
+	elem_weaps = bz_get_element_primary_weapons();
+	box_count = 0;
+	box_ok = IsDefined( level.bz_element_weapons_precached ) &&
+		level.bz_element_weapons_precached &&
+		IsDefined( level.zombie_weapons ) &&
+		elem_weaps.size == 4;
+	for ( i = 0; i < elem_weaps.size; i++ )
+	{
+		w = elem_weaps[i];
+		if ( IsDefined( level.zombie_weapons ) && IsDefined( level.zombie_weapons[w] ) )
+		{
+			entry = level.zombie_weapons[w];
+			if ( IsDefined( entry.is_in_box ) && entry.is_in_box && !IsDefined( entry.upgrade_name ) )
+			{
+				box_count = box_count + 1;
+			}
+			else
+			{
+				box_ok = false;
+			}
+		}
+		else
+		{
+			box_ok = false;
+		}
+	}
+	bz_selftest_check( st, box_ok && box_count == 4, "box_weapons_4_registered" );
+
+	// 2. Mule Kick II (4-slot primary cap) + Arsenal Station purchase of all 4 bz_* primaries
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:mule_kick" );
+	bz_on_menu_response( p, "bz_station_perks", "buy_t2:mule_kick" );
+	bz_selftest_check( st, bz_get_max_primary_weapons( p ) == 4, "mule_kick_t2_cap_4" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:cryo_cannon" );
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:multi_crossbow" );
+	wait( 0.05 );
+
+	prims_mid = p GetWeaponsListPrimaries();
+	four_slot_with_starter = IsDefined( prims_mid ) && prims_mid.size == 4;
+	bz_selftest_check( st, four_slot_with_starter, "mule_kick_4_slot_live" );
+
+	// Drop non-bz starter primary so all 4 bz_* cloned primaries can be held simultaneously
+	if ( IsDefined( prims_mid ) )
+	{
+		for ( i = 0; i < prims_mid.size; i++ )
+		{
+			pw = maps\_bz_rules::bz_normalize_id( prims_mid[i] );
+			if ( pw != "bz_acid_sprayer" && pw != "bz_cryo_cannon" && pw != "bz_multi_crossbow" && pw != "bz_blade_boomerang" )
+			{
+				p TakeWeapon( prims_mid[i] );
+				break;
+			}
+		}
+	}
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:blade_boomerang" );
+	wait( 0.05 );
+
+	prims_all = p GetWeaponsListPrimaries();
+	prim_count = 0;
+	if ( IsDefined( prims_all ) )
+	{
+		prim_count = prims_all.size;
+	}
+	has_all_four = p HasWeapon( "bz_acid_sprayer" ) &&
+		p HasWeapon( "bz_cryo_cannon" ) &&
+		p HasWeapon( "bz_multi_crossbow" ) &&
+		p HasWeapon( "bz_blade_boomerang" ) &&
+		prim_count == 4;
+	bz_selftest_check( st, has_all_four, "arsenal_all_4_bz_primaries" );
+
+	// 3. Arsenal Special Gear: Bowie <-> War Club melee-slot swap + PaP War Club + Portal Grenade
+	p SetPerk( "specialty_altmelee" );
+	p.has_altmelee = true;
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:war_club" );
+	wc_cleared_bowie = maps\_bz_state::bz_state_owns_war_club( p ) &&
+		maps\_bz_state::bz_state_get_melee_slot( p ) == "war_club" &&
+		!p HasPerk( "specialty_altmelee" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:equip_bowie" );
+	bowie_restored = maps\_bz_state::bz_state_get_melee_slot( p ) == "bowie" &&
+		p HasPerk( "specialty_altmelee" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:war_club" );
+	wc_reequipped = maps\_bz_state::bz_state_get_melee_slot( p ) == "war_club" &&
+		!p HasPerk( "specialty_altmelee" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:pap_war_club" );
+	pap_wc_ok = maps\_bz_state::bz_state_has_pap_war_club( p );
+	bz_selftest_check( st, wc_cleared_bowie && bowie_restored && wc_reequipped && pap_wc_ok, "war_club_bowie_swap_and_pap" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:portal_grenade" );
+	portal_gear_ok = maps\_bz_state::bz_state_owns_portal_grenade( p ) &&
+		maps\_bz_state::bz_state_get_portal_charges( p ) >= 1 &&
+		IsDefined( p.bz_special_hud );
+	bz_selftest_check( st, portal_gear_ok, "portal_grenade_gear_and_hud" );
+
+	// Wait for a real live Der Riese zombie (up to 12s) for combat & status verification
+	live_z = undefined;
+	z_wait = 0.0;
+	while ( !IsDefined( live_z ) && z_wait < 12.0 )
+	{
+		zlist = GetAiSpeciesArray( "axis", "all" );
+		if ( IsDefined( zlist ) && zlist.size > 0 )
+		{
+			for ( zi = 0; zi < zlist.size; zi++ )
+			{
+				if ( IsDefined( zlist[zi] ) && IsAlive( zlist[zi] ) )
+				{
+					live_z = zlist[zi];
+					break;
+				}
+			}
+		}
+		if ( !IsDefined( live_z ) )
+		{
+			wait( 0.25 );
+			z_wait = z_wait + 0.25;
+		}
+	}
+	bz_selftest_check( st, IsDefined( live_z ) && IsAlive( live_z ), "live_zombie_available" );
+
+	acid_brittle_dmg = 0;
+	cryo_shatter_dmg = 0;
+	flame_close_ok = false;
+	flame_dot_ok = false;
+	tesla_stun_ok = false;
+	war_club_smash_ok = false;
+	portal_warped = false;
+	portal_excluded_z = false;
+
+	if ( IsDefined( live_z ) && IsAlive( live_z ) )
+	{
+		live_z.maxhealth = 50000;
+		live_z.health = 50000;
+		orig_z_org = live_z.origin;
+		orig_z_ang = ( 0, 0, 0 );
+		if ( IsDefined( live_z.angles ) )
+		{
+			orig_z_ang = live_z.angles;
+		}
+
+		// 4. Acid Sprayer: puddle spawns, 40% slow (0.60x) + 50% brittle (1.50x) on live zombie
+		base_rate = bz_save_zombie_base_move_rate( live_z );
+		puddle = maps\_bz_elem_new::bz_elem_new_fire_acid_sprayer( p, "bz_acid_sprayer" );
+		acid_puddle_ok = IsDefined( puddle ) && IsDefined( puddle.anchor ) && IsDefined( puddle.fx_ent );
+		if ( acid_puddle_ok )
+		{
+			live_z ForceTeleport( puddle.origin, orig_z_ang );
+			maps\_bz_elem_new::bz_elem_new_tick_acid_puddle( puddle );
+		}
+		acid_slow_ok = maps\_bz_elem_new::bz_elem_new_is_acid_slow_active( live_z ) &&
+			live_z.moveplaybackrate <= ( base_rate * 0.61 ) &&
+			live_z.moveplaybackrate >= ( base_rate * 0.55 );
+		acid_brittle_ok = maps\_bz_elem_new::bz_elem_new_is_acid_brittle_active( live_z );
+		acid_brittle_dmg = bz_actor_damage_dispatch( live_z, p, p, 100, 0, "MOD_RIFLE_BULLET", "zombie_colt", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+		bz_selftest_check( st, acid_puddle_ok && acid_slow_ok && acid_brittle_ok && acid_brittle_dmg == 150, "acid_puddle_slow_brittle_150" );
+
+		// Clean acid puddle & debuff before Cryo Cannon test
+		if ( IsDefined( puddle ) )
+		{
+			maps\_bz_elem_new::bz_elem_new_cleanup_puddle( puddle );
+		}
+		live_z.bz_acid_slow_until = 0;
+		live_z.bz_acid_brittle_until = 0;
+		bz_recompute_zombie_move_rate( live_z );
+
+		// 5. Cryo Cannon: freezes live zombie (moveplaybackrate == 0.01) + 2.5x shatter on follow-up hit
+		live_z.health = 50000;
+		cryo_trace = maps\_bz_elem_new::bz_elem_new_trace_forward_impact( p, 1024 );
+		cryo_dist = Distance( cryo_trace.start, cryo_trace.impact );
+		place_dist = 80.0;
+		if ( cryo_dist < place_dist )
+		{
+			place_dist = cryo_dist * 0.5;
+		}
+		cryo_target = (
+			cryo_trace.start[0] + ( cryo_trace.fwd[0] * place_dist ),
+			cryo_trace.start[1] + ( cryo_trace.fwd[1] * place_dist ),
+			cryo_trace.start[2] + ( cryo_trace.fwd[2] * place_dist )
+		);
+		live_z ForceTeleport( maps\_bz_elem_new::bz_elem_new_snap_to_floor( cryo_target ), orig_z_ang );
+
+		frozen_cnt = maps\_bz_elem_new::bz_elem_new_fire_cryo_cannon( p, "bz_cryo_cannon" );
+		cryo_frozen_ok = frozen_cnt >= 1 &&
+			maps\_bz_elem_new::bz_elem_new_is_cryo_frozen( live_z ) &&
+			live_z.moveplaybackrate <= 0.02;
+		cryo_shatter_dmg = bz_actor_damage_dispatch( live_z, p, p, 100, 0, "MOD_EXPLOSIVE", "stielhandgranate", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+		cryo_thawed_ok = !maps\_bz_elem_new::bz_elem_new_is_cryo_frozen( live_z );
+		bz_selftest_check( st, cryo_frozen_ok && cryo_shatter_dmg == 250 && cryo_thawed_ok, "cryo_freeze_shatter_250" );
+
+		// 6. Enhanced Flamethrower: close-range melt & long-range % burn DOT on live zombie
+		live_z.health = 50000;
+		live_z.bz_flame_last_ignite_ms = undefined;
+		live_z.bz_flame_dot_active = false;
+		flame_close_dmg = bz_actor_damage_dispatch( live_z, p, p, 50, 0, "MOD_BURNED", "m2_flamethrower_zombie", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+		flame_close_ok = flame_close_dmg > 50 && IsDefined( live_z.bz_flame_dot_active ) && live_z.bz_flame_dot_active;
+
+		live_z notify( "bz_flame_dot_restart" );
+		live_z.bz_flame_dot_active = false;
+		live_z.bz_flame_last_ignite_ms = undefined;
+		live_z.health = 50000;
+		hp_before_dot = Int( live_z.health );
+		long_dot_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( 10, 50000, false, false );
+		dot_applied = maps\_bz_elem_stock::bz_flame_apply_dot_tick( live_z, p, long_dot_dmg, false, false, 1 );
+		wait( 0.05 );
+		flame_dot_ok = dot_applied && long_dot_dmg > 0 && IsAlive( live_z ) && Int( live_z.health ) < hp_before_dot;
+		bz_selftest_check( st, flame_close_ok && flame_dot_ok, "flamethrower_melt_and_dot" );
+
+		// 7. PaP War Club frontal AOE knockback smash on live zombie
+		live_z.health = 50000;
+		live_z ForceTeleport( maps\_bz_elem_new::bz_elem_new_snap_to_floor( cryo_target ), orig_z_ang );
+		smash_res = maps\_bz_special_weapons::bz_special_war_club_smash( p, undefined, live_z.origin, true, 1200 );
+		war_club_smash_ok = IsDefined( smash_res ) &&
+			smash_res.pap &&
+			smash_res.cleave_hits >= 1 &&
+			smash_res.knockbacks >= 1 &&
+			IsDefined( live_z.bz_war_club_staggered ) &&
+			live_z.bz_war_club_staggered;
+		live_z.bz_war_club_stagger_until = 0;
+		live_z.bz_war_club_staggered = false;
+		bz_recompute_zombie_move_rate( live_z );
+		bz_selftest_check( st, war_club_smash_ok, "pap_war_club_aoe_smash" );
+
+		// 8. Wunderwaffe DG-2 chain-stun on live zombie
+		live_z.health = 50000;
+		live_z.bz_tesla_last_chain_ms = undefined;
+		live_z.bz_tesla_stun_until = 0;
+		stunned_cnt = maps\_bz_elem_stock::bz_tesla_on_chain_hit( live_z, p );
+		tesla_stun_ok = stunned_cnt >= 1 &&
+			IsDefined( live_z.bz_tesla_stunned ) &&
+			live_z.bz_tesla_stunned &&
+			live_z.moveplaybackrate <= 0.02;
+		live_z.bz_tesla_stun_until = 0;
+		live_z.bz_tesla_stunned = false;
+		bz_recompute_zombie_move_rate( live_z );
+		bz_selftest_check( st, tesla_stun_ok, "wunderwaffe_chain_stun" );
+
+		live_z ForceTeleport( orig_z_org, orig_z_ang );
+	}
+	else
+	{
+		bz_selftest_check( st, false, "acid_puddle_slow_brittle_150" );
+		bz_selftest_check( st, false, "cryo_freeze_shatter_250" );
+		bz_selftest_check( st, false, "flamethrower_melt_and_dot" );
+		bz_selftest_check( st, false, "pap_war_club_aoe_smash" );
+		bz_selftest_check( st, false, "wunderwaffe_chain_stun" );
+	}
+
+	// 9. Wunderwaffe DG-2 Juggernog II + Titan (440 HP) real self-shock fix & Blast Shield guard
+	p SetPerk( "specialty_armorvest" );
+	bz_on_menu_response( p, "bz_station_perks", "buy_t2:juggernog" );
+	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
+	p.health = 440;
+	pre_tesla_max = Int( p.maxhealth );
+
+	// Exercise the real patched maps/_zombiemode_tesla.gsc tesla_pvp_thread()
+	p notify( "weapon_pvp_attack", p, "tesla_gun", 50, "MOD_PROJECTILE_SPLASH" );
+	wait( 0.15 );
+	titan_tesla_hp = Int( p.maxhealth );
+	hp_after_shock = Int( p.health );
+	tesla_self_fix_ok = pre_tesla_max == 440 &&
+		titan_tesla_hp == 440 &&
+		hp_after_shock < 440 &&
+		hp_after_shock > 0;
+	bz_selftest_check( st, tesla_self_fix_ok, "wunderwaffe_titan_440_hp_fix" );
+
+	// Verify Blast Shield blocks Wunderwaffe self-shock completely
+	p.health = 440;
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:blast_shield" );
+	p notify( "weapon_pvp_attack", p, "tesla_gun", 50, "MOD_PROJECTILE_SPLASH" );
+	wait( 0.15 );
+	tesla_bs_ok = Int( p.maxhealth ) == 440 && Int( p.health ) == 440;
+	bz_selftest_check( st, tesla_bs_ok, "wunderwaffe_blast_shield_guard" );
+
+	// 10. Multi-Crossbow: 3 sticky bolts spawn & detonate cleanly
+	xbow_res = maps\_bz_special_weapons::bz_special_fire_multi_crossbow( p, "bz_multi_crossbow" );
+	xbow_bolts = 0;
+	if ( IsDefined( xbow_res ) && IsDefined( xbow_res.bolts ) )
+	{
+		xbow_bolts = xbow_res.bolts.size;
+	}
+	wait( 1.5 );
+	xbow_all_detonated = xbow_bolts == 3;
+	if ( xbow_all_detonated )
+	{
+		for ( i = 0; i < xbow_res.bolts.size; i++ )
+		{
+			b = xbow_res.bolts[i];
+			if ( IsDefined( b ) && ( !IsDefined( b.bz_detonated ) || !b.bz_detonated ) )
+			{
+				xbow_all_detonated = false;
+			}
+		}
+	}
+	bz_selftest_check( st, xbow_all_detonated, "multi_crossbow_3_bolts_detonate" );
+
+	// 11. Blade Boomerang: spinning blade model spawns non-solid & returns cleanly
+	boom_res = maps\_bz_special_weapons::bz_special_fire_blade_boomerang( p, "bz_blade_boomerang" );
+	boom_spawned = IsDefined( boom_res ) &&
+		IsDefined( boom_res.blade ) &&
+		boom_res.model == "viewmodel_knife_bowie";
+	wait( 1.2 );
+	boom_returned = boom_spawned &&
+		( !IsDefined( boom_res.blade ) || ( IsDefined( boom_res.blade.bz_special_deleted ) && boom_res.blade.bz_special_deleted ) );
+	bz_selftest_check( st, boom_returned, "blade_boomerang_spawn_and_return" );
+
+	// 12. Portal Grenade: Coop-safe USE+MELEE watcher registered, SpawnFx portal spawns, warps player, excludes live zombie
+	watcher_ok = IsDefined( p.bz_special_watchers_started ) && p.bz_special_watchers_started;
+	portal = maps\_bz_special_weapons::bz_special_try_activate_portal( p );
+	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent );
+	if ( portal_fx_ok )
+	{
+		z_portal_before = portal.origin;
+		if ( IsDefined( live_z ) && IsAlive( live_z ) )
+		{
+			z_p_ang = ( 0, 0, 0 );
+			if ( IsDefined( live_z.angles ) )
+			{
+				z_p_ang = live_z.angles;
+			}
+			live_z ForceTeleport( z_portal_before, z_p_ang );
+		}
+		if ( portal.bz_teleport_count == 0 )
+		{
+			p SetOrigin( portal.origin );
+			p.bz_portal_warp_lock_until = 0;
+			maps\_bz_special_weapons::bz_special_portal_tick( portal, p );
+		}
+		portal_warped = portal.bz_teleport_count >= 1;
+		if ( IsDefined( live_z ) && IsAlive( live_z ) )
+		{
+			portal_excluded_z = Distance( live_z.origin, z_portal_before ) < 16.0;
+		}
+		maps\_bz_special_weapons::bz_special_close_portal( portal );
+	}
+	bz_selftest_check( st, watcher_ok && portal_fx_ok && portal_warped && portal_excluded_z, "portal_grenade_warp_and_exclude_z" );
+
+	// 13. Clean up all test entities & HUDs via end_game hook
+	bz_on_end_game();
+	cleanup_ok = !IsDefined( p.bz_special_hud ) &&
+		!IsDefined( p.bz_perks_hud ) &&
+		!IsDefined( p.bz_class_hud ) &&
+		IsDefined( level.bz_acid_puddles ) && level.bz_acid_puddles.size == 0 &&
+		IsDefined( level.bz_elem_new_entities ) && level.bz_elem_new_entities.size == 0 &&
+		IsDefined( level.bz_special_entities ) && level.bz_special_entities.size == 0 &&
+		IsDefined( level.bz_special_portals ) && level.bz_special_portals.size == 0;
+	bz_selftest_check( st, cleanup_ok, "p2_cleanup_entities_and_hud" );
+
+	// Emit final structured telemetry
+	if ( st.failed == 0 )
+	{
+		fields = [];
+		fields[0] = maps\_bz_log::kv( "map", map_name );
+		fields[1] = maps\_bz_log::kv( "checks", st.passed );
+		fields[2] = maps\_bz_log::kv( "box_weapons", box_count );
+		fields[3] = maps\_bz_log::kv( "primaries", prim_count );
+		fields[4] = maps\_bz_log::kv( "titan_tesla_hp", titan_tesla_hp );
+		fields[5] = maps\_bz_log::kv( "acid_brittle_dmg", acid_brittle_dmg );
+		fields[6] = maps\_bz_log::kv( "cryo_shatter_dmg", cryo_shatter_dmg );
+		fields[7] = maps\_bz_log::kv( "xbow_bolts", xbow_bolts );
+		fields[8] = maps\_bz_log::kv( "portal_warped", bz_bool_int( portal_warped ) );
+		fields[9] = maps\_bz_log::kv( "cleanup", bz_bool_int( cleanup_ok ) );
+		maps\_bz_log::emit( "BZ_P2_SELFTEST_PASS", maps\_bz_log::join_fields( fields ) );
+	}
+	else
+	{
+		ffields = [];
+		ffields[0] = maps\_bz_log::kv( "map", map_name );
+		ffields[1] = maps\_bz_log::kv( "passed", st.passed );
+		ffields[2] = maps\_bz_log::kv( "failed", st.failed );
+		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
+		maps\_bz_log::emit( "BZ_P2_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
 	}
 }
