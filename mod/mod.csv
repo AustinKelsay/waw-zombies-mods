@@ -7,6 +7,7 @@ rawfile,maps/_gauntlet_log.gsc
 rawfile,maps/_gauntlet_rules.gsc
 rawfile,maps/_gauntlet_state.gsc
 rawfile,maps/_gauntlet_perks.gsc
+rawfile,maps/_gauntlet_wipe.gsc
 rawfile,maps/_gauntlet_mode.gsc
 rawfile,maps/_gauntlet_hud.gsc
 rawfile,maps/_gauntlet_bootstrap.gsc

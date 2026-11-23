@@ -696,6 +696,11 @@ on_round_started( round_num )
 	{
 		level thread run_test_autoclear( round_num );
 	}
+
+	if ( GetDvarInt( "gauntlet_test_force_wipe" ) == 1 )
+	{
+		level thread maps\_gauntlet_wipe::maybe_run_test_force_wipe( round_num );
+	}
 }
 
 // Emits ZOMBIE_SPAWNED_SAMPLE once per Stage on the first spawned zombie so
@@ -1112,7 +1117,6 @@ on_end_game()
 		return false;
 	}
 
-	maps\_gauntlet_hud::destroy_gauntlet_hud( "end_game" );
-	maps\_gauntlet_state::clear_run_state();
-	return false;
+	maps\_gauntlet_hud::destroy_gauntlet_hud( "gauntlet_run_wipe" );
+	return maps\_gauntlet_wipe::handle_team_wipe();
 }
