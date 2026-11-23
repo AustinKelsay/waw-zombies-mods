@@ -61,6 +61,29 @@ resolve_banner_delay()
 	return 5.0;
 }
 
+resolve_prep_phase_duration( stage_info )
+{
+	if ( !IsDefined( stage_info ) || !IsDefined( stage_info.prep_duration ) )
+	{
+		return 0;
+	}
+
+	base_duration = Int( stage_info.prep_duration );
+	if ( base_duration <= 0 )
+	{
+		// Cycle 1 always skips Prep Phase regardless of test dvar overrides.
+		return 0;
+	}
+
+	override_prep = GetDvarInt( "gauntlet_test_prep_duration" );
+	if ( override_prep > 0 )
+	{
+		return override_prep;
+	}
+
+	return base_duration;
+}
+
 compute_rounds_cleared_in_stage( start_round, completed_round )
 {
 	cleared = ( Int( completed_round ) - Int( start_round ) ) + 1;
@@ -149,6 +172,7 @@ on_stage_init()
 	level.gauntlet_stage_info = stage_info;
 	level.gauntlet_effective_target_round = effective_target_round;
 	level.gauntlet_stage_cleared = false;
+	level.gauntlet_zombie_sampled = false;
 
 	init_fields = [];
 	init_fields[0] = maps\_gauntlet_log::kv( "cycle", state.cycle );
@@ -171,9 +195,222 @@ on_stage_init()
 	on_stage_ready( state, stage_info );
 }
 
-// Extension seam for Ticket #5 (Cycle 2+ high-round start + Prep Phase) and Ticket #8 (HUD).
+// Ticket #5: Cycle 2+ stock-accurate high-round initialization and Prep Phase.
+// Runs inside round_start() immediately before stock round_think() spawns zombies,
+// while players, doors, Mystery Box, power, and perks are already fully active.
 on_stage_ready( state, stage_info )
 {
+	if ( !IsDefined( stage_info ) )
+	{
+		return;
+	}
+
+	if ( stage_info.start_round > 1 )
+	{
+		apply_high_round_start( state, stage_info );
+	}
+
+	prep_duration = resolve_prep_phase_duration( stage_info );
+	if ( prep_duration > 0 )
+	{
+		run_prep_phase( state, stage_info, prep_duration );
+	}
+}
+
+init_high_round_chalk_hud( start_round )
+{
+	if ( start_round > 10 )
+	{
+		if ( IsDefined( level.chalk_hud2 ) )
+		{
+			level.chalk_hud2 Destroy();
+			level.chalk_hud2 = undefined;
+		}
+
+		if ( IsDefined( level.chalk_hud1 ) )
+		{
+			level.chalk_hud1.alignX = "left";
+			level.chalk_hud1.alignY = "bottom";
+			level.chalk_hud1.horzAlign = "left";
+			level.chalk_hud1.vertAlign = "bottom";
+			level.chalk_hud1.x = 0;
+			level.chalk_hud1.y = 0;
+			level.chalk_hud1.fontscale = 32;
+			level.chalk_hud1.color = ( 0.423, 0.004, 0 );
+			level.chalk_hud1 SetValue( start_round );
+			level.chalk_hud1.alpha = 1;
+		}
+		return;
+	}
+
+	if ( start_round > 5 )
+	{
+		if ( IsDefined( level.chalk_hud1 ) )
+		{
+			level.chalk_hud1.alignX = "left";
+			level.chalk_hud1.alignY = "bottom";
+			level.chalk_hud1.horzAlign = "left";
+			level.chalk_hud1.vertAlign = "bottom";
+			level.chalk_hud1.x = 0;
+			level.chalk_hud1.y = 0;
+			level.chalk_hud1.color = ( 0.423, 0.004, 0 );
+			level.chalk_hud1 SetShader( "hud_chalk_5", 64, 64 );
+			level.chalk_hud1.alpha = 1;
+		}
+
+		if ( IsDefined( level.chalk_hud2 ) )
+		{
+			level.chalk_hud2.alignX = "left";
+			level.chalk_hud2.alignY = "bottom";
+			level.chalk_hud2.horzAlign = "left";
+			level.chalk_hud2.vertAlign = "bottom";
+			level.chalk_hud2.x = 64;
+			level.chalk_hud2.y = 0;
+			level.chalk_hud2.color = ( 0.423, 0.004, 0 );
+			level.chalk_hud2 SetShader( "hud_chalk_" + ( start_round - 5 ), 64, 64 );
+			level.chalk_hud2.alpha = 1;
+		}
+	}
+}
+
+apply_high_round_start( state, stage_info )
+{
+	current_map = get_current_map_name();
+	start_round = Int( stage_info.start_round );
+
+	// Set round number and clear first_round so stock round_spawning() uses full
+	// high-round zombie counts (not 0.2x) and chalk_one_up() skips Round 1 intro.
+	level.round_number = start_round;
+	level.first_round = false;
+
+	// Pre-seed level.zombie_health to round (start_round - 1) so stock
+	// ai_calculate_health() (called once on the opening round in round_think on
+	// prototype/asylum and in round_spawning on sumpf/factory) steps to the exact
+	// stock zombie health for start_round without double-applying +10%.
+	target_health = maps\_gauntlet_rules::calculate_zombie_health( start_round );
+	level.zombie_health = maps\_gauntlet_rules::calculate_pre_round_zombie_health( start_round );
+
+	move_speed = maps\_gauntlet_rules::calculate_zombie_move_speed( start_round );
+	level.zombie_move_speed = move_speed;
+
+	base_delay = 2.0;
+	if ( IsDefined( level.zombie_vars ) && IsDefined( level.zombie_vars["zombie_spawn_delay"] ) )
+	{
+		base_delay = level.zombie_vars["zombie_spawn_delay"];
+	}
+	spawn_delay = maps\_gauntlet_rules::calculate_zombie_spawn_delay( start_round, base_delay );
+	level.zombie_vars["zombie_spawn_delay"] = spawn_delay;
+
+	init_high_round_chalk_hud( start_round );
+
+	// Reschedule Hellhound rounds relative to start_round on Shi No Numa and Der Riese
+	// so stock's Round 5..7 initial schedule is never silently skipped.
+	next_dog_label = "none";
+	if ( maps\_gauntlet_rules::map_has_hellhounds( current_map ) )
+	{
+		dog_offset = RandomIntRange( 2, 5 );
+		next_dog = maps\_gauntlet_rules::compute_next_dog_round( start_round, stage_info.target_round, dog_offset );
+		level.next_dog_round = next_dog;
+		next_dog_label = "" + next_dog;
+	}
+
+	fields = [];
+	fields[0] = maps\_gauntlet_log::kv( "cycle", state.cycle );
+	fields[1] = maps\_gauntlet_log::kv( "stage", state.stage );
+	fields[2] = maps\_gauntlet_log::kv( "map", current_map );
+	fields[3] = maps\_gauntlet_log::kv( "start_round", start_round );
+	fields[4] = maps\_gauntlet_log::kv( "zombie_health", target_health );
+	fields[5] = maps\_gauntlet_log::kv( "zombie_move_speed", move_speed );
+	fields[6] = maps\_gauntlet_log::kv( "spawn_delay", spawn_delay );
+	fields[7] = maps\_gauntlet_log::kv( "next_dog_round", next_dog_label );
+	maps\_gauntlet_log::emit( "HIGH_ROUND_APPLIED", maps\_gauntlet_log::join_fields( fields ) );
+}
+
+create_prep_hud_line( y_offset, font_scale, color )
+{
+	hud = NewHudElem();
+	hud.alignX = "center";
+	hud.alignY = "top";
+	hud.horzAlign = "center";
+	hud.vertAlign = "top";
+	hud.x = 0;
+	hud.y = y_offset;
+	hud.foreground = true;
+	hud.sort = 9;
+	hud.hidewheninmenu = true;
+	hud.fontScale = font_scale;
+	hud.color = color;
+	hud.alpha = 1;
+	return hud;
+}
+
+destroy_prep_huds_on_end_game( title_hud, hint_hud )
+{
+	level endon( "gauntlet_prep_phase_done" );
+	level waittill( "end_game" );
+
+	if ( IsDefined( title_hud ) )
+	{
+		title_hud Destroy();
+	}
+	if ( IsDefined( hint_hud ) )
+	{
+		hint_hud Destroy();
+	}
+}
+
+run_prep_phase( state, stage_info, duration )
+{
+	current_map = get_current_map_name();
+
+	start_fields = [];
+	start_fields[0] = maps\_gauntlet_log::kv( "cycle", state.cycle );
+	start_fields[1] = maps\_gauntlet_log::kv( "stage", state.stage );
+	start_fields[2] = maps\_gauntlet_log::kv( "map", current_map );
+	start_fields[3] = maps\_gauntlet_log::kv( "duration", duration );
+	maps\_gauntlet_log::emit( "PREP_PHASE_START", maps\_gauntlet_log::join_fields( start_fields ) );
+
+	title_hud = create_prep_hud_line( 24, 2.2, ( 1.0, 0.85, 0.25 ) );
+	hint_hud = create_prep_hud_line( 52, 1.4, ( 0.9, 0.95, 1.0 ) );
+	hint_hud SetText( "Gear up for Round " + stage_info.start_round );
+
+	level thread destroy_prep_huds_on_end_game( title_hud, hint_hud );
+
+	for ( remaining = duration; remaining > 0; remaining-- )
+	{
+		if ( IsDefined( level.intermission ) && level.intermission )
+		{
+			break;
+		}
+		if ( IsDefined( title_hud ) )
+		{
+			title_hud SetText( "PREP PHASE: " + remaining + "s" );
+		}
+		wait( 1.0 );
+	}
+
+	level notify( "gauntlet_prep_phase_done" );
+
+	if ( IsDefined( title_hud ) )
+	{
+		title_hud Destroy();
+	}
+	if ( IsDefined( hint_hud ) )
+	{
+		hint_hud Destroy();
+	}
+
+	if ( IsDefined( level.intermission ) && level.intermission )
+	{
+		return;
+	}
+
+	end_fields = [];
+	end_fields[0] = maps\_gauntlet_log::kv( "cycle", state.cycle );
+	end_fields[1] = maps\_gauntlet_log::kv( "stage", state.stage );
+	end_fields[2] = maps\_gauntlet_log::kv( "map", current_map );
+	end_fields[3] = maps\_gauntlet_log::kv( "duration", duration );
+	maps\_gauntlet_log::emit( "PREP_PHASE_END", maps\_gauntlet_log::join_fields( end_fields ) );
 }
 
 apply_connected_players_starting_points( start_round, current_map )
@@ -231,7 +468,15 @@ apply_player_starting_points( player, start_round, current_map )
 	guid = get_player_guid( player );
 	name = get_player_name( player );
 	player_key = maps\_gauntlet_state::make_player_key( guid, name );
+	recorded_points = maps\_gauntlet_state::get_recorded_player_points( guid, name );
+	floor_points = maps\_gauntlet_rules::get_points_floor( start_round );
 	target_points = maps\_gauntlet_state::resolve_player_starting_points( guid, name, start_round );
+
+	carried_label = "none";
+	if ( IsDefined( recorded_points ) )
+	{
+		carried_label = "" + recorded_points;
+	}
 
 	player.score = target_points;
 	player.score_total = target_points;
@@ -243,6 +488,8 @@ apply_player_starting_points( player, start_round, current_map )
 	fields[1] = maps\_gauntlet_log::kv( "points", target_points );
 	fields[2] = maps\_gauntlet_log::kv( "start_round", start_round );
 	fields[3] = maps\_gauntlet_log::kv( "map", current_map );
+	fields[4] = maps\_gauntlet_log::kv( "carried", carried_label );
+	fields[5] = maps\_gauntlet_log::kv( "floor", floor_points );
 	maps\_gauntlet_log::emit( "POINTS_APPLIED", maps\_gauntlet_log::join_fields( fields ) );
 }
 
@@ -254,9 +501,64 @@ on_round_started( round_num )
 		return;
 	}
 
+	if ( !IsDefined( level.gauntlet_zombie_sampled ) || !level.gauntlet_zombie_sampled )
+	{
+		level thread sample_first_spawned_zombie( round_num );
+	}
+
 	if ( GetDvarInt( "gauntlet_test_autoclear" ) == 1 )
 	{
 		level thread run_test_autoclear( round_num );
+	}
+}
+
+// Emits ZOMBIE_SPAWNED_SAMPLE once per Stage on the first spawned zombie so
+// automated verification inspects real in-engine zombie health and move speed.
+sample_first_spawned_zombie( round_num )
+{
+	level endon( "end_game" );
+	level endon( "gauntlet_stage_clear" );
+
+	for ( tries = 0; tries < 600; tries++ )
+	{
+		if ( IsDefined( level.gauntlet_zombie_sampled ) && level.gauntlet_zombie_sampled )
+		{
+			return;
+		}
+
+		enemies = GetAiSpeciesArray( "axis", "all" );
+		for ( i = 0; i < enemies.size; i++ )
+		{
+			ai = enemies[i];
+			if ( !IsDefined( ai ) || !IsAlive( ai ) )
+			{
+				continue;
+			}
+			if ( !IsDefined( ai.maxhealth ) || ai.maxhealth <= 0 )
+			{
+				continue;
+			}
+			if ( !IsDefined( ai.zombie_move_speed ) )
+			{
+				continue;
+			}
+
+			level.gauntlet_zombie_sampled = true;
+			sample_health = ai.health;
+			if ( !IsDefined( sample_health ) || sample_health <= 0 )
+			{
+				sample_health = ai.maxhealth;
+			}
+
+			fields = [];
+			fields[0] = maps\_gauntlet_log::kv( "round", round_num );
+			fields[1] = maps\_gauntlet_log::kv( "health", sample_health );
+			fields[2] = maps\_gauntlet_log::kv( "move_speed", ai.zombie_move_speed );
+			maps\_gauntlet_log::emit( "ZOMBIE_SPAWNED_SAMPLE", maps\_gauntlet_log::join_fields( fields ) );
+			return;
+		}
+
+		wait( 0.05 );
 	}
 }
 
@@ -283,6 +585,14 @@ run_test_autoclear( round_num )
 	{
 		wait( 0.25 );
 		waited++;
+	}
+
+	// Allow sample_first_spawned_zombie() to record untouched spawned AI health first.
+	sample_wait = 0;
+	while ( ( !IsDefined( level.gauntlet_zombie_sampled ) || !level.gauntlet_zombie_sampled ) && sample_wait < 20 )
+	{
+		wait( 0.05 );
+		sample_wait++;
 	}
 
 	wait( 0.25 );

@@ -360,3 +360,71 @@ calculate_zombie_spawn_delay( round_num, base_delay )
 
 	return delay;
 }
+
+// Returns the exact pre-round level.zombie_health seed so that when stock
+// _zombiemode.gsc::ai_calculate_health() executes once on round_num,
+// level.zombie_health lands on exact calculate_zombie_health( round_num )
+// with zero double-scaling across all four stock maps.
+calculate_pre_round_zombie_health( round_num )
+{
+	if ( !IsDefined( round_num ) || Int( round_num ) <= 1 )
+	{
+		return 150;
+	}
+
+	return calculate_zombie_health( Int( round_num ) - 1 );
+}
+
+map_has_hellhounds( map_name )
+{
+	if ( !IsDefined( map_name ) )
+	{
+		return false;
+	}
+
+	normalized = tolower( "" + map_name );
+	if ( normalized == "nazi_zombie_sumpf" || normalized == "nazi_zombie_factory" )
+	{
+		return true;
+	}
+
+	return false;
+}
+
+// Schedules the next Hellhound round relative to a Cycle 2+ Stage's start_round
+// so dog rounds are never permanently skipped when start_round > stock's 5..7.
+// Guarantees result >= start_round + 1 and clamps <= target_round when
+// target_round > start_round.
+compute_next_dog_round( start_round, target_round, offset )
+{
+	if ( !IsDefined( start_round ) || Int( start_round ) < 1 )
+	{
+		sr = 1;
+	}
+	else
+	{
+		sr = Int( start_round );
+	}
+
+	if ( !IsDefined( offset ) || Int( offset ) < 1 )
+	{
+		off = 1;
+	}
+	else
+	{
+		off = Int( offset );
+	}
+
+	candidate = sr + off;
+
+	if ( IsDefined( target_round ) && Int( target_round ) > sr )
+	{
+		tr = Int( target_round );
+		if ( candidate > tr )
+		{
+			candidate = tr;
+		}
+	}
+
+	return candidate;
+}

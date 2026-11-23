@@ -284,6 +284,64 @@ class TestGauntletRulesStockZombieScaling(unittest.TestCase):
             self.gsc.call(RULES_MOD, "calculate_zombie_spawn_delay", 1, 0.02), 0.08, places=6
         )
 
+    def test_pre_round_zombie_health_avoids_double_scaling(self) -> None:
+        self.assertEqual(self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", 1), 150)
+        self.assertEqual(self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", 2), 150)
+        self.assertEqual(self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", 10), 950)
+        self.assertEqual(self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", 15), 1527)
+        self.assertEqual(self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", 20), 2456)
+
+        # Simulate stock _zombiemode.gsc::ai_calculate_health() for rounds 1..30:
+        # applying stock ai_calculate_health() once to pre-round health MUST equal exact round health.
+        for round_num in range(1, 31):
+            pre = self.gsc.call(RULES_MOD, "calculate_pre_round_zombie_health", round_num)
+            expected = self.gsc.call(RULES_MOD, "calculate_zombie_health", round_num)
+            if round_num >= 10:
+                after_stock_step = pre + int(pre * 0.1)
+            elif round_num > 1:
+                after_stock_step = int(pre + 100)
+            else:
+                after_stock_step = pre
+            self.assertEqual(
+                after_stock_step,
+                expected,
+                msg=f"Stock ai_calculate_health step mismatch at Round {round_num}",
+            )
+
+
+class TestGauntletRulesHellhounds(unittest.TestCase):
+    def setUp(self) -> None:
+        self.gsc = GscRuntime(MOD_ROOT)
+
+    def test_map_has_hellhounds(self) -> None:
+        self.assertFalse(self.gsc.call(RULES_MOD, "map_has_hellhounds", "nazi_zombie_prototype"))
+        self.assertFalse(self.gsc.call(RULES_MOD, "map_has_hellhounds", "nazi_zombie_asylum"))
+        self.assertTrue(self.gsc.call(RULES_MOD, "map_has_hellhounds", "nazi_zombie_sumpf"))
+        self.assertTrue(self.gsc.call(RULES_MOD, "map_has_hellhounds", "nazi_zombie_factory"))
+        self.assertTrue(self.gsc.call(RULES_MOD, "map_has_hellhounds", "NAZI_ZOMBIE_FACTORY"))
+        self.assertFalse(self.gsc.call(RULES_MOD, "map_has_hellhounds", "unknown"))
+        self.assertFalse(self.gsc.call(RULES_MOD, "map_has_hellhounds", UNDEFINED))
+
+    def test_compute_next_dog_round_relative_to_stage_band(self) -> None:
+        # Cycle 2 (rounds 10..15): offset 2..4 schedules rounds 12..14
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, 2), 12)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, 3), 13)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, 4), 14)
+        # Offset beyond target_round clamps to target_round
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, 8), 15)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 12, 4), 12)
+
+        # Cycle 3 (rounds 15..20) and Cycle 4 (rounds 20..25)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 15, 20, 2), 17)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 15, 20, 4), 19)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 20, 25, 3), 23)
+
+        # Defensive edges: never schedules on opening start_round itself
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, 0), 11)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 15, -3), 11)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, 10, 2), 12)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_next_dog_round", 10, UNDEFINED, 3), 13)
+
 
 if __name__ == "__main__":
     unittest.main()
