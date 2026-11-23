@@ -1,0 +1,882 @@
+#include "ui/menudef.h"
+
+// Base Zombies - Specialty Perk Station Popup (Call of Duty: WaW 1.7)
+// Non-fullscreen, per-player Co-op safe clickable shop menu.
+// Strictly ASCII-only strings and balanced braces.
+
+{
+	menuDef
+	{
+		name			"bz_station_perks"
+		fullscreen		0
+		rect			0 0 640 480
+		focuscolor		1 0.85 0.35 1
+		style			WINDOW_STYLE_EMPTY
+		border			0
+		onEsc
+		{
+			play "mouse_click";
+			scriptMenuResponse "close";
+			close self;
+		}
+
+		// Main dark shop backdrop
+		itemDef
+		{
+			name			"bz_perks_bg"
+			rect			16 26 608 428
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.04 0.06 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.65
+			visible			1
+			decoration
+		}
+
+		// Header bar
+		itemDef
+		{
+			name			"bz_perks_header_bg"
+			rect			16 26 608 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.07 0.12 0.18 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.45
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_perks_title"
+			type			ITEM_TYPE_TEXT
+			rect			28 33 280 24
+			text			"SPECIALTY PERK STATION"
+			textfont		UI_FONT_NORMAL
+			textscale		0.36
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		18
+			forecolor		0.45 0.88 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_perks_class_readout"
+			type			ITEM_TYPE_TEXT
+			rect			300 35 155 20
+			exp				text( dvarString( "ui_bz_class" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		15
+			forecolor		0.85 0.92 1.0 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_perks_score_readout"
+			type			ITEM_TYPE_TEXT
+			rect			465 34 148 22
+			exp				text( dvarString( "ui_bz_score" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		16
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// ================================================================
+		// COLUMN 1: NEW STANDARD PERKS
+		// ================================================================
+		itemDef
+		{
+			name			"bz_col1_hdr"
+			type			ITEM_TYPE_TEXT
+			rect			26 72 184 18
+			text			"NEW STANDARD PERKS"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		14
+			forecolor		0.45 0.88 1.0 1
+			visible			1
+			decoration
+		}
+
+		// Stamin-Up (2000)
+		itemDef
+		{
+			name			"btn_perk_staminup"
+			type			ITEM_TYPE_BUTTON
+			rect			26 94 184 44
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Stamin-Up (2000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_perk:staminup";
+			}
+		}
+		itemDef
+		{
+			name			"stat_perk_staminup"
+			type			ITEM_TYPE_TEXT
+			rect			34 114 168 18
+			exp				text( dvarString( "ui_bz_perk_staminup" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Mule Kick (4000)
+		itemDef
+		{
+			name			"btn_perk_mule_kick"
+			type			ITEM_TYPE_BUTTON
+			rect			26 146 184 44
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Mule Kick (4000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_perk:mule_kick";
+			}
+		}
+		itemDef
+		{
+			name			"stat_perk_mule_kick"
+			type			ITEM_TYPE_TEXT
+			rect			34 166 168 18
+			exp				text( dvarString( "ui_bz_perk_mule_kick" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Armor Piercing (3000)
+		itemDef
+		{
+			name			"btn_perk_ap"
+			type			ITEM_TYPE_BUTTON
+			rect			26 198 184 44
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Armor Piercing (3000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_perk:ap";
+			}
+		}
+		itemDef
+		{
+			name			"stat_perk_ap"
+			type			ITEM_TYPE_TEXT
+			rect			34 218 168 18
+			exp				text( dvarString( "ui_bz_perk_ap" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			"bz_col1_note"
+			type			ITEM_TYPE_TEXT
+			rect			26 254 184 120
+			text			"Stamin-Up: +15% speed\nMule Kick: 3rd Weapon\nAP: +35% bullet dmg\n\nAll Perks, Tier 2, and Apex Perks are lost on down."
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.78 0.84 0.90 0.90
+			autowrapped
+			visible			1
+			decoration
+		}
+
+		// ================================================================
+		// COLUMN 2: PERK TIER 2 (5000 PTS EACH, REQUIRES TIER 1)
+		// ================================================================
+		itemDef
+		{
+			name			"bz_col2_hdr"
+			type			ITEM_TYPE_TEXT
+			rect			222 72 196 18
+			text			"PERK TIER 2 (5000 EACH)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		14
+			forecolor		0.45 0.88 1.0 1
+			visible			1
+			decoration
+		}
+
+		// Juggernog II
+		itemDef
+		{
+			name			"btn_t2_juggernog"
+			type			ITEM_TYPE_BUTTON
+			rect			222 94 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Juggernog II (220 HP)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:juggernog";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_juggernog"
+			type			ITEM_TYPE_TEXT
+			rect			228 112 184 16
+			exp				text( dvarString( "ui_bz_t2_juggernog" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Speed Cola II
+		itemDef
+		{
+			name			"btn_t2_speed_cola"
+			type			ITEM_TYPE_BUTTON
+			rect			222 138 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Speed Cola II (Fast Swap)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:speed_cola";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_speed_cola"
+			type			ITEM_TYPE_TEXT
+			rect			228 156 184 16
+			exp				text( dvarString( "ui_bz_t2_speed_cola" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Double Tap II
+		itemDef
+		{
+			name			"btn_t2_double_tap"
+			type			ITEM_TYPE_BUTTON
+			rect			222 182 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Double Tap II (+25% Dmg)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:double_tap";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_double_tap"
+			type			ITEM_TYPE_TEXT
+			rect			228 200 184 16
+			exp				text( dvarString( "ui_bz_t2_double_tap" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Quick Revive II
+		itemDef
+		{
+			name			"btn_t2_quick_revive"
+			type			ITEM_TYPE_BUTTON
+			rect			222 226 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Quick Revive II (Invuln)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:quick_revive";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_quick_revive"
+			type			ITEM_TYPE_TEXT
+			rect			228 244 184 16
+			exp				text( dvarString( "ui_bz_t2_quick_revive" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Stamin-Up II
+		itemDef
+		{
+			name			"btn_t2_staminup"
+			type			ITEM_TYPE_BUTTON
+			rect			222 270 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Stamin-Up II (+25% Spd)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:staminup";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_staminup"
+			type			ITEM_TYPE_TEXT
+			rect			228 288 184 16
+			exp				text( dvarString( "ui_bz_t2_staminup" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Mule Kick II - 4th Slot
+		itemDef
+		{
+			name			"btn_t2_mule_kick"
+			type			ITEM_TYPE_BUTTON
+			rect			222 314 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Mule Kick II - 4th Slot"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:mule_kick";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_mule_kick"
+			type			ITEM_TYPE_TEXT
+			rect			228 332 184 16
+			exp				text( dvarString( "ui_bz_t2_mule_kick" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// Armor Piercing II
+		itemDef
+		{
+			name			"btn_t2_ap"
+			type			ITEM_TYPE_BUTTON
+			rect			222 358 196 38
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			text			"Armor Piercing II (+60%)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		6
+			textaligny		15
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_t2:ap";
+			}
+		}
+		itemDef
+		{
+			name			"stat_t2_ap"
+			type			ITEM_TYPE_TEXT
+			rect			228 376 184 16
+			exp				text( dvarString( "ui_bz_t2_ap" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		12
+			forecolor		0.95 0.85 0.40 1
+			visible			1
+			decoration
+		}
+
+		// ================================================================
+		// COLUMN 3: APEX PERKS (20000 PTS EACH)
+		// ================================================================
+		itemDef
+		{
+			name			"bz_col3_hdr"
+			type			ITEM_TYPE_TEXT
+			rect			430 72 184 18
+			text			"APEX PERKS (20000 EACH)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		14
+			forecolor		1.0 0.72 0.28 1
+			visible			1
+			decoration
+		}
+
+		// Double Ammo
+		itemDef
+		{
+			name			"btn_apex_double_ammo"
+			type			ITEM_TYPE_BUTTON
+			rect			430 94 184 62
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.12 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.72 0.28 0.45
+			text			"Double Ammo"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_apex:double_ammo";
+			}
+		}
+		itemDef
+		{
+			name			"desc_apex_double_ammo"
+			type			ITEM_TYPE_TEXT
+			rect			438 114 168 18
+			text			"2x max reserve ammo"
+			textfont		UI_FONT_NORMAL
+			textscale		0.20
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		13
+			forecolor		0.85 0.85 0.85 0.9
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_apex_double_ammo"
+			type			ITEM_TYPE_TEXT
+			rect			438 134 168 18
+			exp				text( dvarString( "ui_bz_apex_double_ammo" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.85 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Lightweight Heavy
+		itemDef
+		{
+			name			"btn_apex_lightweight_heavy"
+			type			ITEM_TYPE_BUTTON
+			rect			430 166 184 62
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.12 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.72 0.28 0.45
+			text			"Lightweight Heavy"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_apex:lightweight_heavy";
+			}
+		}
+		itemDef
+		{
+			name			"desc_apex_lightweight_heavy"
+			type			ITEM_TYPE_TEXT
+			rect			438 186 168 18
+			text			"No LMG/heavy slow"
+			textfont		UI_FONT_NORMAL
+			textscale		0.20
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		13
+			forecolor		0.85 0.85 0.85 0.9
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_apex_lightweight_heavy"
+			type			ITEM_TYPE_TEXT
+			rect			438 206 168 18
+			exp				text( dvarString( "ui_bz_apex_lightweight_heavy" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.85 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Second Chance
+		itemDef
+		{
+			name			"btn_apex_second_chance"
+			type			ITEM_TYPE_BUTTON
+			rect			430 238 184 62
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.12 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.72 0.28 0.45
+			text			"Second Chance"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_apex:second_chance";
+			}
+		}
+		itemDef
+		{
+			name			"desc_apex_second_chance"
+			type			ITEM_TYPE_TEXT
+			rect			438 258 168 18
+			text			"1x/rnd lethal save + stun"
+			textfont		UI_FONT_NORMAL
+			textscale		0.20
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		13
+			forecolor		0.85 0.85 0.85 0.9
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_apex_second_chance"
+			type			ITEM_TYPE_TEXT
+			rect			438 278 168 18
+			exp				text( dvarString( "ui_bz_apex_second_chance" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.85 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Blast Shield
+		itemDef
+		{
+			name			"btn_apex_blast_shield"
+			type			ITEM_TYPE_BUTTON
+			rect			430 310 184 62
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.12 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.72 0.28 0.45
+			text			"Blast Shield"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_apex:blast_shield";
+			}
+		}
+		itemDef
+		{
+			name			"desc_apex_blast_shield"
+			type			ITEM_TYPE_TEXT
+			rect			438 330 168 18
+			text			"Self blast/fire/fall immune"
+			textfont		UI_FONT_NORMAL
+			textscale		0.20
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		13
+			forecolor		0.85 0.85 0.85 0.9
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_apex_blast_shield"
+			type			ITEM_TYPE_TEXT
+			rect			438 350 168 18
+			exp				text( dvarString( "ui_bz_apex_blast_shield" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.85 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Footer feedback bar & Close button
+		itemDef
+		{
+			name			"bz_perks_footer_bg"
+			rect			16 406 608 48
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.06 0.09 0.14 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_perks_feedback"
+			type			ITEM_TYPE_TEXT
+			rect			28 418 460 24
+			exp				text( dvarString( "ui_bz_feedback" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		16
+			forecolor		0.85 0.95 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"btn_perks_close"
+			type			ITEM_TYPE_BUTTON
+			rect			510 415 102 28
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.24 0.10 0.10 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.45 0.45 0.70
+			text			"CLOSE [ESC]"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_CENTER
+			textaligny		19
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "close";
+				close self;
+			}
+		}
+	}
+}

@@ -1,0 +1,278 @@
+#include "ui/menudef.h"
+
+// Base Zombies - Pack-a-Punch & Double Pack-a-Punch Station Popup (Call of Duty: WaW 1.7)
+// Provides Tier 1 Pack-a-Punch (5000) and Double Pack-a-Punch (10000) with held-weapon status.
+// Strictly ASCII-only strings and balanced braces.
+
+{
+	menuDef
+	{
+		name			"bz_station_pap"
+		fullscreen		0
+		rect			0 0 640 480
+		focuscolor		1 0.85 0.35 1
+		style			WINDOW_STYLE_EMPTY
+		border			0
+		onEsc
+		{
+			play "mouse_click";
+			scriptMenuResponse "close";
+			close self;
+		}
+
+		itemDef
+		{
+			name			"bz_pap_bg"
+			rect			72 78 496 324
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.05 0.05 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.80 0.50 1.0 0.70
+			visible			1
+			decoration
+		}
+
+		// Header bar
+		itemDef
+		{
+			name			"bz_pap_header_bg"
+			rect			72 78 496 42
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.11 0.08 0.18 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.80 0.50 1.0 0.50
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_pap_title"
+			type			ITEM_TYPE_TEXT
+			rect			86 86 280 24
+			text			"PACK-A-PUNCH STATION"
+			textfont		UI_FONT_NORMAL
+			textscale		0.36
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		18
+			forecolor		0.88 0.65 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_pap_score_readout"
+			type			ITEM_TYPE_TEXT
+			rect			390 87 164 22
+			exp				text( dvarString( "ui_bz_score" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		16
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Held weapon status bar
+		itemDef
+		{
+			name			"bz_pap_weapon_bg"
+			rect			88 130 464 30
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.08 0.10 0.16 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_pap_weapon_readout"
+			type			ITEM_TYPE_TEXT
+			rect			98 135 444 20
+			exp				text( dvarString( "ui_bz_pap_weapon" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.27
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		15
+			forecolor		0.85 0.95 1.0 1
+			visible			1
+			decoration
+		}
+
+		// Tier 1 Pack-a-Punch (5000)
+		itemDef
+		{
+			name			"btn_pap_single"
+			type			ITEM_TYPE_BUTTON
+			rect			88 172 464 74
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.12 0.12 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.65 0.55 1.0 0.50
+			text			"Pack-a-Punch Weapon (5000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		12
+			textaligny		24
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_pap:single_pap";
+			}
+		}
+		itemDef
+		{
+			name			"desc_pap_single"
+			type			ITEM_TYPE_TEXT
+			rect			100 202 310 34
+			text			"Upgrades currently held primary weapon to Tier 1 Pack-a-Punch."
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_pap_single"
+			type			ITEM_TYPE_TEXT
+			rect			410 198 130 22
+			exp				text( dvarString( "ui_bz_pap_single_pap" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		16
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Tier 2 Double Pack-a-Punch (10000)
+		itemDef
+		{
+			name			"btn_pap_double"
+			type			ITEM_TYPE_BUTTON
+			rect			88 258 464 74
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.18 0.10 0.20 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.55 0.85 0.55
+			text			"Double Pack-a-Punch (10000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		12
+			textaligny		24
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_pap:double_pap";
+			}
+		}
+		itemDef
+		{
+			name			"desc_pap_double"
+			type			ITEM_TYPE_TEXT
+			rect			100 288 310 34
+			text			"Requires Pack-a-Punched weapon. Grants +75% damage, +50% reserve ammo, and II badge."
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_pap_double"
+			type			ITEM_TYPE_TEXT
+			rect			410 284 130 22
+			exp				text( dvarString( "ui_bz_pap_double_pap" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		16
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Footer feedback bar & Close button
+		itemDef
+		{
+			name			"bz_pap_footer_bg"
+			rect			72 354 496 48
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.07 0.08 0.14 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.80 0.50 1.0 0.40
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_pap_feedback"
+			type			ITEM_TYPE_TEXT
+			rect			86 366 362 24
+			exp				text( dvarString( "ui_bz_feedback" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		16
+			forecolor		0.85 0.95 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"btn_pap_close"
+			type			ITEM_TYPE_BUTTON
+			rect			454 363 102 28
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.24 0.10 0.10 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.45 0.45 0.70
+			text			"CLOSE [ESC]"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_CENTER
+			textaligny		19
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "close";
+				close self;
+			}
+		}
+	}
+}

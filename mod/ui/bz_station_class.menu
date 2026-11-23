@@ -1,0 +1,508 @@
+#include "ui/menudef.h"
+
+// Base Zombies - Class Altar Popup (Call of Duty: WaW 1.7)
+// 6 permanent-until-swapped Classes (10000 pts each, never lost on down).
+// Strictly ASCII-only strings and balanced braces.
+
+{
+	menuDef
+	{
+		name			"bz_station_class"
+		fullscreen		0
+		rect			0 0 640 480
+		focuscolor		1 0.85 0.35 1
+		style			WINDOW_STYLE_EMPTY
+		border			0
+		onEsc
+		{
+			play "mouse_click";
+			scriptMenuResponse "close";
+			close self;
+		}
+
+		itemDef
+		{
+			name			"bz_class_bg"
+			rect			26 30 588 420
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.04 0.06 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.65
+			visible			1
+			decoration
+		}
+
+		// Header bar
+		itemDef
+		{
+			name			"bz_class_header_bg"
+			rect			26 30 588 42
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.07 0.12 0.18 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.45
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_class_title"
+			type			ITEM_TYPE_TEXT
+			rect			38 38 250 24
+			text			"CLASS ALTAR (10000 PTS)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.35
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		18
+			forecolor		0.45 0.88 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_class_active_readout"
+			type			ITEM_TYPE_TEXT
+			rect			290 40 160 20
+			exp				text( dvarString( "ui_bz_class" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		15
+			forecolor		0.85 0.95 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_class_score_readout"
+			type			ITEM_TYPE_TEXT
+			rect			460 39 144 22
+			exp				text( dvarString( "ui_bz_score" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		16
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			"bz_class_subtitle"
+			type			ITEM_TYPE_TEXT
+			rect			38 78 564 18
+			text			"Permanent per match (kept on down). Swap anytime at this Altar for 10000 pts."
+			textfont		UI_FONT_NORMAL
+			textscale		0.23
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		13
+			forecolor		0.78 0.86 0.92 0.95
+			visible			1
+			decoration
+		}
+
+		// Row 1 Left: Field Medic
+		itemDef
+		{
+			name			"btn_class_medic"
+			type			ITEM_TYPE_BUTTON
+			rect			38 102 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.09 0.16 0.20 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.40 0.85 0.75 0.50
+			text			"FIELD MEDIC"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:medic";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_medic"
+			type			ITEM_TYPE_TEXT
+			rect			48 128 254 44
+			text			"Instant revive with Quick Revive (2x without). Regenerates +1 reserve mag every 15s + ally ammo trickle."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_medic"
+			type			ITEM_TYPE_TEXT
+			rect			160 107 142 18
+			exp				text( dvarString( "ui_bz_class_medic" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Row 1 Right: Titan
+		itemDef
+		{
+			name			"btn_class_titan"
+			type			ITEM_TYPE_BUTTON
+			rect			328 102 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.14 0.12 0.20 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.70 0.55 1.0 0.50
+			text			"TITAN"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:titan";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_titan"
+			type			ITEM_TYPE_TEXT
+			rect			338 128 254 44
+			text			"2x Max HP (up to 440 with Juggernog II), 2x zombie aggro priority, and 2x weapon damage while standing still."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_titan"
+			type			ITEM_TYPE_TEXT
+			rect			450 107 142 18
+			exp				text( dvarString( "ui_bz_class_titan" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Row 2 Left: Sapper
+		itemDef
+		{
+			name			"btn_class_sapper"
+			type			ITEM_TYPE_BUTTON
+			rect			38 202 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.18 0.12 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.62 0.28 0.50
+			text			"SAPPER"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:sapper";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_sapper"
+			type			ITEM_TYPE_TEXT
+			rect			48 228 254 44
+			text			"10 max frag grenades (refilled each round), +50% blast radius, and Wall-Buy Traps (10s per-wall cooldown)."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_sapper"
+			type			ITEM_TYPE_TEXT
+			rect			160 207 142 18
+			exp				text( dvarString( "ui_bz_class_sapper" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Row 2 Right: Daredevil
+		itemDef
+		{
+			name			"btn_class_daredevil"
+			type			ITEM_TYPE_BUTTON
+			rect			328 202 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.18 0.09 0.13 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.42 0.62 0.50
+			text			"DAREDEVIL"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:daredevil";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_daredevil"
+			type			ITEM_TYPE_TEXT
+			rect			338 228 254 44
+			text			"3x per-player jump height, height-scaled Flopper explosive slam on landing, fall immunity, and 2.5s Sprint Burst."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_daredevil"
+			type			ITEM_TYPE_TEXT
+			rect			450 207 142 18
+			exp				text( dvarString( "ui_bz_class_daredevil" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Row 3 Left: Assassin
+		itemDef
+		{
+			name			"btn_class_assassin"
+			type			ITEM_TYPE_BUTTON
+			rect			38 302 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.08 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.35 0.35 0.50
+			text			"ASSASSIN"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:assassin";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_assassin"
+			type			ITEM_TYPE_TEXT
+			rect			48 328 254 44
+			text			"5x headshot/critical damage and Ghost Slip-Through so zombies cannot body-block you while moving."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_assassin"
+			type			ITEM_TYPE_TEXT
+			rect			160 307 142 18
+			exp				text( dvarString( "ui_bz_class_assassin" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Row 3 Right: Broker
+		itemDef
+		{
+			name			"btn_class_broker"
+			type			ITEM_TYPE_BUTTON
+			rect			328 302 274 90
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.12 0.16 0.08 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.72 0.95 0.35 0.50
+			text			"BROKER"
+			textfont		UI_FONT_NORMAL
+			textscale		0.30
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		10
+			textaligny		22
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_class:broker";
+			}
+		}
+		itemDef
+		{
+			name			"desc_class_broker"
+			type			ITEM_TYPE_TEXT
+			rect			338 328 254 44
+			text			"2x personal points, 1.5x Team Points Aura for nearby Co-op allies, and 50% off Mystery Box spins (475 pts)."
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textalign		ITEM_ALIGN_TOP_LEFT
+			forecolor		0.84 0.90 0.94 0.95
+			autowrapped
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_class_broker"
+			type			ITEM_TYPE_TEXT
+			rect			450 307 142 18
+			exp				text( dvarString( "ui_bz_class_broker" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		14
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Footer feedback bar & Close button
+		itemDef
+		{
+			name			"bz_class_footer_bg"
+			rect			26 402 588 48
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.06 0.09 0.14 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.35
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_class_feedback"
+			type			ITEM_TYPE_TEXT
+			rect			38 414 446 24
+			exp				text( dvarString( "ui_bz_feedback" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		16
+			forecolor		0.85 0.95 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"btn_class_close"
+			type			ITEM_TYPE_BUTTON
+			rect			500 411 102 28
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.24 0.10 0.10 0.95
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.45 0.45 0.70
+			text			"CLOSE [ESC]"
+			textfont		UI_FONT_NORMAL
+			textscale		0.26
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_CENTER
+			textaligny		19
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "close";
+				close self;
+			}
+		}
+	}
+}
