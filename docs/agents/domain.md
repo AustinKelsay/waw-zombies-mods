@@ -4,28 +4,39 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`GLOSSARY.md`** at the repo root, or
-- **`GLOSSARY-MAP.md`** at the repo root if it exists: it points at one `GLOSSARY.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`GLOSSARY-MAP.md`** at the repo root: lists all bounded contexts and points at each context's `GLOSSARY.md`. Read `GLOSSARY.md` (Shared Platform) plus every context glossary relevant to the topic.
+- **`docs/adr/`**: read system-wide ADRs that touch the area you're about to work in. Also check `docs/contexts/<context>/docs/adr/` for context-scoped decisions when present.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+If any context-level file doesn't exist yet, **proceed silently**. Don't flag its absence; don't suggest creating it upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates context ADRs lazily when decisions actually crystallize.
 
 ## File structure
 
-Single-context repo:
+Multi-context repo:
 
-```
+```text
 /
-├── GLOSSARY.md
-├── docs/adr/
-│   ├── 0001-example-decision.md
-│   └── 0002-another-decision.md
-└── src/
+├── GLOSSARY-MAP.md
+├── GLOSSARY.md                                 ← Shared Platform vocabulary
+├── docs/
+│   ├── adr/                                    ← System-wide decisions
+│   │   ├── 0001-vanilla-lobby-assisted-coop-transitions.md
+│   │   ├── 0002-points-only-cross-map-carryover.md
+│   │   ├── 0003-single-unified-mod-with-dvar-mode-gate.md
+│   │   └── 0004-perk-carryover-across-stages.md
+│   └── contexts/
+│       ├── base-zombies/
+│       │   ├── GLOSSARY.md
+│       │   └── docs/adr/                       ← Created lazily on first context ADR
+│       └── zombie-gauntlet/
+│           └── GLOSSARY.md
+├── mod/
+├── scripts/
+└── tests/
 ```
 
 ## Use the glossary's vocabulary
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
+When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in the relevant `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
 
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
