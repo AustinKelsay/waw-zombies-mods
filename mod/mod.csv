@@ -21,6 +21,9 @@ rawfile,maps/_bz_stations.gsc
 rawfile,maps/_bz_perks.gsc
 rawfile,maps/_bz_classes.gsc
 rawfile,maps/_bz_pap.gsc
+rawfile,maps/_bz_elem_stock.gsc
+rawfile,maps/_bz_elem_new.gsc
+rawfile,maps/_bz_special_weapons.gsc
 
 // Frontend Solo & Co-op menus (overrides stock ui/patch_menus.txt)
 menufile,ui/patch_menus.txt

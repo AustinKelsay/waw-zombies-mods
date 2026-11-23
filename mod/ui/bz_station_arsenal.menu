@@ -1,8 +1,11 @@
 #include "ui/menudef.h"
 
 // Base Zombies - Arsenal & Squad Station Popup (Call of Duty: WaW 1.7)
-// Phase 1 exposes PaP Knife, PaP Bowie Knife, and PaP Cluster Grenade, plus
-// clearly marked read-only sections for Phase 2 Elemental Weapons & Phase 3 Companions.
+// Phase 1: PaP Knife, PaP Bowie Knife, PaP Cluster Grenade.
+// Phase 2: Elemental & Special Primaries (Acid Sprayer, Cryo Cannon, Multi-Crossbow,
+//          Blade Boomerang) plus Special Gear / Melee Slot (War Club, PaP War Club,
+//          Equip Bowie Knife swap, Portal Grenade).
+// Phase 3: Squad Companions placeholder panel.
 // Strictly ASCII-only strings and balanced braces.
 
 {
@@ -24,7 +27,7 @@
 		itemDef
 		{
 			name			"bz_arsenal_bg"
-			rect			44 38 552 404
+			rect			28 18 584 446
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.04 0.06 0.09 0.92
 			border			1
@@ -38,7 +41,7 @@
 		itemDef
 		{
 			name			"bz_arsenal_header_bg"
-			rect			44 38 552 40
+			rect			28 18 584 34
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.07 0.12 0.18 0.95
 			border			1
@@ -51,14 +54,29 @@
 		{
 			name			"bz_arsenal_title"
 			type			ITEM_TYPE_TEXT
-			rect			56 46 320 24
+			rect			40 24 270 22
 			text			"ARSENAL & SQUAD STATION"
 			textfont		UI_FONT_NORMAL
-			textscale		0.35
+			textscale		0.33
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		18
+			textaligny		16
 			forecolor		0.45 0.88 1.0 1
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"bz_arsenal_melee_readout"
+			type			ITEM_TYPE_TEXT
+			rect			306 25 148 20
+			exp				text( dvarString( "ui_bz_melee_slot" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_CENTER
+			textaligny		14
+			forecolor		0.72 0.94 1.0 1
 			visible			1
 			decoration
 		}
@@ -66,10 +84,10 @@
 		{
 			name			"bz_arsenal_score_readout"
 			type			ITEM_TYPE_TEXT
-			rect			420 46 164 22
+			rect			458 24 142 22
 			exp				text( dvarString( "ui_bz_score" ) );
 			textfont		UI_FONT_NORMAL
-			textscale		0.30
+			textscale		0.28
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_RIGHT
 			textaligny		16
@@ -78,18 +96,18 @@
 			decoration
 		}
 
-		// Phase 1 Section Header
+		// Phase 1 Section: Melee & Ordnance Upgrades (3-column compact row)
 		itemDef
 		{
 			name			"bz_arsenal_p1_hdr"
 			type			ITEM_TYPE_TEXT
-			rect			58 88 524 18
+			rect			40 56 560 15
 			text			"MELEE & ORDNANCE UPGRADES (PERMANENT PER MATCH)"
 			textfont		UI_FONT_NORMAL
-			textscale		0.25
+			textscale		0.22
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		14
+			textaligny		12
 			forecolor		0.45 0.88 1.0 1
 			visible			1
 			decoration
@@ -100,7 +118,7 @@
 		{
 			name			"btn_pap_knife"
 			type			ITEM_TYPE_BUTTON
-			rect			58 110 524 54
+			rect			40 73 182 42
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.10 0.15 0.22 0.92
 			border			1
@@ -108,11 +126,11 @@
 			bordercolor		0.45 0.88 1.0 0.40
 			text			"PaP Knife (5000)"
 			textfont		UI_FONT_NORMAL
-			textscale		0.28
+			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textalignx		10
-			textaligny		21
+			textalignx		6
+			textaligny		16
 			forecolor		1 1 1 1
 			visible			1
 			mouseEnter		{ play "mouse_over"; }
@@ -126,12 +144,12 @@
 		{
 			name			"desc_pap_knife"
 			type			ITEM_TYPE_TEXT
-			rect			68 136 360 18
-			text			"Upgrades standard knife to 3x melee damage (kept on down)."
+			rect			46 94 108 16
+			text			"3x knife dmg"
 			textfont		UI_FONT_NORMAL
-			textscale		0.22
+			textscale		0.19
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		13
+			textaligny		11
 			forecolor		0.84 0.90 0.94 0.95
 			visible			1
 			decoration
@@ -140,13 +158,13 @@
 		{
 			name			"stat_pap_knife"
 			type			ITEM_TYPE_TEXT
-			rect			430 124 140 20
+			rect			138 94 78 16
 			exp				text( dvarString( "ui_bz_pap_pap_knife" ) );
 			textfont		UI_FONT_NORMAL
-			textscale		0.26
+			textscale		0.20
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_RIGHT
-			textaligny		15
+			textaligny		11
 			forecolor		1.0 0.88 0.35 1
 			visible			1
 			decoration
@@ -157,19 +175,19 @@
 		{
 			name			"btn_pap_bowie"
 			type			ITEM_TYPE_BUTTON
-			rect			58 172 524 54
+			rect			229 73 182 42
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.10 0.15 0.22 0.92
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.40
-			text			"PaP Bowie Knife (5000)"
+			text			"PaP Bowie (5000)"
 			textfont		UI_FONT_NORMAL
-			textscale		0.28
+			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textalignx		10
-			textaligny		21
+			textalignx		6
+			textaligny		16
 			forecolor		1 1 1 1
 			visible			1
 			mouseEnter		{ play "mouse_over"; }
@@ -183,12 +201,12 @@
 		{
 			name			"desc_pap_bowie"
 			type			ITEM_TYPE_TEXT
-			rect			68 198 360 18
-			text			"Requires Bowie Knife. True 1-hit kill on regular zombies on any round."
+			rect			235 94 102 16
+			text			"1-hit reg zombies"
 			textfont		UI_FONT_NORMAL
-			textscale		0.22
+			textscale		0.19
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		13
+			textaligny		11
 			forecolor		0.84 0.90 0.94 0.95
 			visible			1
 			decoration
@@ -197,13 +215,13 @@
 		{
 			name			"stat_pap_bowie"
 			type			ITEM_TYPE_TEXT
-			rect			430 186 140 20
+			rect			327 94 78 16
 			exp				text( dvarString( "ui_bz_pap_pap_bowie" ) );
 			textfont		UI_FONT_NORMAL
-			textscale		0.26
+			textscale		0.20
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_RIGHT
-			textaligny		15
+			textaligny		11
 			forecolor		1.0 0.88 0.35 1
 			visible			1
 			decoration
@@ -214,19 +232,19 @@
 		{
 			name			"btn_pap_cluster"
 			type			ITEM_TYPE_BUTTON
-			rect			58 234 524 54
+			rect			418 73 182 42
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.10 0.15 0.22 0.92
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.40
-			text			"PaP Cluster Grenade (5000)"
+			text			"PaP Cluster (5000)"
 			textfont		UI_FONT_NORMAL
-			textscale		0.28
+			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textalignx		10
-			textaligny		21
+			textalignx		6
+			textaligny		16
 			forecolor		1 1 1 1
 			visible			1
 			mouseEnter		{ play "mouse_over"; }
@@ -240,12 +258,12 @@
 		{
 			name			"desc_pap_cluster"
 			type			ITEM_TYPE_TEXT
-			rect			68 260 360 18
-			text			"Round-scaled lethal blast + 4 mini-clusters (stacks with Sapper)."
+			rect			424 94 102 16
+			text			"4x mini-clusters"
 			textfont		UI_FONT_NORMAL
-			textscale		0.22
+			textscale		0.19
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		13
+			textaligny		11
 			forecolor		0.84 0.90 0.94 0.95
 			visible			1
 			decoration
@@ -254,65 +272,513 @@
 		{
 			name			"stat_pap_cluster"
 			type			ITEM_TYPE_TEXT
-			rect			430 248 140 20
+			rect			516 94 78 16
 			exp				text( dvarString( "ui_bz_pap_pap_cluster" ) );
 			textfont		UI_FONT_NORMAL
-			textscale		0.26
+			textscale		0.20
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_RIGHT
-			textaligny		15
+			textaligny		11
 			forecolor		1.0 0.88 0.35 1
 			visible			1
 			decoration
 		}
 
-		// Phase 2 & Phase 3 Read-Only Placeholder Panels
+		// Phase 2 Section A: Elemental & Special Primary Weapons (2x2 grid)
 		itemDef
 		{
-			name			"bz_arsenal_p2_panel"
-			rect			58 300 256 82
-			style			WINDOW_STYLE_FILLED
-			backcolor		0.08 0.09 0.12 0.85
-			border			1
-			bordersize		1
-			bordercolor		0.55 0.55 0.62 0.40
-			visible			1
-			decoration
-		}
-		itemDef
-		{
-			name			"bz_arsenal_p2_title"
+			name			"bz_arsenal_p2_elem_hdr"
 			type			ITEM_TYPE_TEXT
-			rect			68 308 236 18
-			text			"ELEMENTAL WEAPONS (Coming in Phase 2)"
+			rect			40 122 560 15
+			text			"ELEMENTAL & SPECIAL PRIMARIES (Phase 2 - Mule Kick & PaP Ready)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.22
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		13
-			forecolor		0.72 0.76 0.82 0.95
-			visible			1
-			decoration
-		}
-		itemDef
-		{
-			name			"bz_arsenal_p2_desc"
-			type			ITEM_TYPE_TEXT
-			rect			68 330 236 44
-			text			"Fire, Electricity, Acid, and Frost wonder weapons (bz_elements_enabled)."
-			textfont		UI_FONT_NORMAL
-			textscale		0.20
-			textalign		ITEM_ALIGN_TOP_LEFT
-			forecolor		0.62 0.66 0.72 0.90
-			autowrapped
+			textaligny		12
+			forecolor		0.45 0.95 0.65 1
 			visible			1
 			decoration
 		}
 
+		// Acid Sprayer (6500)
+		itemDef
+		{
+			name			"btn_elem_acid_sprayer"
+			type			ITEM_TYPE_BUTTON
+			rect			40 140 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.09 0.16 0.14 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.40 0.92 0.55 0.45
+			text			"Acid Sprayer (6500)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_element:acid_sprayer";
+			}
+		}
+		itemDef
+		{
+			name			"desc_elem_acid_sprayer"
+			type			ITEM_TYPE_TEXT
+			rect			48 163 180 16
+			text			"6s acid puddles: 40% slow + 50% brittle."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.84 0.94 0.88 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_elem_acid_sprayer"
+			type			ITEM_TYPE_TEXT
+			rect			222 148 86 18
+			exp				text( dvarString( "ui_bz_elem_acid_sprayer" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Cryo Cannon (7000)
+		itemDef
+		{
+			name			"btn_elem_cryo_cannon"
+			type			ITEM_TYPE_BUTTON
+			rect			324 140 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.09 0.14 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.82 1.0 0.45
+			text			"Cryo Cannon (7000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_element:cryo_cannon";
+			}
+		}
+		itemDef
+		{
+			name			"desc_elem_cryo_cannon"
+			type			ITEM_TYPE_TEXT
+			rect			332 163 180 16
+			text			"4s solid freeze + 2.5x shatter damage."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.84 0.92 0.98 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_elem_cryo_cannon"
+			type			ITEM_TYPE_TEXT
+			rect			506 148 86 18
+			exp				text( dvarString( "ui_bz_elem_cryo_cannon" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Multi-Crossbow (7500)
+		itemDef
+		{
+			name			"btn_elem_multi_crossbow"
+			type			ITEM_TYPE_BUTTON
+			rect			40 192 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.13 0.10 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.72 0.35 0.45
+			text			"Multi-Crossbow (7500)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_element:multi_crossbow";
+			}
+		}
+		itemDef
+		{
+			name			"desc_elem_multi_crossbow"
+			type			ITEM_TYPE_TEXT
+			rect			48 215 180 16
+			text			"3-bolt sticky explosive spread."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.94 0.90 0.84 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_elem_multi_crossbow"
+			type			ITEM_TYPE_TEXT
+			rect			222 200 86 18
+			exp				text( dvarString( "ui_bz_elem_multi_crossbow" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Blade Boomerang (6000)
+		itemDef
+		{
+			name			"btn_elem_blade_boomerang"
+			type			ITEM_TYPE_BUTTON
+			rect			324 192 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.14 0.11 0.18 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.80 0.60 1.0 0.45
+			text			"Blade Boomerang (6000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.25
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_element:blade_boomerang";
+			}
+		}
+		itemDef
+		{
+			name			"desc_elem_blade_boomerang"
+			type			ITEM_TYPE_TEXT
+			rect			332 215 180 16
+			text			"Pierces up to 6 zombies and returns."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.92 0.88 0.96 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_elem_blade_boomerang"
+			type			ITEM_TYPE_TEXT
+			rect			506 200 86 18
+			exp				text( dvarString( "ui_bz_elem_blade_boomerang" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Phase 2 Section B: Special Gear & Melee Slot Swap (2x2 grid)
+		itemDef
+		{
+			name			"bz_arsenal_p2_gear_hdr"
+			type			ITEM_TYPE_TEXT
+			rect			40 245 560 15
+			text			"SPECIAL GEAR & MELEE SLOT (KEPT ON DOWN - FREE MELEE SWAP)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		12
+			forecolor		1.0 0.80 0.40 1
+			visible			1
+			decoration
+		}
+
+		// War Club (5000 / Free swap once owned)
+		itemDef
+		{
+			name			"btn_gear_war_club"
+			type			ITEM_TYPE_BUTTON
+			rect			40 263 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.14 0.12 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.95 0.72 0.35 0.45
+			text			"War Club (5000 / Swap)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_gear:war_club";
+			}
+		}
+		itemDef
+		{
+			name			"desc_gear_war_club"
+			type			ITEM_TYPE_TEXT
+			rect			48 286 175 16
+			text			"Heavy melee cleave; free swap once owned."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.94 0.90 0.84 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_gear_war_club"
+			type			ITEM_TYPE_TEXT
+			rect			218 271 90 18
+			exp				text( dvarString( "ui_bz_gear_war_club" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// PaP War Club (5000)
+		itemDef
+		{
+			name			"btn_gear_pap_war_club"
+			type			ITEM_TYPE_BUTTON
+			rect			324 263 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.11 0.09 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.98 0.58 0.32 0.45
+			text			"PaP War Club (5000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_gear:pap_war_club";
+			}
+		}
+		itemDef
+		{
+			name			"desc_gear_pap_war_club"
+			type			ITEM_TYPE_TEXT
+			rect			332 286 175 16
+			text			"Req War Club. Frontal AOE knockback smash."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.94 0.88 0.84 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_gear_pap_war_club"
+			type			ITEM_TYPE_TEXT
+			rect			502 271 90 18
+			exp				text( dvarString( "ui_bz_gear_pap_war_club" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Equip Bowie Knife (Free Swap)
+		itemDef
+		{
+			name			"btn_gear_equip_bowie"
+			type			ITEM_TYPE_BUTTON
+			rect			40 315 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.15 0.22 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.88 1.0 0.40
+			text			"Equip Bowie Knife (Free)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_gear:equip_bowie";
+			}
+		}
+		itemDef
+		{
+			name			"desc_gear_equip_bowie"
+			type			ITEM_TYPE_TEXT
+			rect			48 338 175 16
+			text			"Free melee-slot swap when Bowie is owned."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.84 0.90 0.94 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_gear_equip_bowie"
+			type			ITEM_TYPE_TEXT
+			rect			218 323 90 18
+			exp				text( dvarString( "ui_bz_gear_equip_bowie" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Portal Grenade (6000)
+		itemDef
+		{
+			name			"btn_gear_portal_grenade"
+			type			ITEM_TYPE_BUTTON
+			rect			324 315 276 46
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.10 0.12 0.24 0.92
+			border			1
+			bordersize		1
+			bordercolor		0.65 0.65 1.0 0.50
+			text			"Portal Grenade (6000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.24
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		8
+			textaligny		17
+			forecolor		1 1 1 1
+			visible			1
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_gear:portal_grenade";
+			}
+		}
+		itemDef
+		{
+			name			"desc_gear_portal_grenade"
+			type			ITEM_TYPE_TEXT
+			rect			332 338 175 16
+			text			"[USE+MELEE] Co-op escape portal."
+			textfont		UI_FONT_NORMAL
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
+			forecolor		0.86 0.88 0.98 0.95
+			visible			1
+			decoration
+		}
+		itemDef
+		{
+			name			"stat_gear_portal_grenade"
+			type			ITEM_TYPE_TEXT
+			rect			502 323 90 18
+			exp				text( dvarString( "ui_bz_portal" ) );
+			textfont		UI_FONT_NORMAL
+			textscale		0.21
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_RIGHT
+			textaligny		13
+			forecolor		1.0 0.88 0.35 1
+			visible			1
+			decoration
+		}
+
+		// Phase 3 Read-Only Placeholder Banner
 		itemDef
 		{
 			name			"bz_arsenal_p3_panel"
-			rect			326 300 256 82
+			rect			40 368 560 44
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.08 0.09 0.12 0.85
 			border			1
@@ -325,13 +791,13 @@
 		{
 			name			"bz_arsenal_p3_title"
 			type			ITEM_TYPE_TEXT
-			rect			336 308 236 18
+			rect			50 373 540 16
 			text			"SQUAD COMPANIONS (Coming in Phase 3)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.22
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
-			textaligny		13
+			textaligny		12
 			forecolor		0.72 0.76 0.82 0.95
 			visible			1
 			decoration
@@ -340,13 +806,13 @@
 		{
 			name			"bz_arsenal_p3_desc"
 			type			ITEM_TYPE_TEXT
-			rect			336 330 236 44
+			rect			50 391 540 16
 			text			"Hireable AI squad allies, up to 4 total squad members (bz_companions_enabled)."
 			textfont		UI_FONT_NORMAL
-			textscale		0.20
-			textalign		ITEM_ALIGN_TOP_LEFT
+			textscale		0.19
+			textalign		ITEM_ALIGN_LEFT
+			textaligny		11
 			forecolor		0.62 0.66 0.72 0.90
-			autowrapped
 			visible			1
 			decoration
 		}
@@ -355,7 +821,7 @@
 		itemDef
 		{
 			name			"bz_arsenal_footer_bg"
-			rect			44 394 552 48
+			rect			28 418 584 46
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.06 0.09 0.14 0.95
 			border			1
@@ -368,10 +834,10 @@
 		{
 			name			"bz_arsenal_feedback"
 			type			ITEM_TYPE_TEXT
-			rect			56 406 418 24
+			rect			40 429 448 24
 			exp				text( dvarString( "ui_bz_feedback" ) );
 			textfont		UI_FONT_NORMAL
-			textscale		0.26
+			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_LEFT
 			textaligny		16
@@ -383,7 +849,7 @@
 		{
 			name			"btn_arsenal_close"
 			type			ITEM_TYPE_BUTTON
-			rect			482 403 102 28
+			rect			498 426 102 28
 			style			WINDOW_STYLE_FILLED
 			backcolor		0.24 0.10 0.10 0.95
 			border			1
@@ -391,7 +857,7 @@
 			bordercolor		0.95 0.45 0.45 0.70
 			text			"CLOSE [ESC]"
 			textfont		UI_FONT_NORMAL
-			textscale		0.26
+			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
 			textalign		ITEM_ALIGN_CENTER
 			textaligny		19

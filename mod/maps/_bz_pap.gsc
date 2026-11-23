@@ -514,7 +514,10 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 			dist = Distance( enemy.origin, center );
 			if ( dist <= radius )
 			{
-				enemy DoDamage( damage, center, player );
+				final_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( enemy, damage, "MOD_GRENADE_SPLASH", "stielhandgranate", player, center );
+				enemy.bz_in_damage_dispatch = true;
+				enemy.bz_damage_dispatch_time = GetTime();
+				enemy DoDamage( final_dmg, center, player );
 				hits++;
 			}
 		}
@@ -1024,8 +1027,14 @@ bz_pap_on_actor_damage( zombie, ctx )
 	mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
 
 	// Melee path: PaP Knife (3x) and PaP Bowie Knife (1-hit kill regular zombies any round, 3x boss/dogs)
+	// Defers cleanly when the player currently has the Phase 2 War Club equipped in their melee slot.
 	if ( mod == "mod_melee" )
 	{
+		if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) == "war_club" )
+		{
+			return;
+		}
+
 		has_pap_knife = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_knife", "" );
 		has_pap_bowie = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_bowie", "" );
 		if ( !has_pap_knife && !has_pap_bowie )
@@ -1082,7 +1091,7 @@ bz_pap_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	if ( mod == "mod_grenade" || mod == "mod_grenade_splash" || mod == "mod_falling" || mod == "mod_trigger_hurt" )
+	if ( mod == "mod_unknown" || mod == "mod_grenade" || mod == "mod_grenade_splash" || mod == "mod_falling" || mod == "mod_trigger_hurt" )
 	{
 		return;
 	}

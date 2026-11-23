@@ -132,6 +132,145 @@ LASTSTAND_ALL_DOWN_RE = re.compile(
     r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*player_all_players_in_laststand\([ \t]*\)[ \t]*\)",
     re.MULTILINE,
 )
+TESLA_PVP_THREAD_DEF_RE = re.compile(
+    r"^tesla_pvp_thread\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+TESLA_SELF_DAMAGE_BLOCK_RE = re.compile(
+    r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*self\.health[ \t]*-[ \t]*damage[ \t]*<[ \t]*1[ \t]*\)[ \t]*\r?\n"
+    r"[ \t]*\{[ \t]*\r?\n"
+    r"[ \t]*self\.health[ \t]*=[ \t]*1;[ \t]*\r?\n"
+    r"[ \t]*\}[ \t]*\r?\n"
+    r"[ \t]*else[ \t]*\r?\n"
+    r"[ \t]*\{[ \t]*\r?\n"
+    r"[ \t]*self\.health[ \t]*-=[ \t]*damage;[ \t]*\r?\n"
+    r"[ \t]*\}(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+TESLA_CHAIN_FN_CANDIDATES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^tesla_arc_damage\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+    re.compile(r"^tesla_do_damage\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+    re.compile(r"^tesla_damage_init\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+)
+
+# Verified subset of the 89 FX paths present in ALL FOUR stock Nazi Zombies map fastfiles
+# (nazi_zombie_prototype, nazi_zombie_asylum, nazi_zombie_sumpf, nazi_zombie_factory)
+# per docs/research/phase2-phase3-engine-feasibility.md — guaranteed 0 added FX slots.
+VERIFIED_ALL_4_MAP_FX: frozenset[str] = frozenset(
+    {
+        "misc/fx_exp_raygun_impact",
+        "misc/fx_trail_raygun_geotrail",
+        "misc/fx_zombie_powerup_on",
+        "misc/fx_zombie_powerup_wave",
+        "misc/fx_zombie_powerup_grab",
+        "misc/fx_zombie_mini_nuke",
+        "misc/fx_zombie_bloodsplat",
+        "misc/fx_zombie_bloodspurt",
+        "env/smoke/fx_fog_zombie_amb",
+        "env/electrical/fx_elec_short_oneshot",
+        "env/electrical/fx_elec_wire_spark_burst",
+        "env/dirt/fx_dust_ceiling_impact_lg_mdbrown",
+        "bio/player/fx_footstep_water",
+        "bio/player/fx_footstep_sand",
+        "weapon/grenade/fx_trail_rifle_grenade",
+        "weapon/rocket/fx_trail_panzerfaust_geotrail",
+        "weapon/molotov/fx_molotov_exp",
+    }
+)
+
+# Canonical Phase 2 zero-FX cloned primary weapon definitions (ADR-0003).
+# Each weapon clones a verified stock template at build time, enforces inventoryType=primary
+# and a distinct ammoName/clipName pool, and clears any FX outside VERIFIED_ALL_4_MAP_FX.
+BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
+    (
+        "bz_acid_sprayer",
+        ("ray_gun",),
+        {
+            "inventoryType": "primary",
+            "ammoName": "bz_acid",
+            "clipName": "bz_acid",
+            "displayName": "Acid Sprayer",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "clipSize": "20",
+            "maxAmmo": "120",
+            "startAmmo": "120",
+            "dropAmmoMin": "20",
+            "dropAmmoMax": "60",
+            "projTrailEffect": "misc/fx_trail_raygun_geotrail",
+            "projExplosionEffect": "misc/fx_exp_raygun_impact",
+        },
+    ),
+    (
+        "bz_cryo_cannon",
+        ("ray_gun",),
+        {
+            "inventoryType": "primary",
+            "ammoName": "bz_cryo",
+            "clipName": "bz_cryo",
+            "displayName": "Cryo Cannon",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "clipSize": "16",
+            "maxAmmo": "96",
+            "startAmmo": "96",
+            "dropAmmoMin": "16",
+            "dropAmmoMax": "48",
+            "projTrailEffect": "",
+            "projExplosionEffect": "env/electrical/fx_elec_short_oneshot",
+        },
+    ),
+    (
+        "bz_multi_crossbow",
+        ("m1garand_gl", "zombie_m1garand", "kar98k"),
+        {
+            "inventoryType": "primary",
+            "ammoName": "bz_xbow",
+            "clipName": "bz_xbow",
+            "displayName": "Multi-Crossbow",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "clipSize": "6",
+            "maxAmmo": "36",
+            "startAmmo": "36",
+            "dropAmmoMin": "6",
+            "dropAmmoMax": "18",
+        },
+    ),
+    (
+        "bz_blade_boomerang",
+        ("zombie_colt", "colt"),
+        {
+            "inventoryType": "primary",
+            "ammoName": "bz_blade",
+            "clipName": "bz_blade",
+            "displayName": "Blade Boomerang",
+            "altWeapon": "",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "clipSize": "1",
+            "maxAmmo": "20",
+            "startAmmo": "20",
+            "dropAmmoMin": "1",
+            "dropAmmoMax": "10",
+        },
+    ),
+)
 
 
 def extract_rawfile_from_ff(ff_path: Path, rawfile_name: str) -> bytes:
@@ -641,8 +780,321 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
     return text.encode("latin1")
 
 
-def generate_staged_mod_csv(base_csv_text: str, staged_gsc_relpaths: list[str]) -> str:
-    """Ensure mod.csv includes all staged _bz_*.gsc and BZ-patched stock scripts without duplicates."""
+def _pick_tesla_player_param(params_raw: str) -> str:
+    """Resolve the player parameter identifier from a stock _zombiemode_tesla.gsc signature."""
+    params = [p.strip() for p in params_raw.split(",") if p.strip()]
+    for param in params:
+        if param.lower() in ("player", "attacker", "eattacker"):
+            return param
+    if params:
+        return params[-1]
+    return "player"
+
+
+def inject_zombiemode_tesla_hooks(source_text: str | bytes) -> str | bytes:
+    """Patch stock maps/_zombiemode_tesla.gsc for Wunderwaffe DG-2 Juggernog fix & chain-stun.
+
+    Fixes WaW 1.7's infamous `tesla_pvp_thread()` self-shock bug where assigning directly to
+    `self.health` resets `self.maxhealth` back to 100 (wiping Juggernog I 160, Juggernog II
+    220, and Titan 320/440 HP):
+      1. Strictly gated under `maps\\_bz_hooks::bz_elements_enabled()` so Classic Mode and
+         `bz_elements_enabled 0` execute the exact stock self-shock code untouched.
+      2. When enabled, skips self-shock completely when Blast Shield grants self-damage
+         immunity (`bz_tesla_is_self_shock_immune`), otherwise brackets `self.health` writes
+         with `sav = self.maxhealth; ... self.maxhealth = sav;` and calls
+         `maps\\_bz_hooks::bz_recompute_player_max_health( self )` immediately after.
+      3. Hooks `tesla_arc_damage` / `tesla_do_damage` / `tesla_damage_init` with a guarded
+         `maps\\_bz_elem_stock::bz_tesla_on_chain_hit( self, <player> )` call for the 3.5s
+         chain-stun buff on chained/nearby zombies.
+    """
+    is_bytes = isinstance(source_text, (bytes, bytearray))
+    text = source_text.decode("latin1") if is_bytes else str(source_text)
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    # 1. Patch tesla_pvp_thread() self-shock health assignment (Sumpf & Der Riese shapes)
+    pvp_match = TESLA_PVP_THREAD_DEF_RE.search(text)
+    if pvp_match is None:
+        raise ValueError("Could not locate tesla_pvp_thread() in _zombiemode_tesla.gsc")
+
+    dmg_match = TESLA_SELF_DAMAGE_BLOCK_RE.search(text, pos=pvp_match.end())
+    if dmg_match is None:
+        raise ValueError(
+            "Could not locate self.health self-shock block inside tesla_pvp_thread() in _zombiemode_tesla.gsc"
+        )
+
+    indent = dmg_match.group("indent")
+    trailing = dmg_match.group("trailing")
+    line_ending = "\r" if dmg_match.group(0).endswith("\r") else ""
+    t = "\t"
+    patched_pvp_block = (
+        f"{indent}if ( maps\\_bz_hooks::bz_elements_enabled() ){newline}"
+        f"{indent}{{{newline}"
+        f"{indent}{t}if ( maps\\_bz_elem_stock::bz_tesla_is_self_shock_immune( self ) ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}maps\\_bz_elem_stock::bz_tesla_on_self_shock( self, damage, true );{newline}"
+        f"{indent}{t}{t}continue;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}sav = self.maxhealth;{newline}"
+        f"{indent}{t}if ( self.health - damage < 1 ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health = 1;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}else{newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health -= damage;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}self.maxhealth = sav;{newline}"
+        f"{indent}{t}maps\\_bz_hooks::bz_recompute_player_max_health( self );{newline}"
+        f"{indent}{t}maps\\_bz_elem_stock::bz_tesla_on_self_shock( self, damage, false );{newline}"
+        f"{indent}}}{newline}"
+        f"{indent}else{newline}"
+        f"{indent}{{{newline}"
+        f"{indent}{t}if ( self.health - damage < 1 ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health = 1;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}else{newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health -= damage;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}}}{trailing}{line_ending}"
+    )
+    text = text[: dmg_match.start()] + patched_pvp_block + text[dmg_match.end() :]
+
+    # 2. Hook chain-hit seam for buffed Wunderwaffe stun
+    chain_match: re.Match[str] | None = None
+    for pattern in TESLA_CHAIN_FN_CANDIDATES:
+        chain_match = pattern.search(text)
+        if chain_match is not None:
+            break
+    if chain_match is None:
+        raise ValueError(
+            "Could not locate tesla_arc_damage(), tesla_do_damage(), or tesla_damage_init() "
+            "in _zombiemode_tesla.gsc"
+        )
+    player_param = _pick_tesla_player_param(chain_match.group("params"))
+    chain_hook = (
+        f"{newline}"
+        f"\tif ( maps\\_bz_hooks::bz_elements_enabled() ){newline}"
+        f"\t{{{newline}"
+        f"\t\tmaps\\_bz_elem_stock::bz_tesla_on_chain_hit( self, {player_param} );{newline}"
+        f"\t}}"
+    )
+    text = text[: chain_match.end()] + chain_hook + text[chain_match.end() :]
+
+    # 3. Cross-map DLC2/DLC3 era parity (Shi No Numa + Der Riese):
+    #    - Shi No Numa's maps/_zombiemode_net.gsc defines init(), which collides with
+    #      maps/_zombiemode_tesla.gsc's init() if `#include maps\_zombiemode_net;` is kept.
+    #    - Replace network_safe_play_fx_on_tag(...) with PlayFxOnTag(...) (stock Sumpf path).
+    #    - Guard DLC3-only upgraded viewmodel FX loadfx() calls to nazi_zombie_factory.
+    #    - Support both Sumpf's flat level._zombie_tesla_death arrays and Factory's
+    #      animname-indexed dictionaries.
+    text = re.sub(
+        r"^[ \t]*#include[ \t]+maps\\_zombiemode_net;[ \t]*\r?\n?",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'network_safe_play_fx_on_tag\(\s*"[^"]*"\s*,\s*\d+\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^)]+?)\s*\)',
+        r"PlayFxOnTag( \1, \2, \3 )",
+        text,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)(?P<stmt>level\._effect\["tesla_viewmodel_[^"]+_upgraded"\][^\r\n]+)',
+        rf'\g<indent>if ( IsDefined( level.script ) && tolower( level.script ) == "nazi_zombie_factory" ) {{ \g<stmt> }}',
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)self\.deathanim\s*=\s*random\(\s*level\._zombie_tesla_death\[self\.animname\]\s*\);',
+        (
+            rf"\g<indent>if ( IsDefined( self.animname ) && IsDefined( level._zombie_tesla_death[self.animname] ) ){newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_death[self.animname] );{newline}"
+            rf"\g<indent>}}{newline}"
+            rf"\g<indent>else{newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_death );{newline}"
+            rf"\g<indent>}}"
+        ),
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r'^(?P<indent>[ \t]*)self\.deathanim\s*=\s*random\(\s*level\._zombie_tesla_crawl_death\[self\.animname\]\s*\);',
+        (
+            rf"\g<indent>if ( IsDefined( self.animname ) && IsDefined( level._zombie_tesla_crawl_death[self.animname] ) ){newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_crawl_death[self.animname] );{newline}"
+            rf"\g<indent>}}{newline}"
+            rf"\g<indent>else{newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_crawl_death );{newline}"
+            rf"\g<indent>}}"
+        ),
+        text,
+        flags=re.MULTILINE,
+    )
+
+    return text.encode("latin1") if is_bytes else text
+
+
+def stage_bz_tesla_script(
+    tools_root: Path,
+    stage_dir: Path,
+    steam_game: Path | None = None,
+) -> Path | None:
+    """Patch and stage maps/_zombiemode_tesla.gsc when stock Tesla script is available.
+
+    Prefers installed stock fastfile archives (`nazi_zombie_factory_patch.ff`,
+    `nazi_zombie_factory.ff`, `nazi_zombie_sumpf_patch.ff`, `nazi_zombie_sumpf.ff`)
+    before falling back to `tools_root/raw/maps/_zombiemode_tesla.gsc`.
+    Returns the staged Path, or None if no stock `_zombiemode_tesla.gsc` exists on this host.
+    """
+    stock_bytes: bytes | None = None
+    search_steam = steam_game if steam_game is not None else tools_root
+    for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
+        try:
+            extracted = try_extract_stock_script(
+                map_name, "maps/_zombiemode_tesla.gsc", search_steam, tools_root
+            )
+        except FileNotFoundError:
+            extracted = None
+        if extracted is not None:
+            stock_bytes = extracted
+            break
+
+    if stock_bytes is None:
+        raw_tesla = tools_root / "raw" / "maps" / "_zombiemode_tesla.gsc"
+        if raw_tesla.is_file():
+            stock_bytes = raw_tesla.read_bytes()
+
+    if stock_bytes is None:
+        return None
+
+    patched_bytes = inject_zombiemode_tesla_hooks(stock_bytes)
+    assert isinstance(patched_bytes, bytes)
+    out_path = stage_dir / "maps" / "_zombiemode_tesla.gsc"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(patched_bytes)
+    return out_path
+
+
+def parse_weapon_file(text: str) -> list[tuple[str, str]]:
+    """Parse a WaW 1.7 backslash-delimited WEAPONFILE\\key\\val\\... string."""
+    cleaned = text.rstrip("\r\n")
+    tokens = cleaned.split("\\")
+    if not tokens or tokens[0] != "WEAPONFILE":
+        raise ValueError("Invalid WaW weapon file: missing leading 'WEAPONFILE\\\\' header")
+    body = tokens[1:]
+    if len(body) % 2 != 0:
+        raise ValueError(
+            f"Malformed WaW weapon file: expected even key/value token count, got {len(body)}"
+        )
+    return [(body[i], body[i + 1]) for i in range(0, len(body), 2)]
+
+
+def serialize_weapon_file(pairs: list[tuple[str, str]]) -> str:
+    """Serialize ordered (key, value) pairs back into WaW 1.7 WEAPONFILE format."""
+    parts = ["WEAPONFILE"]
+    for key, val in pairs:
+        parts.append(str(key))
+        parts.append(str(val))
+    return "\\".join(parts)
+
+
+def clone_zero_fx_weapon_file(
+    stock_text: str,
+    overrides: dict[str, str],
+    allowed_fx_set: set[str] | frozenset[str] | None = None,
+) -> str:
+    """Deterministically clone a WaW stock weapon definition with 0 added FX slots.
+
+    Any `*Effect` or `*Fx` field (case-insensitive) whose value is non-empty and not
+    present in `allowed_fx_set` (defaults to VERIFIED_ALL_4_MAP_FX) is cleared to `""`.
+    """
+    pairs = parse_weapon_file(stock_text)
+    allowed = {
+        fx.strip().replace("\\", "/").lower()
+        for fx in (VERIFIED_ALL_4_MAP_FX if allowed_fx_set is None else allowed_fx_set)
+        if fx and fx.strip()
+    }
+
+    applied_keys: set[str] = set()
+    updated: list[tuple[str, str]] = []
+    for key, val in pairs:
+        if key in overrides:
+            val = str(overrides[key])
+            applied_keys.add(key)
+        updated.append((key, val))
+
+    for key, val in overrides.items():
+        if key not in applied_keys:
+            updated.append((key, str(val)))
+
+    sanitized: list[tuple[str, str]] = []
+    for key, val in updated:
+        key_lower = key.lower()
+        if key_lower == "altweapon":
+            val = ""
+        elif key_lower.endswith("effect") or key_lower.endswith("fx"):
+            norm_val = val.strip().replace("\\", "/").lower()
+            if norm_val and norm_val not in allowed:
+                val = ""
+        sanitized.append((key, val))
+
+    return serialize_weapon_file(sanitized)
+
+
+def stage_bz_element_weapons(
+    tools_root: Path,
+    stage_dir: Path,
+    allowed_fx_set: set[str] | frozenset[str] | None = None,
+) -> list[str]:
+    """Generate and stage the 4 zero-FX cloned Phase 2 primary weapons under stage_dir/weapons/sp/.
+
+    Returns the relative paths (e.g. `weapons/sp/bz_acid_sprayer`) staged. Returns an empty list
+    if stock weapon templates are not present under `tools_root/raw/weapons/sp/`.
+    """
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    out_dir = stage_dir / "weapons" / "sp"
+    staged_relpaths: list[str] = []
+    for weap_name, template_candidates, overrides in BZ_ELEMENT_WEAPON_SPECS:
+        template_path: Path | None = None
+        for candidate in template_candidates:
+            path = raw_weapons_dir / candidate
+            if path.is_file():
+                template_path = path
+                break
+        if template_path is None:
+            raise FileNotFoundError(
+                f"No stock weapon template found for {weap_name} in {raw_weapons_dir} "
+                f"(tried: {', '.join(template_candidates)})"
+            )
+        stock_text = template_path.read_text(encoding="latin1")
+        cloned_text = clone_zero_fx_weapon_file(
+            stock_text,
+            overrides=overrides,
+            allowed_fx_set=allowed_fx_set,
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / weap_name
+        out_path.write_text(cloned_text, encoding="latin1")
+        staged_relpaths.append(f"weapons/sp/{weap_name}")
+
+    return staged_relpaths
+
+
+def generate_staged_mod_csv(
+    base_csv_text: str,
+    staged_gsc_relpaths: list[str],
+    staged_weapon_relpaths: list[str] | None = None,
+) -> str:
+    """Ensure mod.csv includes all staged _bz_*.gsc, BZ-patched stock scripts, and cloned bz_* weapons."""
     newline = "\r\n" if "\r\n" in base_csv_text else "\n"
     existing_lines = {line.strip().lower() for line in base_csv_text.splitlines()}
     additions: list[str] = []
@@ -653,11 +1105,22 @@ def generate_staged_mod_csv(base_csv_text: str, staged_gsc_relpaths: list[str]) 
             stem.startswith("_bz_")
             or stem.startswith("_zombiemode_weapons_bz_")
             or stem.startswith("_zombiemode_perks_bz_")
-            or stem in ("_zombiemode_score.gsc", "_laststand.gsc")
+            or stem in ("_zombiemode_score.gsc", "_laststand.gsc", "_zombiemode_tesla.gsc")
         )
         if not is_bz_script:
             continue
         entry = f"rawfile,{norm}"
+        if entry.lower() not in existing_lines:
+            existing_lines.add(entry.lower())
+            additions.append(entry)
+
+    for rel in sorted(staged_weapon_relpaths or []):
+        norm = rel.replace("\\", "/").lstrip("/")
+        if norm.lower().startswith("weapons/"):
+            weap_ref = norm[len("weapons/") :]
+        else:
+            weap_ref = norm
+        entry = f"weapon,{weap_ref}"
         if entry.lower() not in existing_lines:
             existing_lines.add(entry.lower())
             additions.append(entry)
@@ -901,7 +1364,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     laststand_dst.parent.mkdir(parents=True, exist_ok=True)
     laststand_dst.write_bytes(laststand_patched)
 
-    # Auto-register any tracked _bz_*.gsc and staged per-map BZ wrapper scripts in staged mod.csv
+    # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
+    stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+
+    # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
+    staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
+
+    # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, and cloned bz_* weapons
     staged_mod_csv = stage_dir / "mod.csv"
     if staged_mod_csv.is_file():
         staged_gscs = [
@@ -911,6 +1380,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         updated_csv = generate_staged_mod_csv(
             staged_mod_csv.read_text(encoding="latin1"),
             staged_gscs,
+            staged_weapon_relpaths=staged_weapons,
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
 

@@ -733,6 +733,10 @@ bz_stations_player_has_bowie( player )
 	{
 		return true;
 	}
+	if ( IsDefined( player.bz_owns_bowie ) && player.bz_owns_bowie )
+	{
+		return true;
+	}
 	return false;
 }
 
@@ -747,6 +751,10 @@ bz_stations_sync_player_ui( player, feedback )
 
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_stations_sync_stock_perks( player );
+	if ( bz_stations_player_has_bowie( player ) )
+	{
+		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+	}
 
 	score = maps\_bz_state::bz_state_get_score_safe( player );
 	active_class = maps\_bz_state::bz_state_get_class( player );
@@ -947,6 +955,155 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_pap_pap_cluster", "NEED " + cluster_cost );
 	}
 
+	// Phase 2 Elemental & Special Arsenal status dvars
+	elements_on = maps\_bz_hooks::bz_elements_enabled();
+	elem_ids = maps\_bz_rules::bz_get_element_weapon_ids();
+	for ( i = 0; i < elem_ids.size; i++ )
+	{
+		eid = elem_ids[i];
+		e_cost = maps\_bz_rules::bz_get_element_weapon_price( eid );
+		e_weap = maps\_bz_rules::bz_get_element_weapon_name( eid );
+		if ( !elements_on )
+		{
+			player SetClientDvar( "ui_bz_elem_" + eid, "DISABLED" );
+		}
+		else if ( IsDefined( e_weap ) && player HasWeapon( e_weap ) )
+		{
+			player SetClientDvar( "ui_bz_elem_" + eid, "OWNED" );
+		}
+		else if ( score >= e_cost )
+		{
+			player SetClientDvar( "ui_bz_elem_" + eid, "BUY " + e_cost );
+		}
+		else
+		{
+			player SetClientDvar( "ui_bz_elem_" + eid, "NEED " + e_cost );
+		}
+	}
+
+	melee_slot = maps\_bz_state::bz_state_get_melee_slot( player );
+	owns_wc = maps\_bz_state::bz_state_owns_war_club( player );
+	has_pap_wc = maps\_bz_state::bz_state_has_pap_war_club( player );
+	owns_bowie = bz_stations_player_has_bowie( player );
+	owns_portal = maps\_bz_state::bz_state_owns_portal_grenade( player );
+	portal_charges = maps\_bz_state::bz_state_get_portal_charges( player );
+
+	if ( melee_slot == "war_club" )
+	{
+		if ( has_pap_wc )
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP WAR CLUB" );
+		}
+		else
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: WAR CLUB" );
+		}
+	}
+	else if ( melee_slot == "bowie" )
+	{
+		if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP BOWIE" );
+		}
+		else
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: BOWIE" );
+		}
+	}
+	else
+	{
+		if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP KNIFE" );
+		}
+		else
+		{
+			player SetClientDvar( "ui_bz_melee_slot", "MELEE: KNIFE" );
+		}
+	}
+
+	wc_cost = maps\_bz_rules::bz_get_special_gear_price( "war_club" );
+	if ( !elements_on )
+	{
+		player SetClientDvar( "ui_bz_gear_war_club", "DISABLED" );
+	}
+	else if ( owns_wc )
+	{
+		if ( melee_slot == "war_club" )
+		{
+			player SetClientDvar( "ui_bz_gear_war_club", "EQUIPPED" );
+		}
+		else
+		{
+			player SetClientDvar( "ui_bz_gear_war_club", "EQUIP FREE" );
+		}
+	}
+	else if ( score >= wc_cost )
+	{
+		player SetClientDvar( "ui_bz_gear_war_club", "BUY " + wc_cost );
+	}
+	else
+	{
+		player SetClientDvar( "ui_bz_gear_war_club", "NEED " + wc_cost );
+	}
+
+	pap_wc_cost = maps\_bz_rules::bz_get_special_gear_price( "pap_war_club" );
+	if ( !elements_on )
+	{
+		player SetClientDvar( "ui_bz_gear_pap_war_club", "DISABLED" );
+	}
+	else if ( has_pap_wc )
+	{
+		player SetClientDvar( "ui_bz_gear_pap_war_club", "OWNED" );
+	}
+	else if ( !owns_wc )
+	{
+		player SetClientDvar( "ui_bz_gear_pap_war_club", "REQ WAR CLUB" );
+	}
+	else if ( score >= pap_wc_cost )
+	{
+		player SetClientDvar( "ui_bz_gear_pap_war_club", "BUY " + pap_wc_cost );
+	}
+	else
+	{
+		player SetClientDvar( "ui_bz_gear_pap_war_club", "NEED " + pap_wc_cost );
+	}
+
+	if ( !elements_on )
+	{
+		player SetClientDvar( "ui_bz_gear_equip_bowie", "DISABLED" );
+	}
+	else if ( !owns_bowie )
+	{
+		player SetClientDvar( "ui_bz_gear_equip_bowie", "REQ BOWIE" );
+	}
+	else if ( melee_slot == "bowie" )
+	{
+		player SetClientDvar( "ui_bz_gear_equip_bowie", "EQUIPPED" );
+	}
+	else
+	{
+		player SetClientDvar( "ui_bz_gear_equip_bowie", "EQUIP FREE" );
+	}
+
+	portal_cost = maps\_bz_rules::bz_get_special_gear_price( "portal_grenade" );
+	if ( !elements_on )
+	{
+		player SetClientDvar( "ui_bz_portal", "DISABLED" );
+	}
+	else if ( owns_portal )
+	{
+		player SetClientDvar( "ui_bz_portal", "READY (" + portal_charges + ")" );
+	}
+	else if ( score >= portal_cost )
+	{
+		player SetClientDvar( "ui_bz_portal", "BUY " + portal_cost );
+	}
+	else
+	{
+		player SetClientDvar( "ui_bz_portal", "NEED " + portal_cost );
+	}
+
 	if ( IsDefined( feedback ) )
 	{
 		player SetClientDvar( "ui_bz_feedback", "" + feedback );
@@ -1060,6 +1217,33 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 	return maps\_bz_state::bz_make_purchase_result( "ok", "single_pap", cost, player.score );
 }
 
+bz_stations_give_element_primary( player, weap_name )
+{
+	if ( !IsDefined( player ) || !IsDefined( weap_name ) || weap_name == "" )
+	{
+		return;
+	}
+
+	max_primaries = maps\_bz_hooks::bz_get_max_primary_weapons( player );
+	primaries = player GetWeaponsListPrimaries();
+	if ( IsDefined( primaries ) && primaries.size >= max_primaries )
+	{
+		cur = bz_stations_get_player_weapon_safe( player );
+		if ( cur != "" && player HasWeapon( cur ) )
+		{
+			player TakeWeapon( cur );
+		}
+		else if ( primaries.size > 0 )
+		{
+			player TakeWeapon( primaries[primaries.size - 1] );
+		}
+	}
+
+	player GiveWeapon( weap_name );
+	player GiveMaxAmmo( weap_name );
+	player SwitchToWeapon( weap_name );
+}
+
 bz_stations_format_feedback( category, item_id, res )
 {
 	disp = maps\_bz_rules::bz_get_item_display_name( category, item_id );
@@ -1080,6 +1264,10 @@ bz_stations_format_feedback( category, item_id, res )
 		if ( category == "class" && IsDefined( res.swapped ) && res.swapped )
 		{
 			return "Swapped to " + disp + " (-" + res.cost + " pts)";
+		}
+		if ( category == "special_gear" && IsDefined( res.swapped ) && res.swapped )
+		{
+			return "Equipped " + disp + " (Free swap)";
 		}
 		return "Purchased " + disp + " (-" + res.cost + " pts)";
 	}
@@ -1180,6 +1368,16 @@ bz_stations_on_menu_response( player, menu, response )
 		category = "pap";
 		gate = "pap";
 	}
+	else if ( action == "buy_element" )
+	{
+		category = "element_weapon";
+		gate = "elements";
+	}
+	else if ( action == "buy_gear" )
+	{
+		category = "special_gear";
+		gate = "elements";
+	}
 	else
 	{
 		score_now = maps\_bz_state::bz_state_get_score_safe( player );
@@ -1235,6 +1433,35 @@ bz_stations_on_menu_response( player, menu, response )
 				has_prereq = bz_stations_player_has_bowie( player );
 			}
 			res = maps\_bz_state::bz_try_buy_pap_upgrade( player, item_id, weapon_name, has_prereq );
+		}
+	}
+	else if ( category == "element_weapon" )
+	{
+		target_weap = maps\_bz_rules::bz_get_element_weapon_name( item_id );
+		already_has = ( IsDefined( target_weap ) && target_weap != "" && player HasWeapon( target_weap ) );
+		res = maps\_bz_state::bz_try_buy_element_weapon( player, item_id, already_has );
+		if ( res.ok && IsDefined( res.weapon_name ) && res.weapon_name != "" )
+		{
+			bz_stations_give_element_primary( player, res.weapon_name );
+			weapon_name = res.weapon_name;
+		}
+	}
+	else if ( category == "special_gear" )
+	{
+		owns_bowie = bz_stations_player_has_bowie( player );
+		res = maps\_bz_state::bz_try_buy_special_gear( player, item_id, owns_bowie );
+		if ( res.ok )
+		{
+			if ( item_id == "war_club" || item_id == "pap_war_club" )
+			{
+				player UnsetPerk( "specialty_altmelee" );
+				player.has_altmelee = false;
+			}
+			else if ( item_id == "equip_bowie" )
+			{
+				player SetPerk( "specialty_altmelee" );
+				player.has_altmelee = true;
+			}
 		}
 	}
 
