@@ -132,6 +132,26 @@ LASTSTAND_ALL_DOWN_RE = re.compile(
     r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*player_all_players_in_laststand\([ \t]*\)[ \t]*\)",
     re.MULTILINE,
 )
+TESLA_PVP_THREAD_DEF_RE = re.compile(
+    r"^tesla_pvp_thread\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+TESLA_SELF_DAMAGE_BLOCK_RE = re.compile(
+    r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*self\.health[ \t]*-[ \t]*damage[ \t]*<[ \t]*1[ \t]*\)[ \t]*\r?\n"
+    r"[ \t]*\{[ \t]*\r?\n"
+    r"[ \t]*self\.health[ \t]*=[ \t]*1;[ \t]*\r?\n"
+    r"[ \t]*\}[ \t]*\r?\n"
+    r"[ \t]*else[ \t]*\r?\n"
+    r"[ \t]*\{[ \t]*\r?\n"
+    r"[ \t]*self\.health[ \t]*-=[ \t]*damage;[ \t]*\r?\n"
+    r"[ \t]*\}(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE,
+)
+TESLA_CHAIN_FN_CANDIDATES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^tesla_arc_damage\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+    re.compile(r"^tesla_do_damage\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+    re.compile(r"^tesla_damage_init\((?P<params>[^)]*)\)[ \t]*\r?\n\{", re.MULTILINE),
+)
 
 # Verified subset of the 89 FX paths present in ALL FOUR stock Nazi Zombies map fastfiles
 # (nazi_zombie_prototype, nazi_zombie_asylum, nazi_zombie_sumpf, nazi_zombie_factory)
@@ -736,6 +756,149 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
     return text.encode("latin1")
 
 
+def _pick_tesla_player_param(params_raw: str) -> str:
+    """Resolve the player parameter identifier from a stock _zombiemode_tesla.gsc signature."""
+    params = [p.strip() for p in params_raw.split(",") if p.strip()]
+    for param in params:
+        if param.lower() in ("player", "attacker", "eattacker"):
+            return param
+    if params:
+        return params[-1]
+    return "player"
+
+
+def inject_zombiemode_tesla_hooks(source_text: str | bytes) -> str | bytes:
+    """Patch stock maps/_zombiemode_tesla.gsc for Wunderwaffe DG-2 Juggernog fix & chain-stun.
+
+    Fixes WaW 1.7's infamous `tesla_pvp_thread()` self-shock bug where assigning directly to
+    `self.health` resets `self.maxhealth` back to 100 (wiping Juggernog I 160, Juggernog II
+    220, and Titan 320/440 HP):
+      1. Strictly gated under `maps\\_bz_hooks::bz_elements_enabled()` so Classic Mode and
+         `bz_elements_enabled 0` execute the exact stock self-shock code untouched.
+      2. When enabled, skips self-shock completely when Blast Shield grants self-damage
+         immunity (`bz_tesla_is_self_shock_immune`), otherwise brackets `self.health` writes
+         with `sav = self.maxhealth; ... self.maxhealth = sav;` and calls
+         `maps\\_bz_hooks::bz_recompute_player_max_health( self )` immediately after.
+      3. Hooks `tesla_arc_damage` / `tesla_do_damage` / `tesla_damage_init` with a guarded
+         `maps\\_bz_elem_stock::bz_tesla_on_chain_hit( self, <player> )` call for the 3.5s
+         chain-stun buff on chained/nearby zombies.
+    """
+    is_bytes = isinstance(source_text, (bytes, bytearray))
+    text = source_text.decode("latin1") if is_bytes else str(source_text)
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    # 1. Patch tesla_pvp_thread() self-shock health assignment (Sumpf & Der Riese shapes)
+    pvp_match = TESLA_PVP_THREAD_DEF_RE.search(text)
+    if pvp_match is None:
+        raise ValueError("Could not locate tesla_pvp_thread() in _zombiemode_tesla.gsc")
+
+    dmg_match = TESLA_SELF_DAMAGE_BLOCK_RE.search(text, pos=pvp_match.end())
+    if dmg_match is None:
+        raise ValueError(
+            "Could not locate self.health self-shock block inside tesla_pvp_thread() in _zombiemode_tesla.gsc"
+        )
+
+    indent = dmg_match.group("indent")
+    trailing = dmg_match.group("trailing")
+    line_ending = "\r" if dmg_match.group(0).endswith("\r") else ""
+    t = "\t"
+    patched_pvp_block = (
+        f"{indent}if ( maps\\_bz_hooks::bz_elements_enabled() ){newline}"
+        f"{indent}{{{newline}"
+        f"{indent}{t}if ( maps\\_bz_elem_stock::bz_tesla_is_self_shock_immune( self ) ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}maps\\_bz_elem_stock::bz_tesla_on_self_shock( self, damage, true );{newline}"
+        f"{indent}{t}{t}continue;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}sav = self.maxhealth;{newline}"
+        f"{indent}{t}if ( self.health - damage < 1 ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health = 1;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}else{newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health -= damage;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}self.maxhealth = sav;{newline}"
+        f"{indent}{t}maps\\_bz_hooks::bz_recompute_player_max_health( self );{newline}"
+        f"{indent}{t}maps\\_bz_elem_stock::bz_tesla_on_self_shock( self, damage, false );{newline}"
+        f"{indent}}}{newline}"
+        f"{indent}else{newline}"
+        f"{indent}{{{newline}"
+        f"{indent}{t}if ( self.health - damage < 1 ){newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health = 1;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}{t}else{newline}"
+        f"{indent}{t}{{{newline}"
+        f"{indent}{t}{t}self.health -= damage;{newline}"
+        f"{indent}{t}}}{newline}"
+        f"{indent}}}{trailing}{line_ending}"
+    )
+    text = text[: dmg_match.start()] + patched_pvp_block + text[dmg_match.end() :]
+
+    # 2. Hook chain-hit seam for buffed Wunderwaffe stun
+    chain_match: re.Match[str] | None = None
+    for pattern in TESLA_CHAIN_FN_CANDIDATES:
+        chain_match = pattern.search(text)
+        if chain_match is not None:
+            break
+    if chain_match is None:
+        raise ValueError(
+            "Could not locate tesla_arc_damage(), tesla_do_damage(), or tesla_damage_init() "
+            "in _zombiemode_tesla.gsc"
+        )
+    player_param = _pick_tesla_player_param(chain_match.group("params"))
+    chain_hook = (
+        f"{newline}"
+        f"\tif ( maps\\_bz_hooks::bz_elements_enabled() ){newline}"
+        f"\t{{{newline}"
+        f"\t\tmaps\\_bz_elem_stock::bz_tesla_on_chain_hit( self, {player_param} );{newline}"
+        f"\t}}"
+    )
+    text = text[: chain_match.end()] + chain_hook + text[chain_match.end() :]
+
+    return text.encode("latin1") if is_bytes else text
+
+
+def stage_bz_tesla_script(
+    tools_root: Path,
+    stage_dir: Path,
+    steam_game: Path | None = None,
+) -> Path | None:
+    """Patch and stage maps/_zombiemode_tesla.gsc when stock Tesla script is available.
+
+    Prefers `tools_root/raw/maps/_zombiemode_tesla.gsc` (Mod Tools raw tree) and falls back
+    to extracting from `nazi_zombie_factory` / `nazi_zombie_sumpf` fastfiles when present.
+    Returns the staged Path, or None if no stock `_zombiemode_tesla.gsc` exists on this host.
+    """
+    stock_bytes: bytes | None = None
+    raw_tesla = tools_root / "raw" / "maps" / "_zombiemode_tesla.gsc"
+    if raw_tesla.is_file():
+        stock_bytes = raw_tesla.read_bytes()
+    elif steam_game is not None:
+        for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
+            try:
+                extracted = try_extract_stock_script(
+                    map_name, "maps/_zombiemode_tesla.gsc", steam_game, tools_root
+                )
+            except FileNotFoundError:
+                extracted = None
+            if extracted is not None:
+                stock_bytes = extracted
+                break
+
+    if stock_bytes is None:
+        return None
+
+    patched_bytes = inject_zombiemode_tesla_hooks(stock_bytes)
+    assert isinstance(patched_bytes, bytes)
+    out_path = stage_dir / "maps" / "_zombiemode_tesla.gsc"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(patched_bytes)
+    return out_path
+
+
 def parse_weapon_file(text: str) -> list[tuple[str, str]]:
     """Parse a WaW 1.7 backslash-delimited WEAPONFILE\\key\\val\\... string."""
     cleaned = text.rstrip("\r\n")
@@ -858,7 +1021,7 @@ def generate_staged_mod_csv(
             stem.startswith("_bz_")
             or stem.startswith("_zombiemode_weapons_bz_")
             or stem.startswith("_zombiemode_perks_bz_")
-            or stem in ("_zombiemode_score.gsc", "_laststand.gsc")
+            or stem in ("_zombiemode_score.gsc", "_laststand.gsc", "_zombiemode_tesla.gsc")
         )
         if not is_bz_script:
             continue
@@ -1116,6 +1279,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     laststand_dst = stage_dir / "maps" / "_laststand.gsc"
     laststand_dst.parent.mkdir(parents=True, exist_ok=True)
     laststand_dst.write_bytes(laststand_patched)
+
+    # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
+    stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
