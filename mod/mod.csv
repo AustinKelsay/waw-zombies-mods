@@ -4,6 +4,8 @@
 
 // Core Gauntlet scaffold scripts
 rawfile,maps/_gauntlet_log.gsc
+rawfile,maps/_gauntlet_rules.gsc
+rawfile,maps/_gauntlet_state.gsc
 rawfile,maps/_gauntlet_bootstrap.gsc
 
 // Build-staged stock-safe entry hooks for all four stock Nazi Zombies maps
