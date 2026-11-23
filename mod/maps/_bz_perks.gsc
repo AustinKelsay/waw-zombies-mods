@@ -1323,7 +1323,7 @@ bz_perks_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = 32;
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 32 );
 		hud.foreground = true;
 		hud.sort = 5;
 		hud.hidewheninmenu = true;

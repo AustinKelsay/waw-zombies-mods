@@ -959,7 +959,7 @@ class TestBzHooksAndComposition(unittest.TestCase):
             "perks",
         )
 
-        # Normal zombie melee passes through previous callback (50 -> 40)
+        # Normal zombie melee passes through BZ hooks first, then chains into previous callback (50 -> 40)
         dmg_melee = self.gsc.call_on(
             self.player,
             BZ_HOOKS_MOD,
@@ -977,9 +977,11 @@ class TestBzHooksAndComposition(unittest.TestCase):
             0,
         )
         self.assertEqual(dmg_melee, 40)
-        self.assertEqual(chain_log, ["prev", "blast_shield"])
+        self.assertEqual(chain_log, ["blast_shield", "prev"])
 
-        # Explosive splash cancelled to 0 by Blast Shield
+        # Explosive splash cancelled to 0 by Blast Shield BEFORE prev_cb runs
+        # (prevents stock player_damage_override from downing/ending game on intercepted hits)
+        chain_log.clear()
         dmg_splash = self.gsc.call_on(
             self.player,
             BZ_HOOKS_MOD,
@@ -997,6 +999,7 @@ class TestBzHooksAndComposition(unittest.TestCase):
             0,
         )
         self.assertEqual(dmg_splash, 0)
+        self.assertEqual(chain_log, ["blast_shield"])
 
     def test_actor_damage_dispatch_composes_multipliers_and_instant_kill_with_gates(self) -> None:
         self._enable_all_phase1()

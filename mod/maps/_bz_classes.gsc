@@ -87,6 +87,10 @@ bz_class_ensure_player_fields( player )
 	{
 		player.bz_max_grenades = 4;
 	}
+	if ( !IsDefined( player.bz_sapper_grenade_reserve ) )
+	{
+		player.bz_sapper_grenade_reserve = 0;
+	}
 	if ( !IsDefined( player.bz_sapper_trap_next_type ) )
 	{
 		player.bz_sapper_trap_next_type = "fire";
@@ -157,10 +161,6 @@ bz_class_get_frag_weapon( player )
 	if ( player HasWeapon( "stielhandgranate" ) )
 	{
 		return "stielhandgranate";
-	}
-	if ( player HasWeapon( "fraggrenade" ) )
-	{
-		return "fraggrenade";
 	}
 	if ( IsDefined( player.bz_frag_weapon ) && player.bz_frag_weapon != "" )
 	{
@@ -233,7 +233,7 @@ bz_class_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = 14;
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 14 );
 		hud.foreground = true;
 		hud.sort = 6;
 		hud.hidewheninmenu = true;
@@ -417,8 +417,7 @@ bz_classes_on_round_start( round_num )
 			if ( refill_count > 0 )
 			{
 				p.bz_sapper_last_refill_round = r;
-				frag = bz_class_get_frag_weapon( p );
-				p SetWeaponAmmoClip( frag, refill_count );
+				bz_sapper_set_grenades( p, refill_count );
 
 				fields = [];
 				fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( p ) );
@@ -554,6 +553,7 @@ bz_class_teardown( player, previous_class )
 	{
 		base_max = maps\_bz_rules::bz_calc_max_grenades( "" );
 		player.bz_max_grenades = base_max;
+		player.bz_sapper_grenade_reserve = 0;
 		frag = bz_class_get_frag_weapon( player );
 		if ( player GetWeaponAmmoClip( frag ) > base_max )
 		{
@@ -618,8 +618,7 @@ bz_class_apply( player, class_id )
 	{
 		max_nades = maps\_bz_rules::bz_calc_max_grenades( "sapper" );
 		player.bz_max_grenades = max_nades;
-		frag = bz_class_get_frag_weapon( player );
-		player SetWeaponAmmoClip( frag, max_nades );
+		bz_sapper_set_grenades( player, max_nades );
 		player thread bz_sapper_grenade_watch();
 		player thread bz_sapper_wall_buy_watch();
 	}
@@ -1243,6 +1242,92 @@ bz_sapper_on_grenade_detonate( player, origin, base_radius, base_damage )
 	return res;
 }
 
+// WaW 1.7's stock stielhandgranate weapon file clamps engine clip size to 4.
+// Track overflow grenades in player.bz_sapper_grenade_reserve so Sapper can
+// hold and throw all 10 grenades per round without custom weapon assets.
+bz_sapper_set_grenades( player, total_count )
+{
+	if ( !IsDefined( player ) )
+	{
+		return 0;
+	}
+	bz_class_ensure_player_fields( player );
+
+	target = Int( total_count );
+	if ( target < 0 )
+	{
+		target = 0;
+	}
+
+	frag = bz_class_get_frag_weapon( player );
+	player SetWeaponAmmoClip( frag, target );
+	actual_clip = Int( player GetWeaponAmmoClip( frag ) );
+	if ( actual_clip < 0 )
+	{
+		actual_clip = 0;
+	}
+
+	reserve = target - actual_clip;
+	if ( reserve < 0 )
+	{
+		reserve = 0;
+	}
+	player.bz_sapper_grenade_reserve = reserve;
+	return actual_clip + reserve;
+}
+
+bz_sapper_get_total_grenades( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return 0;
+	}
+	bz_class_ensure_player_fields( player );
+	frag = bz_class_get_frag_weapon( player );
+	clip = Int( player GetWeaponAmmoClip( frag ) );
+	if ( clip < 0 )
+	{
+		clip = 0;
+	}
+	reserve = 0;
+	if ( IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
+	{
+		reserve = Int( player.bz_sapper_grenade_reserve );
+	}
+	return clip + reserve;
+}
+
+bz_sapper_on_grenade_thrown( player, weap_name )
+{
+	if ( !IsDefined( player ) )
+	{
+		return 0;
+	}
+	bz_class_ensure_player_fields( player );
+	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	{
+		return 0;
+	}
+
+	frag = bz_class_get_frag_weapon( player );
+	if ( IsDefined( weap_name ) && weap_name != "" )
+	{
+		wn = maps\_bz_rules::bz_normalize_id( weap_name );
+		if ( wn != frag && !IsSubStr( wn, "stielhandgranate" ) && !IsSubStr( wn, "frag" ) )
+		{
+			return bz_sapper_get_total_grenades( player );
+		}
+	}
+
+	if ( IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
+	{
+		player.bz_sapper_grenade_reserve = Int( player.bz_sapper_grenade_reserve ) - 1;
+		cur_clip = Int( player GetWeaponAmmoClip( frag ) );
+		player SetWeaponAmmoClip( frag, cur_clip + 1 );
+	}
+	return bz_sapper_get_total_grenades( player );
+}
+
 bz_sapper_grenade_watch()
 {
 	self endon( "disconnect" );
@@ -1256,6 +1341,7 @@ bz_sapper_grenade_watch()
 		{
 			return;
 		}
+		bz_sapper_on_grenade_thrown( self, weap_name );
 		if ( IsDefined( grenade ) )
 		{
 			self thread bz_sapper_track_thrown_grenade( grenade );

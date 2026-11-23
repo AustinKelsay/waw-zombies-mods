@@ -317,6 +317,11 @@ bz_init()
 		}
 	}
 	level thread bz_watch_connecting_players();
+
+	if ( GetDvarInt( "bz_test_selftest" ) == 1 )
+	{
+		level thread bz_run_test_selftest();
+	}
 }
 
 bz_watch_connecting_players()
@@ -595,22 +600,17 @@ bz_player_damage_override( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeat
 		return iDamage;
 	}
 
-	final_damage = iDamage;
-	if ( IsDefined( prev_cb ) )
-	{
-		prev_res = self [[ prev_cb ]]( eInflictor, eAttacker, final_damage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime );
-		if ( IsDefined( prev_res ) )
-		{
-			final_damage = prev_res;
-		}
-	}
-
+	// Run Base Zombies damage interception hooks (invulnerability, Blast Shield,
+	// Daredevil fall/slam immunity, Second Chance) BEFORE forwarding to stock
+	// player_damage_override (prev_cb). In WaW 1.7, stock player_damage_override
+	// immediately applies finishPlayerDamageWrapper / PlayerLastStand / end_game
+	// on lethal hits, so cancelled damage must short-circuit before prev_cb runs.
 	ctx = SpawnStruct();
 	ctx.player = self;
 	ctx.inflictor = eInflictor;
 	ctx.attacker = eAttacker;
 	ctx.base_damage = iDamage;
-	ctx.damage = final_damage;
+	ctx.damage = iDamage;
 	ctx.flags = iDFlags;
 	ctx.mod = sMeansOfDeath;
 	ctx.weapon = sWeapon;
@@ -639,10 +639,24 @@ bz_player_damage_override( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeat
 	}
 
 	out_dmg = Int( ctx.damage );
-	if ( out_dmg < 0 )
+	if ( out_dmg <= 0 )
 	{
-		out_dmg = 0;
+		return 0;
 	}
+
+	if ( IsDefined( prev_cb ) )
+	{
+		prev_res = self [[ prev_cb ]]( eInflictor, eAttacker, out_dmg, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime );
+		if ( IsDefined( prev_res ) )
+		{
+			out_dmg = Int( prev_res );
+			if ( out_dmg < 0 )
+			{
+				out_dmg = 0;
+			}
+		}
+	}
+
 	return out_dmg;
 }
 
@@ -1089,4 +1103,300 @@ bz_recompute_player_max_health( player )
 		}
 	}
 	return max_hp;
+}
+
+// ---------------------------------------------------------------------------
+// Top-Right HUD Lane Offset (Prevents Overlap When Gauntlet HUD Is Active)
+// ---------------------------------------------------------------------------
+
+bz_get_hud_lane_y( base_y )
+{
+	y = base_y;
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		y = y + 18;
+	}
+	return y;
+}
+
+// ---------------------------------------------------------------------------
+// Gated Live Phase 1 Self-Test (Only Runs When bz_test_selftest == 1)
+// ---------------------------------------------------------------------------
+
+bz_selftest_check( st, ok, label )
+{
+	if ( IsDefined( ok ) && ok )
+	{
+		st.passed = st.passed + 1;
+		return true;
+	}
+	st.failed = st.failed + 1;
+	if ( st.fail_list == "" )
+	{
+		st.fail_list = label;
+	}
+	else
+	{
+		st.fail_list = st.fail_list + "," + label;
+	}
+	return false;
+}
+
+bz_run_test_selftest()
+{
+	level endon( "end_game" );
+
+	if ( !bz_enabled() || GetDvarInt( "bz_test_selftest" ) != 1 )
+	{
+		return;
+	}
+
+	// Wait for first alive spawned player (up to 20s)
+	p = undefined;
+	elapsed = 0.0;
+	while ( !IsDefined( p ) && elapsed < 20.0 )
+	{
+		players = GetPlayers();
+		if ( IsDefined( players ) && players.size > 0 )
+		{
+			for ( i = 0; i < players.size; i++ )
+			{
+				if ( IsDefined( players[i] ) && IsAlive( players[i] ) )
+				{
+					p = players[i];
+					break;
+				}
+			}
+		}
+		if ( !IsDefined( p ) )
+		{
+			wait( 0.25 );
+			elapsed = elapsed + 0.25;
+		}
+	}
+
+	if ( !IsDefined( p ) )
+	{
+		maps\_bz_log::emit( "BZ_SELFTEST_FAIL", "reason=no_alive_player" );
+		return;
+	}
+
+	// Let initial player spawn weapons & level init settle
+	wait( 1.5 );
+
+	st = SpawnStruct();
+	st.passed = 0;
+	st.failed = 0;
+	st.fail_list = "";
+
+	map_name = bz_get_map_name();
+
+	// 1. All 4 Stations spawned
+	stations_ok = IsDefined( level.bz_stations ) &&
+		IsDefined( level.bz_stations["perks"] ) &&
+		IsDefined( level.bz_stations["class"] ) &&
+		IsDefined( level.bz_stations["arsenal"] ) &&
+		IsDefined( level.bz_stations["pap"] );
+	bz_selftest_check( st, stations_ok, "stations_spawned" );
+
+	// Grant ample test points for full Station purchase sweep
+	p.score = 300000;
+
+	// 2. Specialty Perk Station: Standard Perks, Tier 2, and all 4 Apex Perks
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:staminup" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_perk( p, "staminup" ) && p.bz_move_speed_scale > 1.0, "perk_staminup" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:mule_kick" );
+	bz_selftest_check( st, bz_get_max_primary_weapons( p ) == 3, "perk_mule_kick_3" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_t2:mule_kick" );
+	bz_selftest_check( st, bz_get_max_primary_weapons( p ) == 4, "perk_mule_kick_t2_4" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:ap" );
+	bz_on_menu_response( p, "bz_station_perks", "buy_t2:ap" );
+	ap_dmg = bz_actor_damage_dispatch( undefined, p, p, 100, 0, "MOD_RIFLE_BULLET", p GetCurrentWeapon(), p.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_perk_t2( p, "ap" ) && ap_dmg > 100, "perk_ap_t2" );
+
+	p SetPerk( "specialty_armorvest" );
+	bz_on_menu_response( p, "bz_station_perks", "buy_t2:juggernog" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_perk_t2( p, "juggernog" ) && Int( p.maxhealth ) == 220, "perk_jugg_t2_220" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:double_ammo" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "double_ammo" ), "apex_double_ammo" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:lightweight_heavy" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "lightweight_heavy" ), "apex_lightweight_heavy" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:blast_shield" );
+	bs_dmg = p bz_player_damage_override( p, p, 80, 0, "MOD_GRENADE_SPLASH", "stielhandgranate", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "blast_shield" ) && bs_dmg == 0, "apex_blast_shield" );
+
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:second_chance" );
+	sc_ready_before = IsDefined( p.bz_second_chance_ready ) && p.bz_second_chance_ready;
+	sc_dmg = p bz_player_damage_override( undefined, undefined, 9999, 0, "MOD_MELEE", "none", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
+	sc_consumed = sc_ready_before && sc_dmg == 0 && ( !IsDefined( p.bz_second_chance_ready ) || !p.bz_second_chance_ready );
+	bz_selftest_check( st, sc_consumed, "apex_second_chance_trigger" );
+
+	// Clear temporary Second Chance invuln window before subsequent damage hook tests
+	p.bz_invuln_until = 0;
+
+	// Verify round-start recharges Second Chance
+	bz_on_round_start( 2 );
+	bz_selftest_check( st, IsDefined( p.bz_second_chance_ready ) && p.bz_second_chance_ready, "apex_second_chance_recharge" );
+
+	// 3. Class Altar: Swap across all 6 Classes
+	bz_on_menu_response( p, "bz_station_class", "buy_class:medic" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "medic", "class_medic" );
+
+	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
+	titan_hp = Int( p.maxhealth );
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "titan" && titan_hp == 440, "class_titan_440hp" );
+
+	bz_on_menu_response( p, "bz_station_class", "buy_class:sapper" );
+	sapper_nades = maps\_bz_classes::bz_sapper_get_total_grenades( p );
+	// Simulate grenade draw from virtual pouch (engine clip clamped to 4 + 6 reserve = 10)
+	sapper_clip = Int( p GetWeaponAmmoClip( "stielhandgranate" ) );
+	if ( sapper_clip > 0 )
+	{
+		p SetWeaponAmmoClip( "stielhandgranate", sapper_clip - 1 );
+	}
+	sapper_after_throw = maps\_bz_classes::bz_sapper_on_grenade_thrown( p, "stielhandgranate" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "sapper" && sapper_nades == 10 && sapper_after_throw == 9 && Int( p.maxhealth ) == 220, "class_sapper_10nades" );
+
+	bz_on_menu_response( p, "bz_station_class", "buy_class:daredevil" );
+	dd_fall = p bz_player_damage_override( undefined, undefined, 150, 0, "MOD_FALLING", "none", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
+	dd_slam = maps\_bz_classes::bz_daredevil_execute_slam( p, 120, p.origin );
+	dd_vel = p GetVelocity();
+	if ( IsDefined( dd_vel ) )
+	{
+		p SetVelocity( ( dd_vel[0], dd_vel[1], 100 ) );
+	}
+	dd_ok = maps\_bz_state::bz_state_get_class( p ) == "daredevil" &&
+		dd_fall == 0 &&
+		IsDefined( dd_slam ) && dd_slam.damage > 0 &&
+		IsDefined( p.bz_daredevil_burst_active ) && p.bz_daredevil_burst_active;
+	bz_selftest_check( st, dd_ok, "class_daredevil_slam_burst" );
+
+	bz_on_menu_response( p, "bz_station_class", "buy_class:assassin" );
+	hs_dmg = bz_actor_damage_dispatch( undefined, p, p, 100, 0, "MOD_HEAD_SHOT", p GetCurrentWeapon(), p.origin, ( 0, 0, 0 ), "head", 0 );
+
+	// Wait briefly for a real live Der Riese zombie to verify SetContents(0) + restore
+	ghost_z = undefined;
+	z_wait = 0.0;
+	while ( !IsDefined( ghost_z ) && z_wait < 8.0 )
+	{
+		zlist = GetAiSpeciesArray( "axis", "all" );
+		if ( IsDefined( zlist ) && zlist.size > 0 )
+		{
+			for ( zi = 0; zi < zlist.size; zi++ )
+			{
+				if ( IsDefined( zlist[zi] ) && IsAlive( zlist[zi] ) )
+				{
+					ghost_z = zlist[zi];
+					break;
+				}
+			}
+		}
+		if ( !IsDefined( ghost_z ) )
+		{
+			wait( 0.25 );
+			z_wait = z_wait + 0.25;
+		}
+	}
+
+	ghost_ok = false;
+	if ( IsDefined( ghost_z ) )
+	{
+		maps\_bz_classes::bz_assassin_acquire_ghost_on_zombie( p, ghost_z );
+		was_ghosted = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 1 && IsDefined( ghost_z.bz_orig_contents );
+		maps\_bz_classes::bz_assassin_restore_all_zombies( p );
+		was_restored = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 0 && !IsDefined( ghost_z.bz_orig_contents );
+		ghost_ok = was_ghosted && was_restored;
+	}
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "assassin" && hs_dmg >= 500 && ghost_ok, "class_assassin_ghost" );
+
+	bz_on_menu_response( p, "bz_station_class", "buy_class:broker" );
+	broker_pts = bz_points_modify( p, 100, "score" );
+	broker_box = bz_box_cost_modify( p, 950 );
+	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475, "class_broker_2x_475" );
+
+	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP + PaP Bowie + PaP Cluster
+	bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
+	cur_w = "";
+	w_wait = 0.0;
+	while ( w_wait < 2.0 )
+	{
+		cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
+		{
+			break;
+		}
+		wait( 0.1 );
+		w_wait = w_wait + 0.1;
+	}
+	bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
+
+	bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+
+	p SetPerk( "specialty_altmelee" );
+	p.has_altmelee = true;
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_bowie" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_bowie", "" ), "pap_bowie" );
+
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_cluster" );
+	cluster_res = maps\_bz_pap::bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );
+	bz_selftest_check( st, maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_cluster", "" ) && IsDefined( cluster_res ) && cluster_res.mini_count == 4 && cluster_res.self_immune, "pap_cluster" );
+
+	// 5. Verify HUD creation across all 3 Phase 1 HUD lanes
+	huds_created = IsDefined( p.bz_perks_hud ) && IsDefined( p.bz_class_hud ) && IsDefined( p.bz_pap_hud );
+	bz_selftest_check( st, huds_created, "huds_created" );
+
+	// 6. Down-Reset vs Class/PaP Persistence Boundary
+	bz_on_player_downed( p );
+	down_reset_ok = !maps\_bz_state::bz_state_has_perk( p, "staminup" ) &&
+		!maps\_bz_state::bz_state_has_perk( p, "mule_kick" ) &&
+		!maps\_bz_state::bz_state_has_perk_t2( p, "juggernog" ) &&
+		!maps\_bz_state::bz_state_has_apex( p, "second_chance" ) &&
+		!maps\_bz_state::bz_state_has_apex( p, "blast_shield" ) &&
+		bz_get_max_primary_weapons( p ) == 2 &&
+		maps\_bz_state::bz_state_get_class( p ) == "broker" &&
+		maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) &&
+		maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_bowie", "" ) &&
+		maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_cluster", "" );
+	bz_selftest_check( st, down_reset_ok, "down_reset_boundary" );
+
+	// 7. End-Game HUD & Station Cleanup
+	bz_on_end_game();
+	cleanup_ok = !IsDefined( p.bz_perks_hud ) &&
+		!IsDefined( p.bz_class_hud ) &&
+		!IsDefined( p.bz_pap_hud ) &&
+		IsDefined( level.bz_station_entities ) &&
+		level.bz_station_entities.size == 0;
+	bz_selftest_check( st, cleanup_ok, "hud_station_cleanup" );
+
+	// Emit final structured telemetry
+	if ( st.failed == 0 )
+	{
+		fields = [];
+		fields[0] = maps\_bz_log::kv( "map", map_name );
+		fields[1] = maps\_bz_log::kv( "checks", st.passed );
+		fields[2] = maps\_bz_log::kv( "stations", 4 );
+		fields[3] = maps\_bz_log::kv( "titan_hp", titan_hp );
+		fields[4] = maps\_bz_log::kv( "sapper_nades", sapper_nades );
+		fields[5] = maps\_bz_log::kv( "broker_pts", broker_pts );
+		fields[6] = maps\_bz_log::kv( "broker_box", broker_box );
+		fields[7] = maps\_bz_log::kv( "dpap_weapon", cur_w );
+		fields[8] = maps\_bz_log::kv( "assassin_ghost", bz_bool_int( ghost_ok ) );
+		maps\_bz_log::emit( "BZ_SELFTEST_PASS", maps\_bz_log::join_fields( fields ) );
+	}
+	else
+	{
+		ffields = [];
+		ffields[0] = maps\_bz_log::kv( "map", map_name );
+		ffields[1] = maps\_bz_log::kv( "passed", st.passed );
+		ffields[2] = maps\_bz_log::kv( "failed", st.failed );
+		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
+		maps\_bz_log::emit( "BZ_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
+	}
 }

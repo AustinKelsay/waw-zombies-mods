@@ -616,7 +616,7 @@ bz_stations_player_has_bowie( player )
 	{
 		return true;
 	}
-	if ( player HasWeapon( "bowie_knife" ) )
+	if ( IsDefined( player.has_altmelee ) && player.has_altmelee )
 	{
 		return true;
 	}
