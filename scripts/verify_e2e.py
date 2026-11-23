@@ -207,6 +207,14 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         script_relpath="scripts/verify_perks.py",
         description="Verify active perks carry across Stages onto Cycle 2 Nacht der Untoten (ADR-0004) with Classic isolation.",
     ),
+    StageSpec(
+        stage_id="base-zombies-p1",
+        name="Base Zombies Phase 1 Der Riese E2E",
+        category="engine",
+        args=("scripts/verify_base_zombies_p1.py", "--skip-build"),
+        script_relpath="scripts/verify_base_zombies_p1.py",
+        description="Verify Der Riese Base Zombies Phase 1 (4 Stations, Perks, 6 Classes, PaP, HUD) and Classic Mode isolation.",
+    ),
 )
 
 

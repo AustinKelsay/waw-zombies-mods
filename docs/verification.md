@@ -51,6 +51,7 @@ python3 scripts/verify_e2e.py --offline-only
 | 7 | `team-wipe` | `python3 scripts/verify_wipe.py --skip-build` | Team wipe detection, **Run Summary** telemetry/overlay emission, and complete Run dvar reset so the next Run begins cleanly at Cycle 1, Stage 1, Round 1. | Issue #9 AC #4 |
 | 8 | `hud-menus` | `python3 scripts/verify_hud_menus.py --skip-build` | Persistent Gauntlet corner HUD overlay (`GAUNTLET - C<cycle> S<stage>/4 - TARGET R<target>`) and Solo / Co-op menu mode entry points. | Issue #1 User Stories #1–3, #18, #23 |
 | 9 | `perk-carryover` | `python3 scripts/verify_perks.py --skip-build` | Cross-map Perk Carryover (Der Riese → Cycle 2 Nacht der Untoten with Juggernog `160` HP and stock perk HUD icons) plus Classic Mode isolation. | ADR-0004 |
+| 10 | `base-zombies-p1` | `python3 scripts/verify_base_zombies_p1.py --skip-build` | Der Riese Base Zombies Phase 1 live self-test (4 Stations, Perks + Tier 2 + Apex, 6 Classes, Pack-a-Punch Expansion, down-reset persistence boundary, HUD cleanup) plus Classic Mode (`bz_enabled 0`) isolation. | Issue #18 (P1-T7) |
 
 ---
 

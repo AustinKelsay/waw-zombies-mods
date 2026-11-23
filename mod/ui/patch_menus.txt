@@ -13,4 +13,8 @@
 	loadMenu { "ui/pc_joinchoosegamemode.menu" }
 	loadMenu { "ui/xboxlive_lobby.menu" }
 	loadMenu { "ui/systemlink_lobby.menu" }
+	loadMenu { "ui/bz_station_perks.menu" }
+	loadMenu { "ui/bz_station_class.menu" }
+	loadMenu { "ui/bz_station_arsenal.menu" }
+	loadMenu { "ui/bz_station_pap.menu" }
 }
