@@ -200,6 +200,8 @@ on_pre_zombiemode_init()
 	{
 		return;
 	}
+
+	maps\_gauntlet_hud::on_pre_zombiemode_init();
 }
 
 // Seam called inside round_start() immediately before level thread round_think().
@@ -297,6 +299,8 @@ on_stage_ready( state, stage_info )
 	{
 		apply_high_round_start( state, stage_info );
 	}
+
+	maps\_gauntlet_hud::init_gauntlet_hud( state, stage_info, level.gauntlet_effective_target_round );
 
 	prep_duration = resolve_prep_phase_duration( stage_info );
 	if ( prep_duration > 0 )
@@ -1098,6 +1102,7 @@ on_end_game()
 		return false;
 	}
 
+	maps\_gauntlet_hud::destroy_gauntlet_hud( "end_game" );
 	maps\_gauntlet_state::clear_run_state();
 	return false;
 }

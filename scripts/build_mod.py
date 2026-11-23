@@ -283,6 +283,10 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         zm_dst.parent.mkdir(parents=True, exist_ok=True)
         zm_dst.write_bytes(zm_patched_bytes)
 
+    import verify_hud_menus
+
+    verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
+
     return stage_dir
 
 

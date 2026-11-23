@@ -1,0 +1,16 @@
+// Zombie Gauntlet frontend menu manifest (extends stock ui/patch_menus.txt).
+// Loaded automatically by CoD:WaW 1.7 when mod.ff is active via menufile,ui/patch_menus.txt.
+
+{
+	loadMenu { "ui/error.menu" }
+	loadMenu { "ui/objective_info.menu" }
+	loadMenu { "ui/playerprofile.menu" }
+	loadMenu { "ui_mp/manage_friends.menu" }
+	loadMenu { "ui/filter.menu" }
+	loadMenu { "ui/main.menu" }
+	loadMenu { "ui/levels.menu" }
+	loadMenu { "ui/pc_gamesetup_coop.menu" }
+	loadMenu { "ui/pc_joinchoosegamemode.menu" }
+	loadMenu { "ui/xboxlive_lobby.menu" }
+	loadMenu { "ui/systemlink_lobby.menu" }
+}
