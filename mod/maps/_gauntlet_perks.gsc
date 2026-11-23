@@ -525,6 +525,33 @@ watch_carried_perk_loss( player, perk )
 	level thread watch_carried_perk_loss_event( player, perk, "fake_death" );
 }
 
+collect_player_active_perks( player )
+{
+	active_perks = [];
+	if ( !IsDefined( player ) )
+	{
+		return active_perks;
+	}
+
+	is_spectator = ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" );
+	if ( is_spectator || !IsAlive( player ) )
+	{
+		return active_perks;
+	}
+
+	supported = get_supported_perks();
+	for ( i = 0; i < supported.size; i++ )
+	{
+		if ( player HasPerk( supported[i] ) )
+		{
+			idx = active_perks.size;
+			active_perks[idx] = supported[i];
+		}
+	}
+
+	return active_perks;
+}
+
 snapshot_player_perks( player, current_map )
 {
 	active_perks = [];
@@ -538,20 +565,7 @@ snapshot_player_perks( player, current_map )
 	player_key = maps\_gauntlet_state::make_player_key( guid, name );
 	map_label = resolve_map_label( current_map );
 
-	is_spectator = ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" );
-	if ( !is_spectator && IsAlive( player ) )
-	{
-		supported = get_supported_perks();
-		for ( i = 0; i < supported.size; i++ )
-		{
-			if ( player HasPerk( supported[i] ) )
-			{
-				idx = active_perks.size;
-				active_perks[idx] = supported[i];
-			}
-		}
-	}
-
+	active_perks = collect_player_active_perks( player );
 	record_player_perks( guid, name, active_perks );
 
 	fields = [];
@@ -576,6 +590,83 @@ snapshot_all_players_perks( current_map )
 	}
 }
 
+apply_single_perk_to_player( player, perk )
+{
+	if ( !IsDefined( player ) || player HasPerk( perk ) )
+	{
+		return false;
+	}
+
+	player SetPerk( perk );
+
+	if ( perk == "specialty_armorvest" )
+	{
+		jugg_health = get_juggernaut_health();
+		player.maxhealth = jugg_health;
+		player.health = jugg_health;
+	}
+
+	create_perk_hud_icon( player, perk );
+	level thread watch_carried_perk_loss( player, perk );
+	return true;
+}
+
+// Deterministic test-only helper (disabled by default: gauntlet_test_grant_perks="").
+// Consumes the dvar once on initial spawn so automated verification can seed
+// real engine perks on Stage 1 and assert natural carryover across later maps.
+maybe_apply_test_grant_perks( player, current_map )
+{
+	granted = [];
+	raw_grant = GetDvar( "gauntlet_test_grant_perks" );
+	if ( raw_grant == "" || !IsDefined( player ) )
+	{
+		return granted;
+	}
+
+	SetDvar( "gauntlet_test_grant_perks", "" );
+	requested = decode_perk_list( raw_grant );
+	for ( i = 0; i < requested.size; i++ )
+	{
+		if ( apply_single_perk_to_player( player, requested[i] ) )
+		{
+			idx = granted.size;
+			granted[idx] = requested[i];
+		}
+	}
+
+	if ( granted.size > 0 )
+	{
+		guid = resolve_player_guid( player );
+		name = resolve_player_name( player );
+		player_key = maps\_gauntlet_state::make_player_key( guid, name );
+		map_label = resolve_map_label( current_map );
+
+		g_fields = [];
+		g_fields[0] = maps\_gauntlet_log::kv( "player", player_key );
+		g_fields[1] = maps\_gauntlet_log::kv( "perks", format_perk_csv( granted ) );
+		g_fields[2] = maps\_gauntlet_log::kv( "count", granted.size );
+		g_fields[3] = maps\_gauntlet_log::kv( "map", map_label );
+		maps\_gauntlet_log::emit( "PERKS_TEST_GRANTED", maps\_gauntlet_log::join_fields( g_fields ) );
+	}
+
+	return granted;
+}
+
+restore_player_perks_when_alive( player, current_map )
+{
+	player endon( "disconnect" );
+	level endon( "end_game" );
+	level endon( "gauntlet_stage_clear" );
+
+	player waittill( "spawned_player" );
+
+	if ( IsDefined( player ) )
+	{
+		player.gauntlet_perks_deferred = false;
+		restore_player_perks( player, current_map );
+	}
+}
+
 restore_player_perks( player, current_map )
 {
 	restored = [];
@@ -588,7 +679,23 @@ restore_player_perks( player, current_map )
 	{
 		return restored;
 	}
+
+	// Defer perk restoration for mid-round reconnecting spectators until they
+	// actually respawn alive so stock respawn does not wipe Juggernog maxhealth
+	// or leave floating perk HUD icons while spectating.
+	is_spectator = ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" );
+	if ( is_spectator || !IsAlive( player ) )
+	{
+		if ( !IsDefined( player.gauntlet_perks_deferred ) || !player.gauntlet_perks_deferred )
+		{
+			player.gauntlet_perks_deferred = true;
+			level thread restore_player_perks_when_alive( player, current_map );
+		}
+		return restored;
+	}
+
 	player.gauntlet_perks_applied = true;
+	player.gauntlet_perks_deferred = false;
 
 	guid = resolve_player_guid( player );
 	name = resolve_player_name( player );
@@ -599,33 +706,28 @@ restore_player_perks( player, current_map )
 	for ( i = 0; i < recorded.size; i++ )
 	{
 		perk = recorded[i];
-		if ( player HasPerk( perk ) )
+		if ( apply_single_perk_to_player( player, perk ) )
 		{
-			continue;
+			r_idx = restored.size;
+			restored[r_idx] = perk;
 		}
+	}
 
-		player SetPerk( perk );
-
-		if ( perk == "specialty_armorvest" )
-		{
-			jugg_health = get_juggernaut_health();
-			player.maxhealth = jugg_health;
-			player.health = jugg_health;
-		}
-
-		create_perk_hud_icon( player, perk );
-		level thread watch_carried_perk_loss( player, perk );
-
-		r_idx = restored.size;
-		restored[r_idx] = perk;
+	max_hp = 100;
+	if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
+	{
+		max_hp = Int( player.maxhealth );
 	}
 
 	fields = [];
 	fields[0] = maps\_gauntlet_log::kv( "player", player_key );
 	fields[1] = maps\_gauntlet_log::kv( "perks", format_perk_csv( restored ) );
 	fields[2] = maps\_gauntlet_log::kv( "count", restored.size );
-	fields[3] = maps\_gauntlet_log::kv( "map", map_label );
+	fields[3] = maps\_gauntlet_log::kv( "maxhealth", max_hp );
+	fields[4] = maps\_gauntlet_log::kv( "map", map_label );
 	maps\_gauntlet_log::emit( "PERKS_RESTORED", maps\_gauntlet_log::join_fields( fields ) );
+
+	maybe_apply_test_grant_perks( player, current_map );
 
 	return restored;
 }

@@ -49,7 +49,8 @@ python3 scripts/verify_e2e.py --offline-only
 | 5 | `solo-cycle2` | `python3 scripts/verify_cycle2.py --skip-build` | Cycle 1→2 and Cycle 2→3 wraps, Cycle 2/3 high-round zombie health (`1045` at R10, `1679` at R15) and sprint speed without double-scaling, Hellhound round rescheduling on Der Riese, **Points Floor** top-up vs surplus preservation (`8500 > 5000`), and **Prep Phase** spawn hold ordering. | Issue #9 AC #2 |
 | 6 | `coop-transition` | `python3 scripts/verify_coop.py --skip-build` | Co-op lobby-assisted **Stage Transition** (`SetUINextLevel` + `exitLevel` + persisted host dvars) and squad roster recovery rules (spectators, late joiners, reconnectors). | Issue #9 AC #3 |
 | 7 | `team-wipe` | `python3 scripts/verify_wipe.py --skip-build` | Team wipe detection, **Run Summary** telemetry/overlay emission, and complete Run dvar reset so the next Run begins cleanly at Cycle 1, Stage 1, Round 1. | Issue #9 AC #4 |
-| 8 | `hud-menus` | `python3 scripts/verify_hud_menus.py --skip-build` | Persistent Gauntlet corner HUD overlay (`GAUNTLET · C<cycle> S<stage>/4 · TARGET R<target>`) and Solo / Co-op menu mode entry points. | Issue #1 User Stories #1–3, #18, #23 |
+| 8 | `hud-menus` | `python3 scripts/verify_hud_menus.py --skip-build` | Persistent Gauntlet corner HUD overlay (`GAUNTLET - C<cycle> S<stage>/4 - TARGET R<target>`) and Solo / Co-op menu mode entry points. | Issue #1 User Stories #1–3, #18, #23 |
+| 9 | `perk-carryover` | `python3 scripts/verify_perks.py --skip-build` | Cross-map Perk Carryover (Der Riese → Cycle 2 Nacht der Untoten with Juggernog `160` HP and stock perk HUD icons) plus Classic Mode isolation. | ADR-0004 |
 
 ---
 

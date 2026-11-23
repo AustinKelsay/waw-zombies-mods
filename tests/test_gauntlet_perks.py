@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import sys
 from typing import Any
 import unittest
 
@@ -690,7 +691,7 @@ class TestGauntletPerksGsc(unittest.TestCase):
 
         # Telemetry event emitted
         self.assertIn(
-            "GAUNTLET_EVENT|PERKS_RESTORED|player=g_30001;perks=specialty_armorvest,specialty_fastreload,specialty_rof,specialty_quickrevive;count=4;map=nazi_zombie_sumpf",
+            "GAUNTLET_EVENT|PERKS_RESTORED|player=g_30001;perks=specialty_armorvest,specialty_fastreload,specialty_rof,specialty_quickrevive;count=4;maxhealth=160;map=nazi_zombie_sumpf",
             self.gsc.emitted_events,
         )
 
@@ -748,7 +749,7 @@ class TestGauntletPerksGsc(unittest.TestCase):
         self.assertEqual(restored_empty.to_list(), [])
         self.assertEqual(fresh_player.maxhealth, 100)
         self.assertIn(
-            "GAUNTLET_EVENT|PERKS_RESTORED|player=g_50001;perks=none;count=0;map=nazi_zombie_prototype",
+            "GAUNTLET_EVENT|PERKS_RESTORED|player=g_50001;perks=none;count=0;maxhealth=100;map=nazi_zombie_prototype",
             self.gsc.emitted_events,
         )
 
@@ -863,6 +864,90 @@ class TestGauntletPerksGsc(unittest.TestCase):
         self.assertEqual(player.perk_hud.size, 0)
         self.assertEqual(len(self.gsc.live_client_huds), 0)
         self.assertEqual(self.gsc.active_thread_count, 0)
+
+    def test_spectator_defers_perk_restore_until_spawned_player(self) -> None:
+        self.gsc.call(
+            PERKS_MOD,
+            "record_player_perks",
+            70001,
+            "Reconnector",
+            GscArray(["specialty_armorvest", "specialty_fastreload"]),
+        )
+        player = FakePlayer(
+            entity_num=2,
+            guid=70001,
+            playername="Reconnector",
+            alive=False,
+            sessionstate="spectator",
+        )
+
+        # Calling restore while spectating must NOT grant perks, health, or HUDs yet
+        initial = self.gsc.call(PERKS_MOD, "restore_player_perks", player, "nazi_zombie_factory")
+        self.assertEqual(initial.to_list(), [])
+        self.assertFalse(player.has_perk("specialty_armorvest"))
+        self.assertEqual(player.maxhealth, 100)
+        self.assertEqual(len(self.gsc.live_client_huds), 0)
+
+        # Once player respawns alive on next round, perks + Juggernog HP + HUDs restore cleanly
+        player._alive = True
+        player.set_field("sessionstate", "playing")
+        self.gsc.notify_entity(player, "spawned_player")
+
+        self.assertTrue(player.has_perk("specialty_armorvest"))
+        self.assertTrue(player.has_perk("specialty_fastreload"))
+        self.assertEqual(player.maxhealth, 160)
+        self.assertEqual(len(self.gsc.live_client_huds), 2)
+
+    def test_one_shot_test_grant_perks_consumes_dvar_once(self) -> None:
+        self.dvars.set("gauntlet_test_grant_perks", "j,f")
+        player = FakePlayer(entity_num=0, guid=70002, playername="Tester", alive=True)
+
+        self.gsc.call(PERKS_MOD, "restore_player_perks", player, "nazi_zombie_factory")
+        self.assertEqual(self.dvars.get("gauntlet_test_grant_perks"), "")
+        self.assertTrue(player.has_perk("specialty_armorvest"))
+        self.assertTrue(player.has_perk("specialty_fastreload"))
+        self.assertEqual(player.maxhealth, 160)
+        self.assertIn(
+            "GAUNTLET_EVENT|PERKS_TEST_GRANTED|player=g_70002;perks=specialty_armorvest,specialty_fastreload;count=2;map=nazi_zombie_factory",
+            self.gsc.emitted_events,
+        )
+
+
+class TestVerifyPerksLogAnalyzers(unittest.TestCase):
+    def setUp(self) -> None:
+        scripts_dir = str(REPO_ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import verify_perks  # noqa: E402
+
+        self.verify_perks = verify_perks
+
+    def test_analyze_perk_carryover_log_pass_and_failures(self) -> None:
+        valid_log = "\n".join(
+            [
+                "Loading fastfile 'mod'",
+                "dvar set gauntlet_event GAUNTLET_EVENT|PERKS_TEST_GRANTED|player=n_player;perks=specialty_armorvest,specialty_fastreload;count=2;map=nazi_zombie_factory",
+                "dvar set gauntlet_event GAUNTLET_EVENT|PERKS_SAVED|player=n_player;perks=specialty_armorvest,specialty_fastreload;count=2;map=nazi_zombie_factory",
+                "dvar set gauntlet_event GAUNTLET_EVENT|PERKS_RESTORED|player=n_player;perks=specialty_armorvest,specialty_fastreload;count=2;maxhealth=160;map=nazi_zombie_prototype",
+            ]
+        )
+        _, errs = self.verify_perks.analyze_perk_carryover_log(valid_log)
+        self.assertEqual(errs, [])
+
+        bad_hp = valid_log.replace("maxhealth=160", "maxhealth=100")
+        _, errs_hp = self.verify_perks.analyze_perk_carryover_log(bad_hp)
+        self.assertTrue(any("maxhealth" in e for e in errs_hp))
+
+        _, errs_classic = self.verify_perks.analyze_classic_perks_isolation_log(
+            "dvar set gauntlet_event GAUNTLET_EVENT|MOD_LOADED|map=nazi_zombie_prototype;gauntlet_enabled=0\n"
+        )
+        self.assertEqual(errs_classic, [])
+
+        _, errs_leak = self.verify_perks.analyze_classic_perks_isolation_log(
+            "dvar set gauntlet_event GAUNTLET_EVENT|MOD_LOADED|map=nazi_zombie_prototype;gauntlet_enabled=0\n"
+            "dvar set gauntlet_event GAUNTLET_EVENT|PERKS_RESTORED|player=n_player;perks=none;count=0;maxhealth=100;map=nazi_zombie_prototype\n"
+        )
+        self.assertTrue(any("PERKS_RESTORED" in e for e in errs_leak))
 
 
 if __name__ == "__main__":

@@ -199,6 +199,14 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         script_relpath="scripts/verify_hud_menus.py",
         description="Verify persistent Gauntlet HUD overlay and Solo / Co-op menu mode entry points.",
     ),
+    StageSpec(
+        stage_id="perk-carryover",
+        name="Cross-map Perk Carryover",
+        category="engine",
+        args=("scripts/verify_perks.py", "--skip-build"),
+        script_relpath="scripts/verify_perks.py",
+        description="Verify active perks carry across Stages onto Cycle 2 Nacht der Untoten (ADR-0004) with Classic isolation.",
+    ),
 )
 
 

@@ -171,6 +171,11 @@ class WipeGscRuntime(GscRuntime):
         return super()._read_target(target, mod_key, env)
 
     def _call_builtin(self, name_lower: str, args: list[Any], line: int) -> tuple[bool, Any]:
+        if name_lower == "setuinextlevel":
+            if not hasattr(self, "next_level_calls"):
+                self.next_level_calls = []
+            self.next_level_calls.append(_waw_to_str(args[0]) if args else "")
+            return True, UNDEFINED
         if name_lower == "getdvarfloat":
             raw = self.dvars.get(_waw_to_str(args[0])) if args else ""
             try:
@@ -370,7 +375,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
             self.gsc.emitted_events,
         )
         self.assertIn(
-            "GAUNTLET_EVENT|RUN_RESET|run_id=run_wipe_777;active=0;ledger_cleared=1",
+            "GAUNTLET_EVENT|RUN_RESET|run_id=run_wipe_777;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1",
             self.gsc.emitted_events,
         )
         self.assertIn(
@@ -449,12 +454,13 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.dvars.set("gauntlet_enabled", "1")
         self.dvars.set("gauntlet_test_summary_delay", "0.5")
         state = self.gsc.call(STATE_MOD, "init_fresh_run", "coop_run_1")
-        self.gsc.level.set_field("script", "nazi_zombie_prototype")
+        self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 4)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 1, 1))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 1, 2))
 
         self.assertTrue(self.gsc.call(WIPE_MOD, "handle_team_wipe"))
+        self.assertEqual(getattr(self.gsc, "next_level_calls", []), ["nazi_zombie_prototype"])
         self.assertEqual(self.gsc.exit_level_calls, [False])
         self.assertEqual(len(self.gsc.created_huds), 4)
         self.assertTrue(all(h.destroyed for h in self.gsc.created_huds))
@@ -564,7 +570,7 @@ class TestVerifyWipeLogAnalyzers(unittest.TestCase):
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=2;map=nazi_zombie_asylum;duration=2",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=2;stage=2;map=nazi_zombie_asylum;duration=2",
             "dvar set gauntlet_event GAUNTLET_EVENT|RUN_WIPE|cycle=2;stage=2;map=nazi_zombie_asylum;display=Verruckt;final_round=12;total_rounds=47;run_id=verify_wipe_c2s2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|RUN_RESET|run_id=verify_wipe_c2s2;active=0;ledger_cleared=1",
+            "dvar set gauntlet_event GAUNTLET_EVENT|RUN_RESET|run_id=verify_wipe_c2s2;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1",
             "dvar set gauntlet_event GAUNTLET_EVENT|RUN_SUMMARY|cycle=2;stage=2;map=nazi_zombie_asylum;display=Verruckt;final_round=12;total_rounds=47",
         ]
         return "\n".join(lines) + "\n"

@@ -20,14 +20,6 @@ resolve_summary_delay()
 clear_all_run_dvars()
 {
 	maps\_gauntlet_state::clear_run_state();
-
-	// Also wipe carried perks and Co-op lobby handoff dvars so returning to the
-	// lobby or starting a fresh Run after a team wipe leaves zero stale state.
-	SetDvar( "gauntlet_player_perks", "" );
-	SetDvar( "gauntlet_next_map", "" );
-	SetDvar( "gauntlet_next_display", "" );
-	SetDvar( "gauntlet_lobby_status", "" );
-	SetDvar( "gauntlet_pending_transition", "0" );
 }
 
 build_wipe_summary( state, stage_info, final_round, current_map )
@@ -313,25 +305,45 @@ handle_team_wipe()
 	clear_all_run_dvars();
 	level.gauntlet_state = undefined;
 
+	// Read back live engine dvars after clearing to prove in-process erasure.
+	active_after = GetDvarInt( "gauntlet_active" );
+	ledger_cleared = 0;
+	if ( GetDvar( "gauntlet_player_points" ) == "" )
+	{
+		ledger_cleared = 1;
+	}
+	perks_cleared = 0;
+	if ( GetDvar( "gauntlet_player_perks" ) == "" )
+	{
+		perks_cleared = 1;
+	}
+	handoff_cleared = 0;
+	if ( GetDvarInt( "gauntlet_pending_transition" ) == 0 && GetDvar( "gauntlet_next_map" ) == "" && GetDvar( "gauntlet_lobby_status" ) == "" )
+	{
+		handoff_cleared = 1;
+	}
+
 	reset_fields = [];
 	reset_fields[0] = maps\_gauntlet_log::kv( "run_id", summary.run_id );
-	reset_fields[1] = maps\_gauntlet_log::kv( "active", 0 );
-	reset_fields[2] = maps\_gauntlet_log::kv( "ledger_cleared", 1 );
+	reset_fields[1] = maps\_gauntlet_log::kv( "active", active_after );
+	reset_fields[2] = maps\_gauntlet_log::kv( "ledger_cleared", ledger_cleared );
+	reset_fields[3] = maps\_gauntlet_log::kv( "perks_cleared", perks_cleared );
+	reset_fields[4] = maps\_gauntlet_log::kv( "handoff_cleared", handoff_cleared );
 	maps\_gauntlet_log::emit( "RUN_RESET", maps\_gauntlet_log::join_fields( reset_fields ) );
 
 	summary_delay = resolve_summary_delay();
 	show_run_summary_overlay( summary, summary_delay );
 
+	// Reset Co-op lobby next map back to Cycle 1 Stage 1 (Nacht der Untoten)
+	// before exiting so relaunching after a wipe never reloads the wiped map.
+	if ( maps\_utility::coopGame() || GetDvarInt( "gauntlet_test_force_coop" ) == 1 )
+	{
+		SetUINextLevel( "nazi_zombie_prototype" );
+	}
+
 	// Return cleanly to the Co-op lobby (party intact) or Solo main menu
 	// without looping/restarting the map or falling into stock game-over UI.
-	if ( maps\_utility::coopGame() )
-	{
-		exitLevel( false );
-	}
-	else
-	{
-		exitLevel( false );
-	}
+	exitLevel( false );
 
 	return true;
 }

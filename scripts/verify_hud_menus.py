@@ -149,7 +149,9 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
             ("set gauntlet_stage 1", "Solo stage reset"),
             ("set gauntlet_total_rounds 0", "Solo total_rounds reset"),
             ("set gauntlet_player_points", "Solo player points ledger reset"),
-            ("set gauntlet_points_ledger", "Solo points_ledger reset"),
+            ("set gauntlet_player_perks", "Solo player perks ledger reset"),
+            ("set gauntlet_next_map", "Solo next map handoff reset"),
+            ("set gauntlet_next_display", "Solo next display handoff reset"),
             ("set gauntlet_lobby_status", "Solo lobby status reset"),
             ("map nazi_zombie_prototype", "Solo launch Nacht der Untoten"),
             ("GAUNTLET_CLASSIC_MODE_ACTION", "Classic Mode disable macro"),
@@ -348,9 +350,28 @@ def patch_xboxlive_lobby_menu(source: str) -> str:
 
 
 def patch_systemlink_lobby_menu(source: str) -> str:
-    """Patch stock ui/systemlink_lobby.menu with Co-op status readout and disband reset."""
+    """Patch stock ui/systemlink_lobby.menu with Start Match fresh-Run lock, status readout, and disband reset."""
     newline = "\r\n" if "\r\n" in source else "\n"
     text = _ensure_include_gauntlet_menus(source)
+
+    if "GAUNTLET_COOP_FRESH_LOCK_ACTION" not in text:
+        start_btn_re = re.compile(
+            r'^(?P<indent>[ \t]*)CHOICE_BUTTON_VIS\(\s*1,\s*"@MPUI_START_MATCH",\s*SETUP_ACTION_STARTMATCH,\s*'
+            r'when\(\s*dvarbool\(\s*systemlinkpartyandhost\s*\)\s*\)\s*\)(?P<tail>[^\n]*)$',
+            re.MULTILINE | re.IGNORECASE,
+        )
+        match = start_btn_re.search(text)
+        if match is None:
+            raise ValueError("Could not locate Start Match button in ui/systemlink_lobby.menu")
+        indent = match.group("indent")
+        tail = match.group("tail")
+        replacement = (
+            f'{indent}CHOICE_BUTTON_VIS( 1, "@MPUI_START_MATCH", SETUP_ACTION_STARTMATCH, '
+            f'when( dvarbool( systemlinkpartyandhost ) && ( dvarInt( gauntlet_enabled ) == 0 || dvarInt( gauntlet_pending_transition ) == 1 ) ) ){tail}{newline}'
+            f'{indent}CHOICE_BUTTON_VIS( 1, "@MPUI_START_MATCH", GAUNTLET_COOP_FRESH_LOCK_ACTION SETUP_ACTION_STARTMATCH, '
+            f'when( dvarbool( systemlinkpartyandhost ) && dvarInt( gauntlet_enabled ) == 1 && dvarInt( gauntlet_pending_transition ) == 0 ) ){tail}'
+        )
+        text = text[: match.start()] + replacement + text[match.end() :]
 
     if "GAUNTLET_COOP_LOBBY_STATUS_PANEL" not in text:
         safearea_re = re.compile(r'^(?P<indent>[ \t]*)#include\s+"ui/safearea\.menu"', re.MULTILINE)

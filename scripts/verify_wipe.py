@@ -152,6 +152,16 @@ def analyze_wipe_log(
                 f"RUN_RESET ledger_cleared={reset_ev.fields.get('ledger_cleared')!r}, "
                 f"expected '1' ({reset_ev.raw})"
             )
+        if reset_ev.fields.get("perks_cleared") != "1":
+            errors.append(
+                f"RUN_RESET perks_cleared={reset_ev.fields.get('perks_cleared')!r}, "
+                f"expected '1' ({reset_ev.raw})"
+            )
+        if reset_ev.fields.get("handoff_cleared") != "1":
+            errors.append(
+                f"RUN_RESET handoff_cleared={reset_ev.fields.get('handoff_cleared')!r}, "
+                f"expected '1' ({reset_ev.raw})"
+            )
         if wipe_run_id and reset_ev.fields.get("run_id") != wipe_run_id:
             errors.append(
                 f"RUN_RESET run_id={reset_ev.fields.get('run_id')!r} does not match "
@@ -233,6 +243,13 @@ def analyze_post_wipe_fresh_run_log(
                     f"Post-wipe POINTS_APPLIED {key}={pts_ev.fields.get(key)!r}, "
                     f"expected {exp!r} ({pts_ev.raw})"
                 )
+
+    perk_events = [e for e in events if e.event_type == "PERKS_RESTORED"]
+    for perk_ev in perk_events:
+        if perk_ev.fields.get("count") != "0" or perk_ev.fields.get("perks") != "none":
+            errors.append(
+                f"Stale carried perks leaked into post-wipe Run: {perk_ev.raw}"
+            )
 
     for forbidden in ("HIGH_ROUND_APPLIED", "PREP_PHASE_START"):
         if any(e.event_type == forbidden for e in events):

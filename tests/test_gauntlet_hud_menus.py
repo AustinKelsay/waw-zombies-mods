@@ -605,6 +605,7 @@ SYNTHETIC_STOCK_SYSTEMLINK_LOBBY_MENU = """#include "ui/menudef.h"
 \tmenuDef
 \t{
 \t\tname\tmenu_systemlink_lobby
+\t\tCHOICE_BUTTON_VIS( 1, "@MPUI_START_MATCH", SETUP_ACTION_STARTMATCH, when( dvarbool( systemlinkpartyandhost ) ) )
 \t\t#include "ui/safearea.menu"
 \t}
 \tmenuDef
@@ -662,6 +663,7 @@ class TestGauntletMenusAndPatchers(unittest.TestCase):
         patched_syslink = self.vhm.patch_systemlink_lobby_menu(SYNTHETIC_STOCK_SYSTEMLINK_LOBBY_MENU)
         self.assertEqual(self.vhm.validate_menu_braces(patched_syslink), [])
         self.assertIn('#include "ui/gauntlet_menus.inc"', patched_syslink)
+        self.assertIn("GAUNTLET_COOP_FRESH_LOCK_ACTION", patched_syslink)
         self.assertIn("GAUNTLET_COOP_LOBBY_STATUS_PANEL", patched_syslink)
         self.assertIn("GAUNTLET_CLEAR_RUN_STATE_EXEC", patched_syslink)
 

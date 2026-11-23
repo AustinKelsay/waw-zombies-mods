@@ -536,6 +536,10 @@ monitor_player_score_cache( cache )
 			{
 				cache.score = get_player_score_safe( self );
 			}
+			if ( IsDefined( self.gauntlet_perks_applied ) && self.gauntlet_perks_applied )
+			{
+				cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
+			}
 		}
 		wait( 0.5 );
 	}
@@ -546,12 +550,13 @@ watch_player_disconnect()
 	level endon( "end_game" );
 	level endon( "gauntlet_stage_clear" );
 
-	// Store identity/score in an independent struct so entity teardown on
+	// Store identity/score/perks in an independent struct so entity teardown on
 	// disconnect cannot wipe cached values before checkpointing.
 	cache = SpawnStruct();
 	cache.guid = get_player_guid( self );
 	cache.name = get_player_name( self );
 	cache.score = get_player_score_safe( self );
+	cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
 
 	self thread monitor_player_score_cache( cache );
 
@@ -571,10 +576,7 @@ watch_player_disconnect()
 	{
 		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
-		if ( IsDefined( self ) )
-		{
-			maps\_gauntlet_perks::snapshot_player_perks( self, get_current_map_name() );
-		}
+		maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
 
 		fields = [];
 		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
@@ -608,14 +610,26 @@ watch_late_joining_players( start_round, current_map )
 		level waittill( "connecting", player );
 		if ( IsDefined( player ) )
 		{
-			level thread apply_player_starting_points( player, start_round, current_map, true );
+			level thread apply_player_starting_points_threaded( player, start_round, current_map, true );
 		}
 	}
 }
 
-apply_player_starting_points( player, start_round, current_map, is_late_join )
+apply_player_starting_points_threaded( player, start_round, current_map, is_late_join )
 {
 	player endon( "disconnect" );
+	apply_player_starting_points( player, start_round, current_map, is_late_join );
+}
+
+// Synchronous-safe helper (MUST NOT call `player endon("disconnect")` directly,
+// because WaW 1.7 attaches endon to the calling thread — which is round_start()
+// during initial spawn and would soft-lock Prep Phase / round_think() on a drop).
+apply_player_starting_points( player, start_round, current_map, is_late_join )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
 
 	register_player_tracking( player );
 
