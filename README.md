@@ -47,7 +47,23 @@ python3 scripts/smoke_verify.py --modes 0 1
 
 Per-map engine console logs are saved under `.smoke_logs/` (gitignored). The command exits `0` only if every assertion passes on every requested map.
 
-### 3. Manual Steam launch
+### 3. Full end-to-end verification gate
+
+Run the complete quality gate (offline contract tests, `mod.ff` + `waw_gauntlet.iwd` build/deploy, Classic & Gauntlet 4-map smoke, Solo Cycle 1/2+, Co-op transition, team wipe, and HUD/menu checks):
+
+```sh
+python3 scripts/verify_e2e.py
+```
+
+On dev laptops without Steam/Proton/WaW, run the offline suite only:
+
+```sh
+python3 scripts/verify_e2e.py --offline-only
+```
+
+See [docs/verification.md](docs/verification.md) for stage details, flags (`--skip-build`, `--only`, `--continue-on-error`, `--json-report`), log locations, and `plebdev-ultra` troubleshooting.
+
+### 4. Manual Steam launch
 
 Close World at War before rebuilding an active mod so the game reloads `mod.ff`. Then launch directly via Steam:
 
