@@ -2973,13 +2973,13 @@ bz_run_visual_tour()
 	map_name = bz_get_map_name();
 	slug = "";
 	ids = [];
+	poses = [];
 	if ( map_name == "nazi_zombie_factory" )
 	{
 		slug = "factory";
 		ids[0] = "perks";
 		ids[1] = "class";
 		ids[2] = "arsenal";
-		poses = [];
 		poses[0] = ( -120, -240, 20 );
 		poses[1] = ( 155, -200, 20 );
 		poses[2] = ( 115, 65, 20 );
@@ -3091,7 +3091,10 @@ bz_run_visual_tour()
 				return;
 			}
 			p SwitchToWeapon( weap );
-			wait( 0.8 );
+			for ( r_tries = 0; r_tries < 40 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap ); r_tries++ )
+			{
+				wait( 0.05 );
+			}
 			if ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap )
 			{
 				maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap );
@@ -3114,7 +3117,12 @@ bz_run_visual_tour()
 		p SetPlayerAngles( ( 5, 90, 0 ) );
 		p TakeWeapon( "bz_blade_boomerang" );
 		bz_test_equip_native_pap_colt( p );
-		wait( 0.8 );
+		for ( p_tries = 0; p_tries < 40 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != "zombie_colt_upgraded" ); p_tries++ )
+		{
+			wait( 0.05 );
+		}
+		maps\_bz_pap::bz_pap_update_native_prompt_hud( p );
+		wait( 0.25 );
 		if ( !IsDefined( native_trig ) || !IsDefined( p.bz_pap_prompt_hud ) || p.bz_pap_prompt_hud.alpha != 1 )
 		{
 			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_prompt" );
@@ -3122,8 +3130,12 @@ bz_run_visual_tour()
 		}
 		bz_test_visual_phase( "native_pap_prompt" );
 		wait( 0.6 );
+		p.bz_pap_console_next_ms = 0;
 		native_trig notify( "trigger", p );
-		wait( 0.6 );
+		for ( d_tries = 0; d_tries < 20 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, "zombie_colt_upgraded" ); d_tries++ )
+		{
+			wait( 0.05 );
+		}
 		if ( !maps\_bz_state::bz_state_is_weapon_double_pap( p, "zombie_colt_upgraded" ) )
 		{
 			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_ii" );
