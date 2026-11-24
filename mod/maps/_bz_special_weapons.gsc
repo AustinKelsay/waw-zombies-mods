@@ -1659,6 +1659,12 @@ bz_special_ensure_player_watchers( player )
 	player thread bz_special_watch_portal_command();
 	player thread bz_special_watch_portal_notify();
 	player thread bz_special_watch_player_disconnect();
+
+	if ( !IsDefined( player.bz_special_max_ammo_watch_started ) || !player.bz_special_max_ammo_watch_started )
+	{
+		player.bz_special_max_ammo_watch_started = true;
+		player thread bz_special_watch_max_ammo();
+	}
 }
 
 // Coop-safe tactical trigger (WaW 1.7 Coop rejects NotifyOnCommand()):
@@ -1709,6 +1715,18 @@ bz_special_watch_player_disconnect()
 	self waittill( "disconnect" );
 	bz_special_destroy_player_entities( self );
 	bz_special_destroy_player_hud( self );
+}
+
+bz_special_watch_max_ammo()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "zmb_max_ammo" );
+		bz_special_on_max_ammo( self );
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1787,6 +1805,32 @@ bz_special_on_round_start( round_num )
 			}
 		}
 	}
+}
+
+bz_special_on_max_ammo( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	// Ownership checks lazily initialize state. Skip players without Base Zombies state.
+	if ( !IsDefined( player.bz_initialized ) || !player.bz_initialized ||
+		!maps\_bz_state::bz_state_owns_portal_grenade( player ) )
+	{
+		return false;
+	}
+
+	charges = maps\_bz_rules::bz_get_portal_max_charges();
+	player.bz_portal_charges = charges;
+	bz_special_update_hud( player );
+
+	fields = [];
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "reason", "max_ammo" );
+	fields[2] = bz_log_kv( "charges", charges );
+	bz_log_emit( "SPECIAL_PORTAL_REFILL", bz_log_join( fields ) );
+	return true;
 }
 
 bz_special_on_item_purchased( ctx )
@@ -1905,6 +1949,17 @@ bz_special_on_end_game()
 	}
 	bz_special_cleanup_all_entities();
 	bz_special_destroy_all_huds();
+
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		player = players[i];
+		if ( IsDefined( player ) )
+		{
+			player.bz_special_watchers_started = undefined;
+			player.bz_special_max_ammo_watch_started = undefined;
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

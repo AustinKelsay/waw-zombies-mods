@@ -303,6 +303,11 @@ bz_get_element_weapon_id_from_weapon( weapon_name )
 
 bz_get_element_weapon_price( item_id )
 {
+	return bz_get_element_weapon_cost( item_id );
+}
+
+bz_get_element_weapon_cost( item_id )
+{
 	id = bz_normalize_id( item_id );
 	// Elemental Weapons use the tuned 5,000-point cap.
 	if ( id == "acid_sprayer" )
@@ -323,6 +328,16 @@ bz_get_element_weapon_price( item_id )
 	}
 
 	return undefined;
+}
+
+bz_get_element_ammo_cost( item_id )
+{
+	cost = bz_get_element_weapon_cost( item_id );
+	if ( !IsDefined( cost ) )
+	{
+		return 0;
+	}
+	return Int( cost / 2 );
 }
 
 bz_get_special_gear_price( item_id )
@@ -483,7 +498,7 @@ bz_get_item_display_name( category, item_id )
 		return undefined;
 	}
 
-	if ( cat == "element_weapon" )
+	if ( cat == "element_weapon" || cat == "element_ammo" )
 	{
 		if ( id == "acid_sprayer" )
 		{

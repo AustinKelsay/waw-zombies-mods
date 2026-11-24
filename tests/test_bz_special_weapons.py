@@ -29,6 +29,7 @@ from pathlib import Path
 import re
 from typing import Any, Callable
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MOD_ROOT = REPO_ROOT / "mod"
@@ -1014,6 +1015,90 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
 class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
     """Seam 4: Portal Grenade +actionslot 2 binding, cooldown/charges, squad warp & zombie exclusion."""
 
+    def test_max_ammo_notification_refills_portal_charges_and_refreshes_owner_hud(self) -> None:
+        _dvars, gsc, player = _setup_special_env()
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_connect", player)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
+        watcher = "bz_special_watch_max_ammo"
+        self.assertEqual(gsc._threads.count((player, watcher, [])), 1)
+        self.assertTrue(player.bz_special_max_ammo_watch_started)
+
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_gear:portal_grenade")
+        gsc.sim_time_ms = 5000
+        self.assertIsNot(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", player), UNDEFINED)
+        self.assertEqual(player.bz_portal_charges, 1)
+        self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 1")
+
+        gsc.call(BZ_HOOKS_MOD, "bz_notify_all_players_max_ammo")
+        self.assertIn((player, "zmb_max_ammo"), gsc.notifies)
+        pending = list(gsc.notifies)
+        endon_guards = []
+
+        class WatcherWaiting(Exception):
+            pass
+
+        original_method = gsc._exec_method
+
+        def deliver_notification(receiver, method, args, line):
+            if method == "endon":
+                endon_guards.append((receiver, args[0]))
+            if method == "waittill":
+                self.assertEqual((receiver, args[0]), (player, "zmb_max_ammo"))
+                if (receiver, args[0]) not in pending:
+                    raise WatcherWaiting
+                pending.remove((receiver, args[0]))
+                return UNDEFINED
+            return original_method(receiver, method, args, line)
+
+        with patch.object(gsc, "_exec_method", side_effect=deliver_notification):
+            with self.assertRaises(WatcherWaiting):
+                gsc.call_on(player, BZ_SPECIAL_MOD, watcher)
+
+        self.assertEqual(endon_guards, [(player, "disconnect"), (gsc.level, "end_game")])
+        self.assertEqual(player.bz_portal_charges, 2)
+        self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 2")
+        self.assertEqual(
+            gsc.emitted_events.count("BZ_EVENT|SPECIAL_PORTAL_REFILL|player=PlayerOne;reason=max_ammo;charges=2"),
+            1,
+        )
+        gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
+        self.assertIs(player.bz_special_watchers_started, UNDEFINED)
+        self.assertIs(player.bz_special_max_ammo_watch_started, UNDEFINED)
+
+    def test_max_ammo_is_a_strict_noop_for_undefined_unowned_and_disabled_players(self) -> None:
+        dvars, gsc, player = _setup_special_env()
+        refill = "bz_special_on_max_ammo"
+        events = list(gsc.emitted_events)
+        uninitialized = SpecialFakeEntity("LateJoiner", ent_num=1)
+        uninitialized_fields = uninitialized.to_dict()
+        self.assertFalse(gsc.call(BZ_SPECIAL_MOD, refill, UNDEFINED))
+        self.assertFalse(gsc.call(BZ_SPECIAL_MOD, refill, uninitialized))
+        self.assertEqual(uninitialized.to_dict(), uninitialized_fields)
+
+        gsc.call(BZ_STATE_MOD, "bz_state_ensure_init", player)
+        unowned_fields = player.to_dict()
+        self.assertFalse(gsc.call(BZ_SPECIAL_MOD, refill, player))
+        self.assertEqual(player.to_dict(), unowned_fields)
+        self.assertEqual(gsc.hud_elems, [])
+        self.assertEqual(gsc.emitted_events, events)
+
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_gear:portal_grenade")
+        player.set_field("bz_portal_charges", 0)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_update_hud", player)
+        hud = player.bz_special_hud
+        self.assertEqual(hud.current_text, "PORTAL: 0")
+        events = list(gsc.emitted_events)
+        hud_writes = list(hud.text_history)
+        owned_fields = player.to_dict()
+        for disabled_gate in ("bz_enabled", "bz_elements_enabled"):
+            with self.subTest(disabled_gate=disabled_gate):
+                dvars.set(disabled_gate, "0")
+                self.assertFalse(gsc.call(BZ_SPECIAL_MOD, refill, player))
+                self.assertEqual(player.to_dict(), owned_fields)
+                self.assertEqual(hud.text_history, hud_writes)
+                self.assertEqual(gsc.emitted_events, events)
+                dvars.set(disabled_gate, "1")
+
     def test_portal_binds_actionslot2_enforces_cooldown_teleports_squad_excludes_zombies_and_cleans_up(self) -> None:
         _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")
         p1.set_pos(500.0, 500.0, 0.0)
@@ -1297,8 +1382,9 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             "Must compact level.bz_special_entities / level.bz_special_hud_elems instead of assigning undefined",
         )
         # Round-start portal refill delegates to _bz_state::bz_state_on_round_start (no direct write)
+        round_start = code_only.split("bz_special_on_round_start( round_num )", 1)[1].split("\n}", 1)[0]
         self.assertIsNone(
-            re.search(r"\.bz_portal_charges\s*=", code_only),
+            re.search(r"\.bz_portal_charges\s*=", round_start),
             "Portal charge refill must delegate to maps\\_bz_state::bz_state_on_round_start()",
         )
 
@@ -1315,6 +1401,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             "bz_special_on_player_connect",
             "bz_special_on_player_spawned",
             "bz_special_on_round_start",
+            "bz_special_on_max_ammo",
             "bz_special_on_item_purchased",
             "bz_special_on_weapon_fired",
             "bz_special_on_actor_damage",
@@ -1340,7 +1427,12 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             )
 
         # Dedicated child watchers MUST hold endon() guards
-        for child_fn in ("bz_special_watch_portal_command", "bz_special_watch_portal_notify", "bz_special_watch_player_disconnect"):
+        for child_fn in (
+            "bz_special_watch_portal_command",
+            "bz_special_watch_portal_notify",
+            "bz_special_watch_player_disconnect",
+            "bz_special_watch_max_ammo",
+        ):
             self.assertIn(child_fn, mod)
             self.assertTrue(
                 _ast_contains_method_call(mod[child_fn].body, "endon"),

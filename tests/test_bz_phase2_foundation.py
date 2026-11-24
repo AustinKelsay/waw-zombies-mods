@@ -11,6 +11,7 @@ import sys
 import tempfile
 from typing import Any
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MOD_ROOT = REPO_ROOT / "mod"
@@ -798,6 +799,16 @@ class TestPhase2RulesAndStatusMath(unittest.TestCase):
     def setUp(self) -> None:
         self.gsc = GscRuntime(MOD_ROOT)
 
+    def test_element_ammo_cost_is_half_the_weapon_price_and_zero_for_invalid_ids(self) -> None:
+        for item_id in ("acid_sprayer", "cryo_cannon", "multi_crossbow", "blade_boomerang"):
+            with self.subTest(item_id=item_id):
+                weapon_cost = self.gsc.call(RULES_MOD, "bz_get_element_weapon_price", item_id)
+                self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_element_ammo_cost", item_id.upper()), weapon_cost // 2)
+
+        for item_id in ("", "ray_gun", "portal_grenade", "bz_acid_sprayer", UNDEFINED):
+            with self.subTest(item_id=item_id):
+                self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_element_ammo_cost", item_id), 0)
+
     def test_phase2_element_weapons_and_special_gear_catalog_prices_and_metadata(self) -> None:
         elem_ids = self.gsc.call(RULES_MOD, "bz_get_element_weapon_ids").to_list()
         self.assertEqual(
@@ -1119,6 +1130,129 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
             self.gsc.emitted_events,
         )
 
+    def test_elemental_ammo_purchase_refreshes_all_four_arsenal_pills(self) -> None:
+        self.dvars.set("bz_enabled", "1")
+        self.dvars.set("bz_elements_enabled", "1")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+        menu = "bz_station_arsenal"
+        for item_id, display_name in (
+            ("acid_sprayer", "Acid Sprayer"),
+            ("cryo_cannon", "Cryo Cannon"),
+            ("multi_crossbow", "Multi-Crossbow"),
+            ("blade_boomerang", "Blade Boomerang"),
+        ):
+            with self.subTest(item_id=item_id):
+                weapon = "bz_" + item_id
+                pill = "ui_bz_elem_" + item_id
+                action = "buy_element:" + item_id
+                self.gsc.call(STATIONS_MOD, "bz_stations_sync_player_ui", self.p1)
+                self.assertEqual(self.p1.client_dvars[pill], "BUY 5000")
+                self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, action))
+                self.assertEqual(self.p1.client_dvars[pill], "FULL")
+
+                self.p1.weapon_clips[weapon] = 29
+                self.gsc.call(STATIONS_MOD, "bz_stations_sync_player_ui", self.p1)
+                self.assertEqual(self.p1.client_dvars[pill], "AMMO 2500")
+                self.p1.weapon_stocks[weapon] = 159
+                score = self.p1.get_field("score")
+                self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, action))
+                self.assertEqual(self.p1.get_field("score"), score - 2500)
+                self.assertEqual(self.p1.weapon_clips[weapon], 30)
+                self.assertEqual(self.p1.weapon_stocks[weapon], 160)
+                self.assertEqual(self.p1.client_dvars[pill], "FULL")
+                self.assertEqual(self.p1.client_dvars["ui_bz_feedback"], f"Refilled {display_name} ammo (-2500)")
+                self.assertIn(
+                    f"BZ_EVENT|STATION_PURCHASE|player=PlayerOne;menu={menu};category=element_ammo;"
+                    f"item={item_id};status=ok;cost=2500;score={score - 2500}",
+                    self.gsc.emitted_events,
+                )
+
+    def test_elemental_ammo_purchase_rejects_full_and_insufficient_points(self) -> None:
+        self.dvars.set("bz_enabled", "1")
+        self.dvars.set("bz_elements_enabled", "1")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+        menu = "bz_station_arsenal"
+        action = "buy_element:acid_sprayer"
+        weapon = "bz_acid_sprayer"
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, action))
+        self.p1.set_field("score", 2499)
+
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, action))
+        self.assertEqual(self.p1.get_field("score"), 2499)
+        self.assertEqual(self.p1.client_dvars["ui_bz_feedback"], "Acid Sprayer ammo already full")
+        event = f"BZ_EVENT|STATION_PURCHASE|player=PlayerOne;menu={menu};category=element_ammo;item=acid_sprayer"
+        self.assertIn(event + ";status=already_full;cost=0;score=2499", self.gsc.emitted_events)
+
+        self.p1.weapon_stocks[weapon] = 159
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, action))
+        self.assertEqual(self.p1.get_field("score"), 2499)
+        self.assertEqual(self.p1.weapon_stocks[weapon], 159)
+        self.assertEqual(self.p1.weapon_clips[weapon], 30)
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "AMMO 2500")
+        self.assertEqual(self.p1.client_dvars["ui_bz_feedback"], "Need 2500 pts for Acid Sprayer Ammo")
+        self.assertIn(event + ";status=insufficient_points;cost=2500;score=2499", self.gsc.emitted_events)
+
+    def test_elemental_ammo_refills_scale_reserve_and_update_existing_pap_cache(self) -> None:
+        self.dvars.set("bz_enabled", "1")
+        self.dvars.set("bz_elements_enabled", "1")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+        self.gsc.call(STATE_MOD, "bz_state_ensure_init", self.p1)
+        weapon = "bz_multi_crossbow"
+        self.p1.give_weapon(weapon)
+        cache = GscArray()
+        self.p1.set_field("bz_pap_target_stock", cache)
+
+        for double_ammo, double_pap, expected in (
+            (False, False, 160),
+            (False, True, 240),
+            (True, False, 320),
+            (True, True, 480),
+        ):
+            with self.subTest(double_ammo=double_ammo, double_pap=double_pap):
+                self.p1.get_field("bz_apex_perks").set_item("double_ammo", double_ammo)
+                self.p1.get_field("bz_double_pap_weapons").set_item(weapon, double_pap)
+                self.assertEqual(
+                    self.gsc.call(STATIONS_MOD, "bz_stations_get_element_target_stock", self.p1, weapon),
+                    expected,
+                )
+                self.p1.weapon_clips = {weapon: 30}
+                self.p1.weapon_stocks = {weapon: expected - 1}
+                self.p1.set_field("score", 2500)
+                cache.set_item(weapon, expected - 1)
+                self.assertTrue(
+                    self.gsc.call(
+                        BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:multi_crossbow"
+                    )
+                )
+                self.assertEqual(self.p1.get_field("score"), 0)
+                self.assertEqual(self.p1.weapon_stocks[weapon], expected)
+                self.assertEqual(cache[weapon], expected)
+                self.assertEqual(self.p1.client_dvars["ui_bz_elem_multi_crossbow"], "FULL")
+                self.assertEqual(self.p1.current_weapon, "thompson")
+
+    def test_elemental_ammo_falls_back_to_120_reserve_and_supports_clipless_weapons(self) -> None:
+        weapon = "bz_blade_boomerang"
+        self.p1.give_weapon(weapon)
+        original_builtin = self.gsc._call_builtin
+        for max_ammo in (UNDEFINED, 0, -1):
+            def weapon_builtin(name, args, line):
+                if name == "weaponmaxammo":
+                    return True, max_ammo
+                if name == "weaponclipsize":
+                    return True, 0
+                return original_builtin(name, args, line)
+
+            with self.subTest(max_ammo=max_ammo), patch.object(self.gsc, "_call_builtin", side_effect=weapon_builtin):
+                self.p1.weapon_stocks = {weapon: 7}
+                self.assertFalse(self.gsc.call(STATIONS_MOD, "bz_stations_is_element_ammo_full", self.p1, weapon))
+                self.gsc.call(STATIONS_MOD, "bz_stations_refill_element_ammo", self.p1, weapon)
+                self.assertEqual(self.p1.weapon_stocks[weapon], 120)
+                self.assertIs(self.p1.weapon_clips, UNDEFINED)
+                self.assertTrue(self.gsc.call(STATIONS_MOD, "bz_stations_is_element_ammo_full", self.p1, weapon))
+
     def test_arsenal_phase2_buy_element_and_buy_gear_end_to_end_with_melee_swaps_and_ui_dvars(self) -> None:
         self.dvars.set("bz_enabled", "1")
         self.dvars.set("bz_perks_enabled", "1")
@@ -1158,7 +1292,7 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         self.assertEqual(self.p1.get_field("score"), 71000)
         self.assertIn("bz_acid_sprayer", self.p1.weapons)
         self.assertEqual(self.p1.current_weapon, "bz_acid_sprayer")
-        self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "OWNED")
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "FULL")
         self.assertEqual(self.p1.client_dvars["ui_bz_elem_cryo_cannon"], "BUY 5000")
 
         # 2. Buy Cryo Cannon (5000 test cap) -> fills 3rd Mule Kick slot without dropping thompson

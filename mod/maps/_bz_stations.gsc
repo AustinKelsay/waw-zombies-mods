@@ -999,6 +999,31 @@ bz_stations_player_has_bowie( player )
 	return false;
 }
 
+bz_stations_get_element_target_stock( player, weap_name )
+{
+	has_double_ammo = bz_state_has_apex( player, "double_ammo" );
+	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weap_name );
+	ammo_mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_dpap );
+
+	base_max = WeaponMaxAmmo( weap_name );
+	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
+	{
+		base_max = 120;
+	}
+	return Int( Int( base_max ) * ammo_mult );
+}
+
+bz_stations_is_element_ammo_full( player, weap_name )
+{
+	if ( player GetWeaponAmmoStock( weap_name ) < bz_stations_get_element_target_stock( player, weap_name ) )
+	{
+		return false;
+	}
+
+	clip_size = WeaponClipSize( weap_name );
+	return !IsDefined( clip_size ) || clip_size <= 0 || player GetWeaponAmmoClip( weap_name ) >= clip_size;
+}
+
 // Public UI sync seam for Chunk 3 modules (T4/T5/T6) and Station menu refreshes.
 // Uses per-player SetClientDvar exclusively so Co-op teammates are never affected.
 bz_stations_sync_player_ui( player, feedback )
@@ -1079,7 +1104,7 @@ bz_stations_sync_player_ui( player, feedback )
 	{
 		aid = apex_ids[i];
 		a_cost = maps\_bz_rules::bz_get_apex_perk_price( aid );
-		if ( maps\_bz_state::bz_state_has_apex( player, aid ) )
+		if ( bz_state_has_apex( player, aid ) )
 		{
 			player SetClientDvar( "ui_bz_apex_" + aid, "OWNED" );
 		}
@@ -1131,7 +1156,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	is_pap = bz_stations_is_weapon_pap( player, weapon_name );
-	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name );
+	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weapon_name );
 
 	if ( weapon_name == "" )
 	{
@@ -1228,7 +1253,14 @@ bz_stations_sync_player_ui( player, feedback )
 		}
 		else if ( IsDefined( e_weap ) && player HasWeapon( e_weap ) )
 		{
-			player SetClientDvar( "ui_bz_elem_" + eid, "OWNED" );
+			if ( bz_stations_is_element_ammo_full( player, e_weap ) )
+			{
+				player SetClientDvar( "ui_bz_elem_" + eid, "FULL" );
+			}
+			else
+			{
+				player SetClientDvar( "ui_bz_elem_" + eid, "AMMO " + bz_get_element_ammo_cost( eid ) );
+			}
 		}
 		else if ( score >= e_cost )
 		{
@@ -1484,6 +1516,44 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 	return bz_make_purchase_result( "ok", "single_pap", cost, player.score );
 }
 
+bz_stations_refill_element_ammo( player, weap_name )
+{
+	clip_size = WeaponClipSize( weap_name );
+	if ( IsDefined( clip_size ) && clip_size > 0 )
+	{
+		player SetWeaponAmmoClip( weap_name, clip_size );
+	}
+
+	target_stock = bz_stations_get_element_target_stock( player, weap_name );
+	player SetWeaponAmmoStock( weap_name, target_stock );
+	if ( IsDefined( player.bz_pap_target_stock ) )
+	{
+		player.bz_pap_target_stock[weap_name] = target_stock;
+	}
+}
+
+bz_stations_try_buy_element_ammo( player, item_id, weap_name )
+{
+	score = bz_state_get_score_safe( player );
+	if ( bz_stations_is_element_ammo_full( player, weap_name ) )
+	{
+		return bz_make_purchase_result( "already_full", item_id, 0, score );
+	}
+
+	ammo_cost = bz_get_element_ammo_cost( item_id );
+	if ( score < ammo_cost )
+	{
+		return bz_make_purchase_result( "insufficient_points", item_id, ammo_cost, score );
+	}
+
+	player.score = score - ammo_cost;
+	bz_stations_refill_element_ammo( player, weap_name );
+	res = bz_make_purchase_result( "ok", item_id, ammo_cost, player.score );
+	res.category = "element_ammo";
+	res.weapon_name = weap_name;
+	return res;
+}
+
 bz_stations_give_element_primary( player, weap_name )
 {
 	if ( !IsDefined( player ) || !IsDefined( weap_name ) || weap_name == "" )
@@ -1507,7 +1577,7 @@ bz_stations_give_element_primary( player, weap_name )
 	}
 
 	player GiveWeapon( weap_name );
-	player GiveMaxAmmo( weap_name );
+	bz_stations_refill_element_ammo( player, weap_name );
 	player SwitchToWeapon( weap_name );
 }
 
@@ -1528,6 +1598,10 @@ bz_stations_format_feedback( category, item_id, res )
 
 	if ( res.status == "ok" )
 	{
+		if ( category == "element_ammo" )
+		{
+			return "Refilled " + disp + " ammo (-" + res.cost + ")";
+		}
 		if ( category == "class" && IsDefined( res.swapped ) && res.swapped )
 		{
 			return "Swapped to " + disp + " (-" + res.cost + " pts)";
@@ -1540,7 +1614,15 @@ bz_stations_format_feedback( category, item_id, res )
 	}
 	if ( res.status == "insufficient_points" )
 	{
+		if ( category == "element_ammo" )
+		{
+			return "Need " + res.cost + " pts for " + disp + " Ammo";
+		}
 		return "Need " + res.cost + " pts for " + disp;
+	}
+	if ( res.status == "already_full" )
+	{
+		return disp + " ammo already full";
 	}
 	if ( res.status == "already_owned" )
 	{
@@ -1728,11 +1810,20 @@ bz_stations_on_menu_response( player, menu, response )
 	{
 		target_weap = bz_get_element_weapon_name( item_id );
 		already_has = ( IsDefined( target_weap ) && target_weap != "" && player HasWeapon( target_weap ) );
-		res = maps\_bz_state::bz_try_buy_element_weapon( player, item_id, already_has );
-		if ( res.ok && IsDefined( res.weapon_name ) && res.weapon_name != "" )
+		if ( already_has && norm_menu == "bz_station_arsenal" )
 		{
-			bz_stations_give_element_primary( player, res.weapon_name );
-			weapon_name = res.weapon_name;
+			category = "element_ammo";
+			res = bz_stations_try_buy_element_ammo( player, item_id, target_weap );
+			weapon_name = target_weap;
+		}
+		else
+		{
+			res = maps\_bz_state::bz_try_buy_element_weapon( player, item_id, already_has );
+			if ( res.ok && IsDefined( res.weapon_name ) && res.weapon_name != "" )
+			{
+				bz_stations_give_element_primary( player, res.weapon_name );
+				weapon_name = res.weapon_name;
+			}
 		}
 	}
 	else if ( category == "special_gear" )
@@ -1839,9 +1930,19 @@ bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
 	return maps\_bz_state::bz_state_has_pap_upgrade( player, upgrade_id, weapon_name );
 }
 
+bz_state_has_apex( player, perk_id )
+{
+	return maps\_bz_state::bz_state_has_apex( player, perk_id );
+}
+
 bz_get_element_weapon_name( item_id )
 {
 	return maps\_bz_rules::bz_get_element_weapon_name( item_id );
+}
+
+bz_get_element_ammo_cost( item_id )
+{
+	return maps\_bz_rules::bz_get_element_ammo_cost( item_id );
 }
 
 bz_get_special_gear_price( item_id )
