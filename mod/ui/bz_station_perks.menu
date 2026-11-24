@@ -578,14 +578,14 @@
 		}
 
 		// ================================================================
-		// COLUMN 3: APEX PERKS (20000 PTS EACH)
+		// COLUMN 3: APEX PERKS (8000 PTS EACH - TEST CAP)
 		// ================================================================
 		itemDef
 		{
 			name			"bz_col3_hdr"
 			type			ITEM_TYPE_TEXT
 			rect			430 72 184 18
-			text			"APEX PERKS (20000 EACH)"
+			text			"APEX PERKS (8000 EACH)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.26
 			textstyle		ITEM_TEXTSTYLE_SHADOWED

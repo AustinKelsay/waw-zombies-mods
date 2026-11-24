@@ -263,11 +263,11 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
         # No HUD created before player owns a Class
         self.assertEqual(self.gsc.hud_elems, [])
 
-        # Buy Titan (10,000 pts) via Class Altar menu response
+        # Buy Titan (5,000 pts test cap) via Class Altar menu response
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:titan")
         )
-        self.assertEqual(self.p1.get_field("score"), 90000)
+        self.assertEqual(self.p1.get_field("score"), 95000)
         self.assertEqual(self.p1.get_field("maxhealth"), 200)
         self.assertAlmostEqual(self.p1.get_field("bz_aggro_weight"), 2.0)
 
@@ -293,7 +293,7 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:sapper")
         )
-        self.assertEqual(self.p1.get_field("score"), 80000)
+        self.assertEqual(self.p1.get_field("score"), 90000)
         self.assertEqual(self.p1.get_field("maxhealth"), 100)
         self.assertAlmostEqual(self.p1.get_field("bz_aggro_weight"), 1.0)
         self.assertEqual(self.p1.ammo_clip["stielhandgranate"], 10)

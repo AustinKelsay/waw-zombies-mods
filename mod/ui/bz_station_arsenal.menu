@@ -301,7 +301,7 @@
 			decoration
 		}
 
-		// Acid Sprayer (6500)
+		// Acid Sprayer (5000 - test cap)
 		itemDef
 		{
 			name			"btn_elem_acid_sprayer"
@@ -312,7 +312,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.40 0.92 0.55 0.45
-			text			"Acid Sprayer (6500)"
+			text			"Acid Sprayer (5000)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -358,7 +358,7 @@
 			decoration
 		}
 
-		// Cryo Cannon (7000)
+		// Cryo Cannon (5000 - test cap)
 		itemDef
 		{
 			name			"btn_elem_cryo_cannon"
@@ -369,7 +369,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.82 1.0 0.45
-			text			"Cryo Cannon (7000)"
+			text			"Cryo Cannon (5000)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -415,7 +415,7 @@
 			decoration
 		}
 
-		// Multi-Crossbow (7500)
+		// Multi-Crossbow (5000 - test cap)
 		itemDef
 		{
 			name			"btn_elem_multi_crossbow"
@@ -426,7 +426,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.95 0.72 0.35 0.45
-			text			"Multi-Crossbow (7500)"
+			text			"Multi-Crossbow (5000)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -472,7 +472,7 @@
 			decoration
 		}
 
-		// Blade Boomerang (6000)
+		// Blade Boomerang (5000 - test cap)
 		itemDef
 		{
 			name			"btn_elem_blade_boomerang"
@@ -483,7 +483,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.80 0.60 1.0 0.45
-			text			"Blade Boomerang (6000)"
+			text			"Blade Boomerang (5000)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.25
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -717,7 +717,7 @@
 			decoration
 		}
 
-		// Portal Grenade (6000)
+		// Portal Grenade (5000 - test cap)
 		itemDef
 		{
 			name			"btn_gear_portal_grenade"
@@ -728,7 +728,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.65 0.65 1.0 0.50
-			text			"Portal Grenade (6000)"
+			text			"Portal Grenade (5000)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.24
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
