@@ -182,10 +182,13 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         return events, errors
 
     players: set[str] = set()
+    factory_native_pap_ok = False
     for index, (map_name, cycle, stage) in enumerate(GAUNTLET_STAGES):
         start, end = flow[index * 3][0], flow[index * 3 + 1][0]
         restored_players: set[str] = set()
-        last_saves: dict[str, bz.BzEvent] = {}
+        restored_pos: dict[str, int] = {}
+        restored_labels: dict[str, str] = {}
+        last_saves: dict[str, tuple[int, bz.BzEvent]] = {}
         for position in range(start + 1, end):
             event = timeline[position]
             if not isinstance(event, bz.BzEvent) or event.fields.get("map") != map_name:
@@ -195,13 +198,15 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
                 continue
             if event.event_type == "GAUNTLET_BZ_RESTORED" and player in players and _has_restored_seed(event):
                 restored_players.add(player)
+                restored_pos[player] = position
+                restored_labels[player] = event.fields.get("label") or player
             if event.event_type == "GAUNTLET_BZ_SAVED" and (
                 player in restored_players or (index == 0 and position > seeds[0][0])
             ):
-                last_saves[player] = event
+                last_saves[player] = (position, event)
         saved_players = {
             player
-            for player, save_event in last_saves.items()
+            for player, (_, save_event) in last_saves.items()
             if _has_seeded_perm_and_perks(save_event.fields.get("perm", ""), save_event.fields.get("perks", ""))
             and _has_seeded_weapons(save_event.fields)
         }
@@ -212,12 +217,32 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         if index < len(GAUNTLET_STAGES) - 1 and not saved_players:
             errors.append(f"Missing GAUNTLET_BZ_SAVED with the same player's seeded loadout on {stage_label}")
             break
+        if map_name == "nazi_zombie_factory":
+            for player in saved_players:
+                r_pos = restored_pos.get(player)
+                s_pos = last_saves[player][0]
+                expected_label = restored_labels.get(player, "")
+                if r_pos is None or not expected_label:
+                    continue
+                if any(
+                    isinstance(e, bz.BzEvent)
+                    and matches(
+                        e,
+                        "PAP_DOUBLE_UPGRADE",
+                        map="nazi_zombie_factory",
+                        weapon="zombie_colt_upgraded",
+                        console="native",
+                        player=expected_label,
+                    )
+                    for e in timeline[r_pos + 1 : s_pos]
+                ):
+                    factory_native_pap_ok = True
+                    break
         players = saved_players
 
     # Der Riese stations spawn inside bz_init() right after Stage 3 transitions into Der Riese
-    # and before Der Riese's Stage Clear (flow[8] = sumpf->factory transition, flow[9] = factory init,
-    # flow[10] = factory clear).
-    factory_window_start, factory_init, factory_window_end = flow[8][0], flow[9][0], flow[10][0]
+    # and before Der Riese's Stage Clear (flow[8] = sumpf->factory transition, flow[10] = factory clear).
+    factory_window_start, factory_window_end = flow[8][0], flow[10][0]
     factory_stations = Counter(
         e.fields.get("station")
         for e in timeline[factory_window_start + 1 : factory_window_end]
@@ -225,13 +250,9 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
     )
     if factory_stations != Counter(("perks", "class", "arsenal")):
         errors.append("Expected exactly one STATION_SPAWN each for Der Riese perks, class, and arsenal")
-    if not any(
-        isinstance(e, bz.BzEvent)
-        and matches(e, "PAP_DOUBLE_UPGRADE", map="nazi_zombie_factory", console="native")
-        for e in timeline[factory_init + 1 : factory_window_end]
-    ):
+    if not factory_native_pap_ok:
         errors.append(
-            "Missing Der Riese native PaP coexistence event (PAP_DOUBLE_UPGRADE with console=native) during Cycle 1 Stage 4"
+            "Missing Der Riese native PaP coexistence event (PAP_DOUBLE_UPGRADE for restored host on zombie_colt_upgraded with console=native between restore and save) during Cycle 1 Stage 4"
         )
 
     summary_position = flow[len(expected_flow) - 1][0]

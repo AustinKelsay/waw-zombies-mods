@@ -194,7 +194,11 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, weap );
 	ammo_mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_dpap );
 
-	base_max = WeaponMaxAmmo( weap );
+	base_max = maps\_bz_rules::bz_get_element_base_reserve( weap );
+	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
+	{
+		base_max = WeaponMaxAmmo( weap );
+	}
 	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
 	{
 		base_max = player GetWeaponAmmoStock( weap );

@@ -340,6 +340,31 @@ bz_get_element_ammo_cost( item_id )
 	return Int( cost / 2 );
 }
 
+// Canonical 1x base reserve stock for the 4 cloned Elemental Weapons.
+// Their weaponfiles set maxAmmo = 3 * base (360/288/108/60) so WaW 1.7's
+// SetWeaponAmmoStock clamp allows full Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x.
+bz_get_element_base_reserve( weapon_name )
+{
+	weap = bz_normalize_id( weapon_name );
+	if ( weap == "bz_acid_sprayer" )
+	{
+		return 120;
+	}
+	if ( weap == "bz_cryo_cannon" )
+	{
+		return 96;
+	}
+	if ( weap == "bz_multi_crossbow" )
+	{
+		return 36;
+	}
+	if ( weap == "bz_blade_boomerang" )
+	{
+		return 20;
+	}
+	return 0;
+}
+
 bz_get_special_gear_price( item_id )
 {
 	id = bz_normalize_id( item_id );
@@ -1304,6 +1329,7 @@ bz_rules_get_stations_api()
 	api.bz_get_class_ids = ::bz_get_class_ids;
 	api.bz_get_class_price = ::bz_get_class_price;
 	api.bz_get_element_ammo_cost = ::bz_get_element_ammo_cost;
+	api.bz_get_element_base_reserve = ::bz_get_element_base_reserve;
 	api.bz_get_element_weapon_ids = ::bz_get_element_weapon_ids;
 	api.bz_get_element_weapon_name = ::bz_get_element_weapon_name;
 	api.bz_get_element_weapon_price = ::bz_get_element_weapon_price;

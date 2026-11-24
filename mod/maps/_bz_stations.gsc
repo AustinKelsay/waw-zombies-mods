@@ -1070,7 +1070,11 @@ bz_stations_get_element_target_stock( player, weap_name )
 	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weap_name );
 	ammo_mult = [[ rules.bz_calc_reserve_ammo_mult ]]( has_double_ammo, is_dpap );
 
-	base_max = WeaponMaxAmmo( weap_name );
+	base_max = [[ rules.bz_get_element_base_reserve ]]( weap_name );
+	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
+	{
+		base_max = WeaponMaxAmmo( weap_name );
+	}
 	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
 	{
 		base_max = 120;
@@ -1510,6 +1514,36 @@ bz_stations_on_player_spawned( player )
 		player.bz_station_prompt_watching = true;
 		player thread bz_stations_watch_player_prompt();
 		player thread bz_stations_watch_prompt_disconnect();
+		player thread bz_stations_watch_max_ammo();
+	}
+}
+
+bz_stations_watch_max_ammo()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "zmb_max_ammo" );
+		if ( !bz_enabled() || !bz_elements_enabled() )
+		{
+			continue;
+		}
+		rules = bz_stations_get_rules_api();
+		primaries = self GetWeaponsListPrimaries();
+		if ( !IsDefined( primaries ) )
+		{
+			continue;
+		}
+		for ( i = 0; i < primaries.size; i++ )
+		{
+			weap = primaries[i];
+			if ( [[ rules.bz_get_element_base_reserve ]]( weap ) > 0 )
+			{
+				bz_stations_refill_element_ammo( self, weap );
+			}
+		}
 	}
 }
 
@@ -2103,6 +2137,7 @@ bz_stations_get_selftest_api()
 	api.bz_stations_format_prompt_text = ::bz_stations_format_prompt_text;
 	api.bz_stations_is_weapon_pap = ::bz_stations_is_weapon_pap;
 	api.bz_stations_open_for_player = ::bz_stations_open_for_player;
+	api.bz_stations_sync_player_ui = ::bz_stations_sync_player_ui;
 	api.bz_stations_try_buy_single_pap = ::bz_stations_try_buy_single_pap;
 	return api;
 }

@@ -892,7 +892,11 @@ bz_perks_calc_weapon_max_reserve( player, weapon_name )
 		return 0;
 	}
 
-	base_max = Int( WeaponMaxAmmo( w ) );
+	base_max = maps\_bz_rules::bz_get_element_base_reserve( w );
+	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
+	{
+		base_max = Int( WeaponMaxAmmo( w ) );
+	}
 	if ( base_max <= 0 )
 	{
 		return 0;

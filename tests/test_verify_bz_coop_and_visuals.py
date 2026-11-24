@@ -93,11 +93,11 @@ def make_gauntlet_log() -> str:
         else:
             lines.append(
                 f"BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map={map_name};class=titan;"
-                f"t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;{SEEDED_LOADOUT}"
+                f"t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;{SEEDED_LOADOUT};label=host"
             )
             if slug == "factory":
                 lines.append(
-                    f"BZ_EVENT|PAP_DOUBLE_UPGRADE|map={map_name};weapon=zombie_colt_upgraded;console=native"
+                    f"BZ_EVENT|PAP_DOUBLE_UPGRADE|player=host;map={map_name};weapon=zombie_colt_upgraded;console=native"
                 )
         if index < 4:
             next_slug, next_cycle, next_stage = GAUNTLET_STAGES[index + 1]
@@ -143,10 +143,16 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
             ("STAGE_INIT|cycle=1;stage=2", "STAGE_INIT|cycle=1;stage=3", "STAGE_INIT"),
             ("STATION_SPAWN|map=nazi_zombie_factory;station=arsenal",
              "STATION_SPAWN|map=nazi_zombie_factory;station=pap", "STATION_SPAWN"),
-            ("PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native",
-             "PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=station",
+            ("PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native",
+             "PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=station",
              "PAP_DOUBLE_UPGRADE"),
-            ("BZ_EVENT|PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native\n",
+            ("PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native",
+             "PAP_DOUBLE_UPGRADE|player=other;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native",
+             "PAP_DOUBLE_UPGRADE"),
+            ("PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native",
+             "PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=bz_acid_sprayer;console=native",
+             "PAP_DOUBLE_UPGRADE"),
+            ("BZ_EVENT|PAP_DOUBLE_UPGRADE|player=host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native\n",
              "", "PAP_DOUBLE_UPGRADE"),
             ("RUN_SUMMARY", "IGNORED", "RUN_SUMMARY"),
             ("RUN_SUMMARY|cycle=2", "RUN_SUMMARY|cycle=1", "RUN_SUMMARY"),
@@ -194,6 +200,15 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
         native_pap = [line for line in lines if "PAP_DOUBLE_UPGRADE" in line]
         after_clear = [line for line in lines if line not in native_pap] + native_pap
         _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(after_clear))
+        self.assertTrue(any("PAP_DOUBLE_UPGRADE" in err for err in errors), errors)
+
+        restore_idx = next(
+            i for i, line in enumerate(lines)
+            if "GAUNTLET_BZ_RESTORED" in line and "nazi_zombie_factory" in line
+        )
+        before_restore = [line for line in lines if line not in native_pap]
+        before_restore.insert(restore_idx, native_pap[0])
+        _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(before_restore))
         self.assertTrue(any("PAP_DOUBLE_UPGRADE" in err for err in errors), errors)
 
     def test_restore_telemetry_reports_applied_state_when_destination_gates_disabled(self) -> None:

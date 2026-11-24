@@ -1502,6 +1502,7 @@ bz_run_gauntlet_seed()
 		orig_origin = p.origin;
 		orig_angles = p.angles;
 		orig_score = p.score;
+		orig_weapon = bz_get_weapon_safe( p );
 		p.score = 50000;
 		p SetOrigin( ( -61, 495, 118 ) );
 		p SetPlayerAngles( ( 5, 90, 0 ) );
@@ -1518,13 +1519,23 @@ bz_run_gauntlet_seed()
 		}
 		native_ok = bz_is_double_pap_safe( p, "zombie_colt_upgraded" );
 		p TakeWeapon( "zombie_colt_upgraded" );
-		if ( p HasWeapon( "bz_acid_sprayer" ) )
+		if ( orig_weapon != "" && p HasWeapon( orig_weapon ) )
+		{
+			p SwitchToWeapon( orig_weapon );
+		}
+		else if ( p HasWeapon( "bz_acid_sprayer" ) )
 		{
 			p SwitchToWeapon( "bz_acid_sprayer" );
 		}
 		p.score = orig_score;
+		if ( IsDefined( p.old_score ) )
+		{
+			p maps\_zombiemode_score::set_player_score_hud();
+		}
 		p SetOrigin( orig_origin );
 		p SetPlayerAngles( orig_angles );
+		bz_stations_sync_player_ui( p, "" );
+		bz_pap_update_native_prompt_hud( p );
 		if ( !native_ok )
 		{
 			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap" );
@@ -1597,12 +1608,12 @@ bz_test_arsenal_acid_ammo_refill( p )
 	score_before = p.score;
 	handled = bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
 
-	// Acid Sprayer reserves target 360 with Double PaP (1.5x) + Double Ammo (2.0x),
-	// while WaW 1.7 clamps SetWeaponAmmoStock to WeaponMaxAmmo (120). Verify target
-	// tracking, full engine stock/clip refill, and repeat-click already_full rejection.
+	// Acid Sprayer base reserve is 120 and its weaponfile maxAmmo is 360 (3x ceiling),
+	// so Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x must deliver a real 360-round
+	// reserve read back from the WaW 1.7 engine, and reject a repeat click as already_full.
 	target_ok = IsDefined( p.bz_pap_target_stock ) && IsDefined( p.bz_pap_target_stock[acid] ) &&
 		p.bz_pap_target_stock[acid] == 360;
-	stock_ok = p GetWeaponAmmoStock( acid ) >= WeaponMaxAmmo( acid ) &&
+	stock_ok = p GetWeaponAmmoStock( acid ) == 360 &&
 		p GetWeaponAmmoClip( acid ) == WeaponClipSize( acid );
 	score_after_refill = p.score;
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
@@ -2077,6 +2088,12 @@ bz_stations_open_for_player( player, station_id )
 {
 	api = bz_selftest_get_stations_api();
 	return [[ api.bz_stations_open_for_player ]]( player, station_id );
+}
+
+bz_stations_sync_player_ui( player, feedback )
+{
+	api = bz_selftest_get_stations_api();
+	[[ api.bz_stations_sync_player_ui ]]( player, feedback );
 }
 
 bz_stations_try_buy_single_pap( player, weapon_name )
