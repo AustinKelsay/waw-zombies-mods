@@ -963,6 +963,7 @@ class TestEnhancedFlamethrower(unittest.TestCase):
                         "misc/fx_exp_raygun_impact",
                         "env/electrical/fx_elec_short_oneshot",
                         "bio/player/fx_footstep_water",
+                        "misc/fx_zombie_bloodsplat",
                     )
                     for fx in gsc.fx_loads
                 ),
