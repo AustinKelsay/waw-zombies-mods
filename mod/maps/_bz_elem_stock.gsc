@@ -259,6 +259,10 @@ bz_elem_stock_apply_tesla_stun_to_zombie( zombie, stun_sec, stun_until )
 	{
 		return false;
 	}
+	if ( maps\_bz_hooks::bz_is_spawning_dog( zombie ) )
+	{
+		return false;
+	}
 	if ( IsDefined( zombie.bz_tesla_stun_until ) && zombie.bz_tesla_stun_until >= stun_until )
 	{
 		return false;
@@ -280,6 +284,10 @@ bz_tesla_on_chain_hit( zombie, player )
 		return 0;
 	}
 	if ( IsDefined( level.bz_elem_stock_ended ) && level.bz_elem_stock_ended )
+	{
+		return 0;
+	}
+	if ( maps\_bz_hooks::bz_is_spawning_dog( zombie ) )
 	{
 		return 0;
 	}
@@ -311,6 +319,10 @@ bz_tesla_on_chain_hit( zombie, player )
 			{
 				z = enemies[i];
 				if ( !IsDefined( z ) || z == zombie || !IsAlive( z ) || !IsDefined( z.origin ) )
+				{
+					continue;
+				}
+				if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 				{
 					continue;
 				}
@@ -506,6 +518,10 @@ bz_flame_start_burn_dot( zombie, player, round_num, zombie_hp, is_close_range, i
 	{
 		return false;
 	}
+	if ( maps\_bz_hooks::bz_is_spawning_dog( zombie ) )
+	{
+		return false;
+	}
 
 	now = GetTime();
 	if ( IsDefined( zombie.bz_flame_last_ignite_ms ) && ( now - zombie.bz_flame_last_ignite_ms ) < 500 )
@@ -558,6 +574,10 @@ bz_flame_spread_nearby( source_zombie, player, round_num, zombie_hp, is_upgraded
 		}
 		z = enemies[i];
 		if ( !IsDefined( z ) || z == source_zombie || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 		{
 			continue;
 		}
