@@ -385,22 +385,28 @@ class TestBzStationProximityPrompt(unittest.TestCase):
                 self.assertEqual(tuple(hud.get_field("color").to_list()), color)
                 self.assertEqual(hud.get_field("alpha"), 1)
 
-    def test_prompt_uses_nearest_station_within_96_units_and_keeps_64_unit_trigger(self) -> None:
-        self.update_at((-237, 460, 24))  # 97u horizontally
+    def test_prompt_uses_nearest_station_within_64_unit_trigger_cylinder(self) -> None:
+        self.update_at((-235, 460, 24))  # 95u horizontally (outside 64u trigger)
         self.assertEqual(self.gsc.hud_elems, [])
-        self.update_at((-236, 460, 24))  # 96u horizontally
+        self.update_at((-205, 460, 24))  # 65u horizontally (outside 64u trigger)
+        self.assertEqual(self.gsc.hud_elems, [])
+        self.update_at((-204, 460, 24))  # 64u horizontally (on trigger boundary)
         hud = self.player.get_field("bz_station_prompt_hud")
         self.assertEqual(hud.get_field("alpha"), 1)
         self.assertIn("[PERKS]", hud.get_field("text"))
 
-        self.update_at((-140, 393, 24))  # Inside both prompt ranges, nearer Perks
+        # Within 64u of Perks (-140, 460) and outside Class (-140, 320)
+        self.update_at((-140, 400, 24))
         self.assertIn("[PERKS]", hud.get_field("text"))
-        self.update_at((-140, 387, 24))  # Inside both prompt ranges, nearer Class
+        # Within 64u of Class (-140, 320) and outside Perks (-140, 460)
+        self.update_at((-140, 380, 24))
         self.assertIn("[CLASS]", hud.get_field("text"))
 
-        self.update_at((-140, 460, 120))  # 96u vertically
+        self.update_at((-140, 460, 96))  # +72u vertically (inside trigger height)
         self.assertEqual(hud.get_field("alpha"), 1)
-        self.update_at((-140, 460, 121))  # 97u vertically
+        self.update_at((-140, 460, 97))  # +73u vertically (above trigger height)
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.update_at((-140, 460, -9))  # -33u vertically (below trigger floor tolerance)
         self.assertEqual(hud.get_field("alpha"), 0)
         triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
         self.assertTrue(triggers)

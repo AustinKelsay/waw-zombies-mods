@@ -1326,41 +1326,99 @@ _CSC_LEVEL_NOTIFY_1ARG_RE = re.compile(
     r"(?P<body>[^}]*?\blevel\s+notify\s*\(\s*notify_name\s*\)\s*;[^}]*?\})",
     re.DOTALL,
 )
+_CSC_LOCAL_CLIENT_CONNECT_RE = re.compile(
+    r"(?P<header>localclientconnect\s*\(\s*(?P<param>\w+)\s*\)\s*\{)",
+    re.IGNORECASE,
+)
 
 
-def inject_clientscript_callbacks_patch(source: bytes | str) -> bytes | str:
-    """Ensure clientscripts/_callbacks.csc::level_notify accepts DLC 3-arg notetrack callbacks.
+def inject_clientscript_callbacks_patch(
+    source: bytes | str,
+    build_id: str | None = None,
+) -> bytes | str:
+    """Ensure clientscripts/_callbacks.csc supports 3-arg notetracks and client build parity.
 
-    Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
-    `level_notify(notify_name)`, which throws a client script runtime error when
-    `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
-    notetracks via `level_notify("notetrack", localClientNum, note)`.
+    1. Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
+       `level_notify(notify_name)`, which throws a client script runtime error when
+       `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
+       notetracks via `level_notify("notetrack", localClientNum, note)`.
+    2. When `build_id` is supplied, embeds an independent client-package fingerprint
+       (`bz_get_client_build_id()`) and hooks `localclientconnect` to compare it against
+       the host-published `bz_host_build_id` client dvar (complete noop in Classic Mode).
     """
     is_bytes = isinstance(source, bytes)
     text = source.decode("latin1") if is_bytes else source
-    if re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
-        return source
-
     newline = "\r\n" if "\r\n" in text else "\n"
-    patched, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
-        f"level_notify(notify_name, param1, param2){newline}"
-        f"{{{newline}"
-        f"\tlevel notify(notify_name, param1, param2);{newline}"
-        f"}}",
-        text,
-        count=1,
-    )
-    if count != 1:
-        raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
-    return patched.encode("latin1") if is_bytes else patched
+
+    if not re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
+        text, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
+            f"level_notify(notify_name, param1, param2){newline}"
+            f"{{{newline}"
+            f"\tlevel notify(notify_name, param1, param2);{newline}"
+            f"}}",
+            text,
+            count=1,
+        )
+        if count != 1:
+            raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
+
+    if build_id is not None:
+        if not re.fullmatch(r"[0-9a-zA-Z_.-]+", build_id):
+            raise ValueError("Invalid Base Zombies client build ID")
+        if "bz_check_client_build_parity(" not in text:
+            connect_match = _CSC_LOCAL_CLIENT_CONNECT_RE.search(text)
+            if connect_match is not None:
+                param = connect_match.group("param")
+                hook = f"{newline}\tlevel thread bz_check_client_build_parity( {param} );"
+                text = text[: connect_match.end()] + hook + text[connect_match.end() :]
+            helper = (
+                f"{newline}"
+                f"bz_get_client_build_id(){newline}"
+                f"{{{newline}"
+                f'\treturn "{build_id}";{newline}'
+                f"}}{newline}"
+                f"{newline}"
+                f"bz_check_client_build_parity( clientNum ){newline}"
+                f"{{{newline}"
+                f'\tif ( GetDvarInt( "bz_enabled" ) != 1 ){newline}'
+                f"\t{{{newline}"
+                f"\t\treturn;{newline}"
+                f"\t}}{newline}"
+                f"\tclient_id = bz_get_client_build_id();{newline}"
+                f'\tSetClientDvar( "bz_client_build_id", client_id );{newline}'
+                f"\tfor ( i = 0; i < 40; i++ ){newline}"
+                f"\t{{{newline}"
+                f'\t\thost_id = GetDvar( "bz_host_build_id" );{newline}'
+                f'\t\tif ( IsDefined( host_id ) && host_id != "" ){newline}'
+                f"\t\t{{{newline}"
+                f"\t\t\tif ( host_id != client_id ){newline}"
+                f"\t\t\t{{{newline}"
+                f'\t\t\t\tSetClientDvar( "bz_build_parity_status", "mismatch" );{newline}'
+                f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_MISMATCH|host=" + host_id + ";client=" + client_id );{newline}'
+                f"\t\t\t}}{newline}"
+                f"\t\t\telse{newline}"
+                f"\t\t\t{{{newline}"
+                f'\t\t\t\tSetClientDvar( "bz_build_parity_status", "match" );{newline}'
+                f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_CLIENT|host=" + host_id + ";client=" + client_id + ";status=match" );{newline}'
+                f"\t\t\t}}{newline}"
+                f"\t\t\treturn;{newline}"
+                f"\t\t}}{newline}"
+                f"\t\twait( 0.25 );{newline}"
+                f"\t}}{newline}"
+                f"}}{newline}"
+            )
+            text = text + helper
+
+    return text.encode("latin1") if is_bytes else text
 
 
 def stage_bz_clientscript_callbacks(
     tools_root: Path,
     stage_dir: Path,
     steam_game: Path | None = None,
+    build_id: str | None = None,
 ) -> Path | None:
-    """Stage DLC-compatible clientscripts/_callbacks.csc so Cryo Cannon notetracks work on all 4 maps."""
+    """Stage DLC-compatible clientscripts/_callbacks.csc with Cryo notetrack & client parity support."""
     stock_bytes: bytes | None = None
     search_steam = steam_game if steam_game is not None else tools_root
     for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
@@ -1392,7 +1450,8 @@ def stage_bz_clientscript_callbacks(
     if stock_bytes is None:
         return None
 
-    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes)
+    resolved_id = build_id if build_id is not None else f"{BZ_BUILD_VERSION}-{resolve_git_short_sha(REPO_ROOT)}"
+    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes, build_id=resolved_id)
     assert isinstance(patched_bytes, bytes)
     out_path = stage_dir / "clientscripts" / "_callbacks.csc"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1835,8 +1894,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         shutil.copy2(src_path, dst)
 
     # Both the linker and IWD packager use this staged script.
+    build_commit = resolve_git_short_sha(REPO_ROOT)
     (stage_dir / "maps" / "_bz_version.gsc").write_text(
-        render_bz_version_gsc(BZ_BUILD_VERSION, resolve_git_short_sha(REPO_ROOT)),
+        render_bz_version_gsc(BZ_BUILD_VERSION, build_commit),
         encoding="ascii",
     )
 
@@ -1969,8 +2029,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
     stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
-    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify for Cryo Cannon on Nacht/Verruckt)
-    stage_bz_clientscript_callbacks(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify + client build parity)
+    stage_bz_clientscript_callbacks(
+        tools_root=tools_root,
+        stage_dir=stage_dir,
+        steam_game=steam_game,
+        build_id=f"{BZ_BUILD_VERSION}-{build_commit}",
+    )
 
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)

@@ -742,8 +742,9 @@ bz_stations_update_prompt_hud( player )
 	}
 
 	best = undefined;
-	// The 3D distance also caps vertical separation at 96 units.
-	best_dist = 96.0;
+	// Match the spawned trigger_radius(origin, 64, 72) cylinder so "Press [F]" only
+	// appears where pressing Use actually opens the station.
+	best_dist = 64.0;
 	ids = [];
 	ids[0] = "perks";
 	ids[1] = "class";
@@ -757,7 +758,12 @@ bz_stations_update_prompt_hud( player )
 		{
 			continue;
 		}
-		dist = Distance( player.origin, st.origin );
+		dz = player.origin[2] - st.origin[2];
+		if ( dz < -32.0 || dz > 72.0 )
+		{
+			continue;
+		}
+		dist = Distance( ( player.origin[0], player.origin[1], 0 ), ( st.origin[0], st.origin[1], 0 ) );
 		if ( dist <= best_dist )
 		{
 			best_dist = dist;

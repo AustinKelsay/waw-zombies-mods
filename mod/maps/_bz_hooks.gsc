@@ -776,10 +776,13 @@ bz_on_player_spawned( player )
 		player.bz_build_parity_announced = true;
 		version = maps\_bz_version::bz_get_build_version();
 		commit = maps\_bz_version::bz_get_build_commit();
+		build_id = maps\_bz_version::bz_get_build_id();
+		player SetClientDvar( "bz_build_id", build_id );
+		player SetClientDvar( "bz_host_build_id", build_id );
 		fields = [];
 		fields[0] = bz_log_kv( "version", version );
 		fields[1] = bz_log_kv( "commit", commit );
-		fields[2] = bz_log_kv( "build_id", maps\_bz_version::bz_get_build_id() );
+		fields[2] = bz_log_kv( "build_id", build_id );
 		fields[3] = bz_log_kv( "player", bz_build_parity_label( bz_get_player_label( player ) ) );
 		fields[4] = bz_log_kv( "map", bz_build_parity_label( bz_get_map_name() ) );
 		bz_log_emit( "BUILD_PARITY", bz_log_join( fields ) );
@@ -3025,9 +3028,9 @@ bz_run_visual_tour()
 		ids[0] = "perks";
 		ids[1] = "class";
 		ids[2] = "arsenal";
-		poses[0] = ( -120, -240, 20 );
-		poses[1] = ( 155, -200, 20 );
-		poses[2] = ( 115, 65, 20 );
+		poses[0] = ( -254, -240, 20 );
+		poses[1] = ( 174, -200, 20 );
+		poses[2] = ( 140, 80, 20 );
 	}
 	else
 	{
@@ -3047,8 +3050,10 @@ bz_run_visual_tour()
 		{
 			return;
 		}
-		ids[0] = "arsenal";
-		ids[1] = "pap";
+		ids[0] = "perks";
+		ids[1] = "class";
+		ids[2] = "arsenal";
+		ids[3] = "pap";
 	}
 
 	phase_count = 0;
@@ -3065,12 +3070,6 @@ bz_run_visual_tour()
 		if ( slug == "factory" )
 		{
 			bz_test_visual_pose( p, poses[i], station );
-			if ( id == "perks" )
-			{
-				// The courtyard overview is 190u away. Step inside the real HUD's 96u radius.
-				wait( 0.6 );
-				bz_test_visual_pose( p, ( -238, -240, 20 ), station );
-			}
 			wait( 0.6 );
 		}
 		else
@@ -3239,8 +3238,9 @@ bz_run_gauntlet_seed()
 	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:cryo_cannon" );
-	// Seed a Phase 2 item the existing cross-Stage bridge carries in its perm record.
+	// Seed permanent Phase 2 gear & PaP carried by the cross-Stage bridge (wc + pwc).
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:war_club" );
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:pap_war_club" );
 
 	acid = "bz_acid_sprayer";
 	if ( p HasWeapon( acid ) )
@@ -3260,7 +3260,9 @@ bz_run_gauntlet_seed()
 	if ( !bz_has_perk_safe( p, "staminup" ) ||
 		!bz_has_perk_safe( p, "mule_kick" ) ||
 		bz_get_class_safe( p ) != "titan" ||
-		!maps\_bz_state::bz_state_owns_war_club( p ) || !p HasWeapon( acid ) || !p HasWeapon( "bz_cryo_cannon" ) ||
+		!maps\_bz_state::bz_state_owns_war_club( p ) ||
+		!maps\_bz_state::bz_state_has_pap_war_club( p ) ||
+		!p HasWeapon( acid ) || !p HasWeapon( "bz_cryo_cannon" ) ||
 		!bz_is_double_pap_safe( p, acid ) )
 	{
 		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=incomplete_seed" );

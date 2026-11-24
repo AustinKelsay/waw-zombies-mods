@@ -32,6 +32,12 @@ class TestCoopAnalyzer(unittest.TestCase):
     def test_rejects_missing_parity_non_native_purchase_and_selftest_failure(self) -> None:
         cases = (
             (COOP_LOG.replace("BUILD_PARITY", "IGNORED"), "BUILD_PARITY"),
+            (COOP_LOG.replace("checks=10;build_id=0.5.0-dev", "checks=10;build_id=0.5.0-different"), "Conflicting build_id"),
+            (
+                COOP_LOG
+                + "BZ_EVENT|BUILD_PARITY|build_id=0.5.0-other;player=Client;map=nazi_zombie_factory\n",
+                "Conflicting BUILD_PARITY",
+            ),
             (COOP_LOG.replace("console=native", "console=station"), "console=native"),
             (COOP_LOG + "BZ_EVENT|BZ_COOP_SELFTEST_FAIL|reasons=dog_floor\n", "dog_floor"),
             (COOP_LOG.replace("Loading fastfile 'mod'", ""), "mod.ff"),
@@ -45,11 +51,11 @@ class TestCoopAnalyzer(unittest.TestCase):
 GAUNTLET_LOG = """Loading fastfile 'mod'
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;run_id=run_10
 BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2
-BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc|war_club;perks=su,mk|-|-
+BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-
 GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;next_map=nazi_zombie_asylum
 GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;run_id=run_10
-BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0
+BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1
 """
 
 
@@ -60,7 +66,11 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
 
     def test_rejects_empty_snapshot_missing_restore_and_wrong_transition(self) -> None:
         cases = (
-            (GAUNTLET_LOG.replace("perm=titan|wc|war_club", "perm=none"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=none"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|-|knife"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|wc|war_club"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("t1=2", "t1=0"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("pap_war_club=1", "pap_war_club=0"), "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("GAUNTLET_BZ_RESTORED", "IGNORED"), "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum",
                                   "STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf"), "STAGE_TRANSITION"),
@@ -99,29 +109,53 @@ class TestVisualTourAnalyzer(unittest.TestCase):
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertEqual(errors, [])
 
-    def test_accepts_two_station_phases_on_other_stock_maps(self) -> None:
+    def test_accepts_four_station_phases_on_other_stock_maps(self) -> None:
         for slug in ("prototype", "asylum", "sumpf"):
             with self.subTest(map=slug):
-                log, frames = self.make_tour(slug, [f"{slug}_arsenal_prompt", f"{slug}_pap_prompt"])
+                phases = [
+                    f"{slug}_perks_prompt",
+                    f"{slug}_class_prompt",
+                    f"{slug}_arsenal_prompt",
+                    f"{slug}_pap_prompt",
+                ]
+                log, frames = self.make_tour(slug, phases)
                 _, errors = verifier.analyze_visual_tour_result(log, frames)
                 self.assertEqual(errors, [])
 
     def test_rejects_frozen_tour(self) -> None:
-        log, frames = self.make_tour("asylum", ["asylum_arsenal_prompt", "asylum_pap_prompt"], frozen=True)
+        phases = [
+            "asylum_perks_prompt",
+            "asylum_class_prompt",
+            "asylum_arsenal_prompt",
+            "asylum_pap_prompt",
+        ]
+        log, frames = self.make_tour("asylum", phases, frozen=True)
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertTrue(any("frozen" in error for error in errors), errors)
 
     def test_rejects_missing_phase_empty_png_and_missing_done(self) -> None:
-        log, frames = self.make_tour("sumpf", ["sumpf_arsenal_prompt", "sumpf_pap_prompt"])
+        phases = [
+            "sumpf_perks_prompt",
+            "sumpf_class_prompt",
+            "sumpf_arsenal_prompt",
+            "sumpf_pap_prompt",
+        ]
+        log, frames = self.make_tour("sumpf", phases)
         frames[0].path.write_bytes(b"")
-        _, errors = verifier.analyze_visual_tour_result(log, frames[:1])
+        _, errors = verifier.analyze_visual_tour_result(log, frames[:3])
         self.assertTrue(any("sumpf_pap_prompt" in error for error in errors), errors)
         self.assertTrue(any("empty" in error for error in errors), errors)
         _, errors = verifier.analyze_visual_tour_result(log.replace("VISUAL_TOUR_DONE", "IGNORED"), frames)
         self.assertTrue(any("VISUAL_TOUR_DONE" in error for error in errors), errors)
 
     def test_all_analyzers_reject_engine_errors(self) -> None:
-        visual_log, frames = self.make_tour("prototype", ["prototype_arsenal_prompt", "prototype_pap_prompt"])
+        phases = [
+            "prototype_perks_prompt",
+            "prototype_class_prompt",
+            "prototype_arsenal_prompt",
+            "prototype_pap_prompt",
+        ]
+        visual_log, frames = self.make_tour("prototype", phases)
         for suffix in ("Error: script runtime error", "Exceeded limit of 400 'fx' assets", "Fatal error"):
             with self.subTest(error=suffix):
                 for result in (
@@ -130,6 +164,35 @@ class TestVisualTourAnalyzer(unittest.TestCase):
                     verifier.analyze_visual_tour_result(visual_log + "\n" + suffix, frames),
                 ):
                     self.assertTrue(any(suffix in error for error in result[1]), result[1])
+
+    def test_capture_visuals_alias_and_missing_dialog_responder_error(self) -> None:
+        import builtins
+        from threading import Event
+
+        with patch.object(verifier.shutil, "which", return_value=None), patch.object(
+            verifier.importlib.util, "find_spec", return_value=None
+        ):
+            with self.assertRaises(RuntimeError):
+                verifier.require_dialog_responder()
+
+        real_import = builtins.__import__
+
+        def block_xlib(name, *args, **kwargs):
+            if name.split(".")[0] == "Xlib":
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+
+        with patch.object(verifier.shutil, "which", return_value=None), patch(
+            "builtins.__import__", side_effect=block_xlib
+        ):
+            with self.assertRaises(RuntimeError):
+                verifier.dismiss_optimal_settings(":121", Event())
+
+        # Verify --capture-visuals is accepted by CLI argparse (fails at preflight, not exit code 2).
+        with patch.object(verifier.shutil, "which", return_value=None):
+            with self.assertRaises(SystemExit) as ctx:
+                verifier.main(["--capture-visuals", "/tmp/unused_bz_visuals"])
+            self.assertEqual(ctx.exception.code, 1)
 
 
 class TestVisualCapture(unittest.TestCase):
@@ -207,8 +270,9 @@ class TestLiveHookGates(unittest.TestCase):
         runtime.call(BZ_HOOKS_MOD, "bz_run_gauntlet_seed")
 
         bridge = r"maps\_bz_gauntlet_bridge"
-        self.assertEqual(runtime.call(bridge, "encode_perm_record", host), "titan|wc|war_club")
+        self.assertEqual(runtime.call(bridge, "encode_perm_record", host), "titan|wc,pwc|war_club")
         self.assertEqual(runtime.call(bridge, "encode_perks_record", host), "su,mk|-|-")
+        self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_has_pap_war_club", host))
         self.assertTrue({"bz_acid_sprayer", "bz_cryo_cannon"}.issubset(host.weapons))
         self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_is_weapon_double_pap", host, "bz_acid_sprayer"))
         self.assertIn("BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2",

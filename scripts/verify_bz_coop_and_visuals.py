@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Verify native PaP and Hellhounds, enhanced Gauntlet, and active-fire visuals."""
+"""Verify host-side Co-op native PaP & Hellhounds, enhanced Gauntlet, and 4-map visuals.
+
+Note on WaW 1.7 CoDWaW.exe Co-op: the stock Steam Co-op binary has no CLI `connect`
+command and rejects join-in-progress (`Client connect ignored because join in progress
+isn't allowed in COOP`), so live Co-op verification runs host-side on Der Riese (matching
+`scripts/verify_coop.py`) while multi-player prompt/state isolation is verified offline.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -30,26 +37,54 @@ def engine_errors(log_text: str) -> list[str]:
 
 
 def analyze_bz_coop_selftest_log(log_text: str) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check the host's parity, live native purchase, and self-test verdict."""
+    """Check the host's parity consistency, live native purchase, and self-test verdict."""
     events = bz.parse_bz_events(log_text)
     errors = engine_errors(log_text)
-    if not any(event.event_type == "BUILD_PARITY" and event.fields.get("build_id") for event in events):
+    parity_ids = {
+        event.fields.get("build_id", "")
+        for event in events
+        if event.event_type == "BUILD_PARITY" and event.fields.get("build_id")
+    }
+    if not parity_ids:
         errors.append("Missing BUILD_PARITY with a build ID")
+    elif len(parity_ids) > 1:
+        errors.append(f"Conflicting BUILD_PARITY build IDs: {sorted(parity_ids)}")
     if not any(
         event.event_type == "PAP_DOUBLE_UPGRADE" and event.fields.get("console") == "native"
         for event in events
     ):
         errors.append("Missing PAP_DOUBLE_UPGRADE with console=native")
-    if not any(event.event_type == "BZ_COOP_SELFTEST_PASS" for event in events):
+    pass_events = [event for event in events if event.event_type == "BZ_COOP_SELFTEST_PASS"]
+    if not pass_events:
         errors.append("Missing BZ_COOP_SELFTEST_PASS")
+    elif parity_ids:
+        expected_id = next(iter(parity_ids))
+        for pass_ev in pass_events:
+            pass_id = pass_ev.fields.get("build_id", "")
+            if pass_id != expected_id:
+                errors.append(
+                    f"Conflicting build_id between BUILD_PARITY ({expected_id}) "
+                    f"and BZ_COOP_SELFTEST_PASS ({pass_id})"
+                )
     for event in events:
         if event.event_type == "BZ_COOP_SELFTEST_FAIL":
             errors.append(event.raw)
     return events, errors
 
 
+def _has_seeded_perm_and_perks(perm: str, perks: str) -> bool:
+    perm_parts = perm.split("|")
+    if len(perm_parts) < 3:
+        return False
+    cls, flags_csv, melee_slot = perm_parts[0], perm_parts[1], perm_parts[2]
+    flags = {tok for tok in flags_csv.split(",") if tok and tok != "-"}
+    perks_parts = perks.split("|")
+    t1 = {tok for tok in perks_parts[0].split(",") if tok and tok != "-"} if perks_parts else set()
+    return cls == "titan" and {"wc", "pwc"} <= flags and melee_slot == "war_club" and {"su", "mk"} <= t1
+
+
 def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check the first enhanced Stage handoff using the bridge's emitted fields."""
+    """Check the first enhanced Stage handoff (class, perks, war_club, pap_war_club)."""
     events = bz.parse_bz_events(log_text)
     gauntlet = parse_gauntlet_events(log_text)
     errors = engine_errors(log_text)
@@ -71,10 +106,12 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         for e in events
         if matches(e, "GAUNTLET_BZ_SAVED", map=source)
         and e.fields.get("player")
-        and all(e.fields.get(key, "none") not in ("", "none", "-", "-|-|-") for key in ("perm", "perks"))
+        and _has_seeded_perm_and_perks(e.fields.get("perm", ""), e.fields.get("perks", ""))
     }
     if not saved_players:
-        errors.append(f"Missing non-empty GAUNTLET_BZ_SAVED on {source}")
+        errors.append(
+            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), and perks (su,mk)"
+        )
     for event_type, fields in (
         ("STAGE_CLEAR", {"map": source, "next_map": destination}),
         ("STAGE_TRANSITION", {"next_map": destination}),
@@ -83,11 +120,15 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         if not any(matches(e, event_type, **fields) for e in gauntlet):
             errors.append(f"Missing {event_type} for {destination}")
     if not any(
-        matches(e, "GAUNTLET_BZ_RESTORED", map=destination, **{"class": "titan"})
+        matches(e, "GAUNTLET_BZ_RESTORED", map=destination, **{"class": "titan", "war_club": "1", "pap_war_club": "1"})
         and e.fields.get("player") in saved_players
+        and e.fields.get("t1", "").isdecimal()
+        and int(e.fields["t1"]) >= 2
         for e in events
     ):
-        errors.append(f"Missing GAUNTLET_BZ_RESTORED with class=titan for a saved player on {destination}")
+        errors.append(
+            f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, war_club=1, pap_war_club=1"
+        )
     return events, errors
 
 
@@ -97,7 +138,12 @@ WEAPON_SLUGS = ("acid", "cryo", "crossbow", "boomerang")
 
 def expected_visual_phases(slug: str) -> tuple[str, ...]:
     if slug != "factory":
-        return (f"{slug}_arsenal_prompt", f"{slug}_pap_prompt")
+        return (
+            f"{slug}_perks_prompt",
+            f"{slug}_class_prompt",
+            f"{slug}_arsenal_prompt",
+            f"{slug}_pap_prompt",
+        )
     return (
         "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
         *(f"{weapon}_{state}" for weapon in WEAPON_SLUGS for state in ("idle", "active", "post")),
@@ -169,13 +215,46 @@ def analyze_visual_tour_result(
     return events, errors
 
 
+def require_dialog_responder() -> str:
+    """Return the available X11 responder backend or raise an actionable dependency error."""
+    if shutil.which("xdotool") is not None:
+        return "xdotool"
+    if importlib.util.find_spec("Xlib") is not None:
+        return "xlib"
+    raise RuntimeError(
+        "Missing X11 startup-dialog responder: install python-xlib or xdotool so "
+        "'Set Optimal Settings?' cannot hang headless runs."
+    )
+
+
 def dismiss_optimal_settings(display_name: str, stop: Event) -> None:
     """Decline the optional hardware-settings dialog on the isolated X11 display."""
+    if shutil.which("xdotool") is not None:
+        env = dict(os.environ, DISPLAY=display_name)
+        while not stop.is_set():
+            try:
+                res = subprocess.run(
+                    ["xdotool", "search", "--onlyvisible", "--name", "^Set Optimal Settings\\?$"],
+                    env=env, capture_output=True, text=True, timeout=2, check=False,
+                )
+                for wid in res.stdout.split():
+                    subprocess.run(
+                        ["xdotool", "windowfocus", "--sync", wid, "key", "Alt+n"],
+                        env=env, capture_output=True, timeout=2, check=False,
+                    )
+            except (OSError, subprocess.SubprocessError):
+                pass
+            stop.wait(0.25)
+        return
+
     try:
         from Xlib import X, XK, display, error
         from Xlib.ext import xtest
-    except ImportError:
-        return
+    except ImportError as exc:
+        raise RuntimeError(
+            "Missing X11 startup-dialog responder: install python-xlib or xdotool so "
+            "'Set Optimal Settings?' cannot hang headless runs."
+        ) from exc
 
     try:
         connection = display.Display(display_name)
@@ -265,7 +344,10 @@ class VisualCapture:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("coop", "enhanced-gauntlet", "visual-tour", "all"), default="all")
-    parser.add_argument("--out-dir", type=Path, default=smoke_verify.SMOKE_LOG_DIR / "bz_coop_and_visuals")
+    parser.add_argument(
+        "--out-dir", "--capture-visuals", dest="out_dir",
+        type=Path, default=smoke_verify.SMOKE_LOG_DIR / "bz_coop_and_visuals",
+    )
     parser.add_argument("--maps", nargs="+", choices=MAP_SLUGS, default=MAP_SLUGS,
                         help="Stock Maps for visual-tour (Co-op runs on factory; Gauntlet starts on prototype).")
     parser.add_argument("--skip-build", action="store_true")
@@ -284,6 +366,10 @@ def main(argv: list[str] | None = None) -> int:
     missing = [tool for tool in required_tools if shutil.which(tool) is None]
     if missing:
         parser.exit(1, f"ERROR: Missing live verification tools: {', '.join(missing)}\n")
+    try:
+        require_dialog_responder()
+    except RuntimeError as exc:
+        parser.exit(1, f"ERROR: {exc}\n")
     if not appdata.is_dir() or not args.proton.is_file():
         parser.exit(1, f"ERROR: Expected a playtest AppData folder at {appdata} and Proton at {args.proton}\n")
 

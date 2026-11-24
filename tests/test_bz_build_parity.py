@@ -117,6 +117,8 @@ class TestBzBuildParityHooks(unittest.TestCase):
         self.assertEqual(self.runtime.emitted_events, [])
         self.assertEqual(self.runtime.player_prints, [])
         self.assertIs(self.host.get_field("bz_build_parity_announced"), UNDEFINED)
+        self.assertNotIn("bz_build_id", self.host.client_dvars)
+        self.assertNotIn("bz_host_build_id", self.host.client_dvars)
 
     def test_enabled_announces_once_per_player_per_match(self) -> None:
         self.dvars.set("bz_enabled", "1")
@@ -139,6 +141,9 @@ class TestBzBuildParityHooks(unittest.TestCase):
         )
         banner = "Base Zombies v0.5.0 (dev) - Co-op: all players must share mod.ff + waw_gauntlet.iwd"
         self.assertEqual(self.runtime.player_prints, [(self.host, banner), (self.client, banner)])
+        for player in (self.host, self.client):
+            self.assertEqual(player.client_dvars.get("bz_build_id"), "0.5.0-dev")
+            self.assertEqual(player.client_dvars.get("bz_host_build_id"), "0.5.0-dev")
 
         self.runtime.call(BZ_HOOKS_MOD, "bz_on_end_game")
         for player in self.runtime.players:
