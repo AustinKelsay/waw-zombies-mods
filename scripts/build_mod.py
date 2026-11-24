@@ -1089,12 +1089,25 @@ def stage_bz_element_weapons(
     return staged_relpaths
 
 
+# Stock iw_14.iwd ptrs41_zombie & m2_flamethrower_zombie reference these xmodels, which exist
+# in Nacht/Verruckt/Shi No Numa but were renamed in Der Riese (nazi_zombie_factory.ff).
+# Including these 4 xmodels in staged mod.csv (0 added FX) fixes missing PTRS-41 & Flamethrower
+# models on Der Riese under fs_game without breaking the other 3 stock maps.
+DER_RIESE_COMPAT_XMODELS: tuple[str, ...] = (
+    "viewmodel_mp_ptrs41",
+    "weapon_mp_ptrs41",
+    "viewmodel_usa_flamethrower",
+    "weapon_usa_flamethrower",
+)
+
+
 def generate_staged_mod_csv(
     base_csv_text: str,
     staged_gsc_relpaths: list[str],
     staged_weapon_relpaths: list[str] | None = None,
+    extra_xmodels: list[str] | None = None,
 ) -> str:
-    """Ensure mod.csv includes all staged _bz_*.gsc, BZ-patched stock scripts, and cloned bz_* weapons."""
+    """Ensure mod.csv includes all staged _bz_*.gsc, BZ-patched stock scripts, cloned bz_* weapons, and compat xmodels."""
     newline = "\r\n" if "\r\n" in base_csv_text else "\n"
     existing_lines = {line.strip().lower() for line in base_csv_text.splitlines()}
     additions: list[str] = []
@@ -1121,6 +1134,12 @@ def generate_staged_mod_csv(
         else:
             weap_ref = norm
         entry = f"weapon,{weap_ref}"
+        if entry.lower() not in existing_lines:
+            existing_lines.add(entry.lower())
+            additions.append(entry)
+
+    for xmodel in sorted(extra_xmodels or []):
+        entry = f"xmodel,{xmodel}"
         if entry.lower() not in existing_lines:
             existing_lines.add(entry.lower())
             additions.append(entry)
@@ -1370,17 +1389,23 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
 
-    # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, and cloned bz_* weapons
+    # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, cloned bz_* weapons,
+    # and Der Riese PTRS-41/Flamethrower compat xmodels (when raw xmodels exist).
     staged_mod_csv = stage_dir / "mod.csv"
     if staged_mod_csv.is_file():
         staged_gscs = [
             p.relative_to(stage_dir).as_posix()
             for p in sorted((stage_dir / "maps").rglob("*.gsc"))
         ]
+        raw_xmodel_dir = tools_root / "raw" / "xmodel"
+        compat_xmodels = [
+            xm for xm in DER_RIESE_COMPAT_XMODELS if (raw_xmodel_dir / xm).is_file()
+        ]
         updated_csv = generate_staged_mod_csv(
             staged_mod_csv.read_text(encoding="latin1"),
             staged_gscs,
             staged_weapon_relpaths=staged_weapons,
+            extra_xmodels=compat_xmodels,
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
 
