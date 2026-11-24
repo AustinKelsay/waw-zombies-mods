@@ -2266,6 +2266,8 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn(b'return "0.5.0-abc1234";', patched)
         self.assertIn(b'GetDvar( "bz_host_build_id" )', patched)
         self.assertIn(b"BZ_EVENT|BUILD_PARITY_MISMATCH|", patched)
+        # Guests must not early-exit on local bz_enabled before polling host_id
+        self.assertNotIn(b'GetDvarInt( "bz_enabled" )', patched)
         # Idempotent when already patched
         self.assertEqual(
             build_mod.inject_clientscript_callbacks_patch(patched, build_id="0.5.0-abc1234"),

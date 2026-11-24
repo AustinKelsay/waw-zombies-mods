@@ -1380,17 +1380,13 @@ def inject_clientscript_callbacks_patch(
                 f"{newline}"
                 f"bz_check_client_build_parity( clientNum ){newline}"
                 f"{{{newline}"
-                f'\tif ( GetDvarInt( "bz_enabled" ) != 1 ){newline}'
-                f"\t{{{newline}"
-                f"\t\treturn;{newline}"
-                f"\t}}{newline}"
                 f"\tclient_id = bz_get_client_build_id();{newline}"
-                f'\tSetClientDvar( "bz_client_build_id", client_id );{newline}'
                 f"\tfor ( i = 0; i < 40; i++ ){newline}"
                 f"\t{{{newline}"
                 f'\t\thost_id = GetDvar( "bz_host_build_id" );{newline}'
                 f'\t\tif ( IsDefined( host_id ) && host_id != "" ){newline}'
                 f"\t\t{{{newline}"
+                f'\t\t\tSetClientDvar( "bz_client_build_id", client_id );{newline}'
                 f"\t\t\tif ( host_id != client_id ){newline}"
                 f"\t\t\t{{{newline}"
                 f'\t\t\t\tSetClientDvar( "bz_build_parity_status", "mismatch" );{newline}'

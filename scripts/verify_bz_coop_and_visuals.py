@@ -40,12 +40,18 @@ def analyze_bz_coop_selftest_log(log_text: str) -> tuple[list[bz.BzEvent], list[
     """Check the host's parity consistency, live native purchase, and self-test verdict."""
     events = bz.parse_bz_events(log_text)
     errors = engine_errors(log_text)
-    parity_ids = {
-        event.fields.get("build_id", "")
-        for event in events
-        if event.event_type == "BUILD_PARITY" and event.fields.get("build_id")
-    }
-    if not parity_ids:
+    for event in events:
+        if event.event_type == "BUILD_PARITY_MISMATCH":
+            errors.append(event.raw)
+    parity_events = [event for event in events if event.event_type == "BUILD_PARITY"]
+    parity_ids: set[str] = set()
+    for event in parity_events:
+        bid = event.fields.get("build_id", "")
+        if not bid:
+            errors.append(f"BUILD_PARITY missing build_id: {event.raw}")
+        else:
+            parity_ids.add(bid)
+    if not parity_events:
         errors.append("Missing BUILD_PARITY with a build ID")
     elif len(parity_ids) > 1:
         errors.append(f"Conflicting BUILD_PARITY build IDs: {sorted(parity_ids)}")
@@ -120,14 +126,20 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         if not any(matches(e, event_type, **fields) for e in gauntlet):
             errors.append(f"Missing {event_type} for {destination}")
     if not any(
-        matches(e, "GAUNTLET_BZ_RESTORED", map=destination, **{"class": "titan", "war_club": "1", "pap_war_club": "1"})
+        matches(
+            e,
+            "GAUNTLET_BZ_RESTORED",
+            map=destination,
+            **{"class": "titan", "war_club": "1", "pap_war_club": "1", "melee_slot": "war_club"},
+        )
         and e.fields.get("player") in saved_players
         and e.fields.get("t1", "").isdecimal()
         and int(e.fields["t1"]) >= 2
         for e in events
     ):
         errors.append(
-            f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, war_club=1, pap_war_club=1"
+            f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, "
+            "war_club=1, pap_war_club=1, melee_slot=war_club"
         )
     return events, errors
 

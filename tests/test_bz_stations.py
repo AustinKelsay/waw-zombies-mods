@@ -412,6 +412,33 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         self.assertTrue(triggers)
         self.assertTrue(all(trig.get_field("radius") == 64 for trig in triggers))
 
+    def test_overlapping_verruckt_triggers_open_same_nearest_station_as_hud(self) -> None:
+        dvars = FakeDvarStore()
+        for gate in ("bz_enabled", "bz_perks_enabled", "bz_classes_enabled", "bz_pap_enabled", "bz_elements_enabled"):
+            dvars.set(gate, "1")
+        gsc = StationHudRuntime(MOD_ROOT, dvars)
+        gsc.level.set_field("script", "nazi_zombie_asylum")
+        gsc.call(BZ_HOOKS_MOD, "bz_init")
+        player = FakeEntity("VerrucktPlayer", ent_num=0)
+        gsc.players.append(player)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
+
+        # (949, 335, 96) lies inside BOTH Perks (920, 370; ~45u) and Arsenal (985, 295; ~54u).
+        player.set_field("origin", GscArray([949, 335, 96]))
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        hud = player.get_field("bz_station_prompt_hud")
+        self.assertIn("[PERKS]", hud.get_field("text"))
+
+        nearest = gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", player)
+        self.assertEqual(nearest.get_field("id"), "perks")
+
+        # Moving closer to Arsenal (965, 315, 96) switches both HUD and shared selection to Arsenal.
+        player.set_field("origin", GscArray([965, 315, 96]))
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        self.assertIn("[ARSENAL]", hud.get_field("text"))
+        nearest2 = gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", player)
+        self.assertEqual(nearest2.get_field("id"), "arsenal")
+
     def test_prompt_hides_when_dead_in_last_stand_or_in_station_menu(self) -> None:
         origin = (-140, 460, 24)
         self.update_at(origin)

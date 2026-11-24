@@ -764,10 +764,18 @@ restore_player_bz_state( player, current_map )
 	{
 		map_label = "" + current_map;
 	}
+	applied_cls = maps\_bz_state::bz_state_get_class( player );
 	cls_label = "none";
-	if ( perm.class_id != "" )
+	if ( IsDefined( applied_cls ) && applied_cls != "" )
 	{
-		cls_label = perm.class_id;
+		cls_label = applied_cls;
+	}
+	applied_wc = maps\_bz_state::bz_state_owns_war_club( player );
+	applied_pwc = maps\_bz_state::bz_state_has_pap_war_club( player );
+	applied_melee = maps\_bz_state::bz_state_get_melee_slot( player );
+	if ( !IsDefined( applied_melee ) || applied_melee == "" )
+	{
+		applied_melee = "knife";
 	}
 
 	fields = [];
@@ -777,8 +785,9 @@ restore_player_bz_state( player, current_map )
 	fields[3] = maps\_bz_log::kv( "t1", t1_restored );
 	fields[4] = maps\_bz_log::kv( "t2", t2_restored );
 	fields[5] = maps\_bz_log::kv( "apex", apex_restored );
-	fields[6] = maps\_bz_log::kv( "war_club", maps\_bz_hooks::bz_bool_int( perm.owns_war_club ) );
-	fields[7] = maps\_bz_log::kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( perm.pap_war_club ) );
+	fields[6] = maps\_bz_log::kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
+	fields[7] = maps\_bz_log::kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
+	fields[8] = maps\_bz_log::kv( "melee_slot", applied_melee );
 	maps\_bz_log::emit( "GAUNTLET_BZ_RESTORED", maps\_bz_log::join_fields( fields ) );
 	return true;
 }

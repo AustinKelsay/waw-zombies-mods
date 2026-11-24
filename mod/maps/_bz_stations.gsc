@@ -607,7 +607,13 @@ bz_station_trigger_think()
 		}
 		player.bz_station_next_use_time = now + 450;
 
-		bz_stations_open_for_player( player, self.id );
+		target_id = self.id;
+		nearest = bz_stations_find_nearest_in_range( player );
+		if ( IsDefined( nearest ) )
+		{
+			target_id = nearest.id;
+		}
+		bz_stations_open_for_player( player, target_id );
 	}
 }
 
@@ -724,26 +730,17 @@ bz_stations_watch_prompt_disconnect()
 	hud Destroy();
 }
 
-bz_stations_update_prompt_hud( player )
+// Shared station selection for both the proximity prompt HUD and trigger interaction.
+// Uses the exact trigger_radius(origin, 64, 72) cylinder so overlapping triggers always
+// open the same station shown on the player's HUD.
+bz_stations_find_nearest_in_range( player )
 {
-	if ( !IsDefined( player ) )
+	if ( !IsDefined( player ) || !IsDefined( player.origin ) || !IsDefined( level.bz_stations ) )
 	{
-		return;
-	}
-	if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
-		!IsDefined( level.bz_stations ) ||
-		IsDefined( player.revivetrigger ) ||
-		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
-		( IsDefined( player.in_last_stand ) && player.in_last_stand ) ||
-		( IsDefined( player.bz_station_open ) && player.bz_station_open ) )
-	{
-		bz_stations_hide_prompt_hud( player );
-		return;
+		return undefined;
 	}
 
 	best = undefined;
-	// Match the spawned trigger_radius(origin, 64, 72) cylinder so "Press [F]" only
-	// appears where pressing Use actually opens the station.
 	best_dist = 64.0;
 	ids = [];
 	ids[0] = "perks";
@@ -770,6 +767,27 @@ bz_stations_update_prompt_hud( player )
 			best = st;
 		}
 	}
+	return best;
+}
+
+bz_stations_update_prompt_hud( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
+		!IsDefined( level.bz_stations ) ||
+		IsDefined( player.revivetrigger ) ||
+		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
+		( IsDefined( player.in_last_stand ) && player.in_last_stand ) ||
+		( IsDefined( player.bz_station_open ) && player.bz_station_open ) )
+	{
+		bz_stations_hide_prompt_hud( player );
+		return;
+	}
+
+	best = bz_stations_find_nearest_in_range( player );
 
 	if ( !IsDefined( best ) )
 	{
