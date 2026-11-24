@@ -1065,9 +1065,10 @@ bz_stations_player_has_bowie( player )
 
 bz_stations_get_element_target_stock( player, weap_name )
 {
+	rules = bz_stations_get_rules_api();
 	has_double_ammo = bz_state_has_apex( player, "double_ammo" );
 	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weap_name );
-	ammo_mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_dpap );
+	ammo_mult = [[ rules.bz_calc_reserve_ammo_mult ]]( has_double_ammo, is_dpap );
 
 	base_max = WeaponMaxAmmo( weap_name );
 	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
@@ -1108,15 +1109,18 @@ bz_stations_sync_player_ui( player, feedback )
 		return;
 	}
 
+	rules = bz_stations_get_rules_api();
+	state = bz_stations_get_state_api();
+
 	bz_state_ensure_init( player );
 	bz_stations_sync_stock_perks( player );
 	if ( bz_stations_player_has_bowie( player ) )
 	{
-		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+		[[ state.bz_state_sync_bowie_ownership ]]( player, true );
 	}
 
 	score = bz_state_get_score_safe( player );
-	active_class = maps\_bz_state::bz_state_get_class( player );
+	active_class = [[ state.bz_state_get_class ]]( player );
 	weapon_name = bz_stations_get_player_weapon_safe( player );
 
 	player SetClientDvar( "ui_bz_score", "POINTS: " + score );
@@ -1135,12 +1139,12 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	// Standard Perks & Perk Tier 2 status dvars
-	std_ids = maps\_bz_rules::bz_get_standard_perk_ids();
+	std_ids = [[ rules.bz_get_standard_perk_ids ]]();
 	for ( i = 0; i < std_ids.size; i++ )
 	{
 		pid = std_ids[i];
-		has_t1 = maps\_bz_state::bz_state_has_perk( player, pid );
-		p_cost = maps\_bz_rules::bz_get_standard_perk_price( pid );
+		has_t1 = [[ state.bz_state_has_perk ]]( player, pid );
+		p_cost = [[ rules.bz_get_standard_perk_price ]]( pid );
 		if ( has_t1 )
 		{
 			player SetClientDvar( "ui_bz_perk_" + pid, "OWNED" );
@@ -1154,8 +1158,8 @@ bz_stations_sync_player_ui( player, feedback )
 			player SetClientDvar( "ui_bz_perk_" + pid, "NEED " + p_cost );
 		}
 
-		t2_cost = maps\_bz_rules::bz_get_perk_t2_price( pid );
-		if ( maps\_bz_state::bz_state_has_perk_t2( player, pid ) )
+		t2_cost = [[ rules.bz_get_perk_t2_price ]]( pid );
+		if ( [[ state.bz_state_has_perk_t2 ]]( player, pid ) )
 		{
 			player SetClientDvar( "ui_bz_t2_" + pid, "OWNED" );
 		}
@@ -1174,11 +1178,11 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	// Apex Perks status dvars
-	apex_ids = maps\_bz_rules::bz_get_apex_perk_ids();
+	apex_ids = [[ rules.bz_get_apex_perk_ids ]]();
 	for ( i = 0; i < apex_ids.size; i++ )
 	{
 		aid = apex_ids[i];
-		a_cost = maps\_bz_rules::bz_get_apex_perk_price( aid );
+		a_cost = [[ rules.bz_get_apex_perk_price ]]( aid );
 		if ( bz_state_has_apex( player, aid ) )
 		{
 			player SetClientDvar( "ui_bz_apex_" + aid, "OWNED" );
@@ -1194,11 +1198,11 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	// Classes status dvars
-	class_ids = maps\_bz_rules::bz_get_class_ids();
+	class_ids = [[ rules.bz_get_class_ids ]]();
 	for ( i = 0; i < class_ids.size; i++ )
 	{
 		cid = class_ids[i];
-		c_cost = maps\_bz_rules::bz_get_class_price( cid );
+		c_cost = [[ rules.bz_get_class_price ]]( cid );
 		if ( active_class == cid )
 		{
 			player SetClientDvar( "ui_bz_class_" + cid, "ACTIVE" );
@@ -1316,11 +1320,11 @@ bz_stations_sync_player_ui( player, feedback )
 
 	// Phase 2 Elemental & Special Arsenal status dvars
 	elements_on = bz_elements_enabled();
-	elem_ids = maps\_bz_rules::bz_get_element_weapon_ids();
+	elem_ids = [[ rules.bz_get_element_weapon_ids ]]();
 	for ( i = 0; i < elem_ids.size; i++ )
 	{
 		eid = elem_ids[i];
-		e_cost = maps\_bz_rules::bz_get_element_weapon_price( eid );
+		e_cost = [[ rules.bz_get_element_weapon_price ]]( eid );
 		e_weap = bz_get_element_weapon_name( eid );
 		if ( !elements_on )
 		{
@@ -1347,12 +1351,12 @@ bz_stations_sync_player_ui( player, feedback )
 		}
 	}
 
-	melee_slot = maps\_bz_state::bz_state_get_melee_slot( player );
-	owns_wc = maps\_bz_state::bz_state_owns_war_club( player );
-	has_pap_wc = maps\_bz_state::bz_state_has_pap_war_club( player );
+	melee_slot = [[ state.bz_state_get_melee_slot ]]( player );
+	owns_wc = [[ state.bz_state_owns_war_club ]]( player );
+	has_pap_wc = [[ state.bz_state_has_pap_war_club ]]( player );
 	owns_bowie = bz_stations_player_has_bowie( player );
-	owns_portal = maps\_bz_state::bz_state_owns_portal_grenade( player );
-	portal_charges = maps\_bz_state::bz_state_get_portal_charges( player );
+	owns_portal = [[ state.bz_state_owns_portal_grenade ]]( player );
+	portal_charges = [[ state.bz_state_get_portal_charges ]]( player );
 
 	if ( melee_slot == "war_club" )
 	{
@@ -1862,26 +1866,27 @@ bz_stations_on_menu_response( player, menu, response )
 		return true;
 	}
 
+	state = bz_stations_get_state_api();
 	weapon_name = bz_stations_get_player_weapon_safe( player );
 	res = undefined;
 
 	if ( category == "perk" )
 	{
 		bz_stations_sync_stock_perks( player );
-		res = maps\_bz_state::bz_try_buy_perk( player, item_id );
+		res = [[ state.bz_try_buy_perk ]]( player, item_id );
 	}
 	else if ( category == "perk_t2" )
 	{
 		bz_stations_sync_stock_perks( player );
-		res = maps\_bz_state::bz_try_buy_perk_t2( player, item_id );
+		res = [[ state.bz_try_buy_perk_t2 ]]( player, item_id );
 	}
 	else if ( category == "apex" )
 	{
-		res = maps\_bz_state::bz_try_buy_apex( player, item_id );
+		res = [[ state.bz_try_buy_apex ]]( player, item_id );
 	}
 	else if ( category == "class" )
 	{
-		res = maps\_bz_state::bz_try_buy_class( player, item_id );
+		res = [[ state.bz_try_buy_class ]]( player, item_id );
 	}
 	else if ( category == "pap" )
 	{
@@ -1900,7 +1905,7 @@ bz_stations_on_menu_response( player, menu, response )
 			{
 				has_prereq = bz_stations_player_has_bowie( player );
 			}
-			res = maps\_bz_state::bz_try_buy_pap_upgrade( player, item_id, weapon_name, has_prereq );
+			res = [[ state.bz_try_buy_pap_upgrade ]]( player, item_id, weapon_name, has_prereq );
 		}
 	}
 	else if ( category == "element_weapon" )
@@ -1915,7 +1920,7 @@ bz_stations_on_menu_response( player, menu, response )
 		}
 		else
 		{
-			res = maps\_bz_state::bz_try_buy_element_weapon( player, item_id, already_has );
+			res = [[ state.bz_try_buy_element_weapon ]]( player, item_id, already_has );
 			if ( res.ok && IsDefined( res.weapon_name ) && res.weapon_name != "" )
 			{
 				bz_stations_give_element_primary( player, res.weapon_name );
@@ -1926,7 +1931,7 @@ bz_stations_on_menu_response( player, menu, response )
 	else if ( category == "special_gear" )
 	{
 		owns_bowie = bz_stations_player_has_bowie( player );
-		res = maps\_bz_state::bz_try_buy_special_gear( player, item_id, owns_bowie );
+		res = [[ state.bz_try_buy_special_gear ]]( player, item_id, owns_bowie );
 		if ( res.ok )
 		{
 			if ( item_id == "war_club" || item_id == "pap_war_club" )
@@ -1992,9 +1997,28 @@ bz_log_kv( key, value )
 	return maps\_bz_log::kv( key, value );
 }
 
+bz_stations_get_rules_api()
+{
+	if ( !IsDefined( level.bz_stations_rules_api ) )
+	{
+		level.bz_stations_rules_api = maps\_bz_rules::bz_rules_get_stations_api();
+	}
+	return level.bz_stations_rules_api;
+}
+
+bz_stations_get_state_api()
+{
+	if ( !IsDefined( level.bz_stations_state_api ) )
+	{
+		level.bz_stations_state_api = maps\_bz_state::bz_state_get_stations_api();
+	}
+	return level.bz_stations_state_api;
+}
+
 bz_normalize_id( raw_id )
 {
-	return maps\_bz_rules::bz_normalize_id( raw_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_normalize_id ]]( raw_id );
 }
 
 bz_pap_enabled()
@@ -2009,47 +2033,56 @@ bz_elements_enabled()
 
 bz_state_ensure_init( player )
 {
-	maps\_bz_state::bz_state_ensure_init( player );
+	api = bz_stations_get_state_api();
+	[[ api.bz_state_ensure_init ]]( player );
 }
 
 bz_state_get_score_safe( player )
 {
-	return maps\_bz_state::bz_state_get_score_safe( player );
+	api = bz_stations_get_state_api();
+	return [[ api.bz_state_get_score_safe ]]( player );
 }
 
 bz_get_item_display_name( category, item_id )
 {
-	return maps\_bz_rules::bz_get_item_display_name( category, item_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_item_display_name ]]( category, item_id );
 }
 
 bz_get_pap_upgrade_price( upgrade_id )
 {
-	return maps\_bz_rules::bz_get_pap_upgrade_price( upgrade_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_pap_upgrade_price ]]( upgrade_id );
 }
 
 bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
 {
-	return maps\_bz_state::bz_state_has_pap_upgrade( player, upgrade_id, weapon_name );
+	api = bz_stations_get_state_api();
+	return [[ api.bz_state_has_pap_upgrade ]]( player, upgrade_id, weapon_name );
 }
 
 bz_state_has_apex( player, perk_id )
 {
-	return maps\_bz_state::bz_state_has_apex( player, perk_id );
+	api = bz_stations_get_state_api();
+	return [[ api.bz_state_has_apex ]]( player, perk_id );
 }
 
 bz_get_element_weapon_name( item_id )
 {
-	return maps\_bz_rules::bz_get_element_weapon_name( item_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_element_weapon_name ]]( item_id );
 }
 
 bz_get_element_ammo_cost( item_id )
 {
-	return maps\_bz_rules::bz_get_element_ammo_cost( item_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_element_ammo_cost ]]( item_id );
 }
 
 bz_get_special_gear_price( item_id )
 {
-	return maps\_bz_rules::bz_get_special_gear_price( item_id );
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_special_gear_price ]]( item_id );
 }
 
 bz_get_player_label( player )
@@ -2059,7 +2092,8 @@ bz_get_player_label( player )
 
 bz_make_purchase_result( status, item_id, cost, remaining_score )
 {
-	return maps\_bz_state::bz_make_purchase_result( status, item_id, cost, remaining_score );
+	api = bz_stations_get_state_api();
+	return [[ api.bz_make_purchase_result ]]( status, item_id, cost, remaining_score );
 }
 
 // Local function pointers used by the gated live selftests.

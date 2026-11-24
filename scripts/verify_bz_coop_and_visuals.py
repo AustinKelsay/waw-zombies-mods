@@ -215,8 +215,9 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         players = saved_players
 
     # Der Riese stations spawn inside bz_init() right after Stage 3 transitions into Der Riese
-    # and before Der Riese's Stage Clear (flow[8] = sumpf->factory transition, flow[10] = factory clear).
-    factory_window_start, factory_window_end = flow[8][0], flow[10][0]
+    # and before Der Riese's Stage Clear (flow[8] = sumpf->factory transition, flow[9] = factory init,
+    # flow[10] = factory clear).
+    factory_window_start, factory_init, factory_window_end = flow[8][0], flow[9][0], flow[10][0]
     factory_stations = Counter(
         e.fields.get("station")
         for e in timeline[factory_window_start + 1 : factory_window_end]
@@ -224,6 +225,14 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
     )
     if factory_stations != Counter(("perks", "class", "arsenal")):
         errors.append("Expected exactly one STATION_SPAWN each for Der Riese perks, class, and arsenal")
+    if not any(
+        isinstance(e, bz.BzEvent)
+        and matches(e, "PAP_DOUBLE_UPGRADE", map="nazi_zombie_factory", console="native")
+        for e in timeline[factory_init + 1 : factory_window_end]
+    ):
+        errors.append(
+            "Missing Der Riese native PaP coexistence event (PAP_DOUBLE_UPGRADE with console=native) during Cycle 1 Stage 4"
+        )
 
     summary_position = flow[len(expected_flow) - 1][0]
     if not any(

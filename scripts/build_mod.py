@@ -547,6 +547,7 @@ def inject_map_hooks(
     powerups_flag_hook = ""
     if rewire_powerups_module:
         powerups_flag_hook = (
+            f"{indent}level.bz_powerup_drop_fn = maps\\{rewire_powerups_module}::powerup_drop;{newline}"
             f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ level.bz_powerups_hooked = true; }}{newline}"
         )
     p2_powerup_hook = ""
@@ -1379,6 +1380,22 @@ def inject_zombiemode_tesla_hooks(source_text: str | bytes) -> str | bytes:
             rf"\g<indent>else{newline}"
             rf"\g<indent>{{{newline}"
             rf"\g<indent>\tself.deathanim = random( level._zombie_tesla_crawl_death );{newline}"
+            rf"\g<indent>}}"
+        ),
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # 4. Route Wunderwaffe chain-kill powerup drops through the active map's
+    #    patched powerups module (bound to level.bz_powerup_drop_fn by inject_map_hooks)
+    #    so Max Ammo drops on Shi No Numa and Der Riese never bypass the Portal
+    #    Grenade refill hook while staying stock-identical in Classic Mode.
+    text = re.sub(
+        r"^(?P<indent>[ \t]*)level\s+thread\s+maps\\_zombiemode_powerups::powerup_drop\(\s*(?P<args>[^)]+?)\s*\)\s*;",
+        (
+            rf"\g<indent>if ( IsDefined( level.bz_powerup_drop_fn ) ){newline}"
+            rf"\g<indent>{{{newline}"
+            rf"\g<indent>\tlevel thread [[ level.bz_powerup_drop_fn ]]( \g<args> );{newline}"
             rf"\g<indent>}}"
         ),
         text,

@@ -1293,3 +1293,26 @@ bz_get_portal_max_charges()
 {
 	return 2;
 }
+
+// Grouped local function pointers used by _bz_stations.gsc to stay within WaW 1.7 precache budgets.
+bz_rules_get_stations_api()
+{
+	api = SpawnStruct();
+	api.bz_calc_reserve_ammo_mult = ::bz_calc_reserve_ammo_mult;
+	api.bz_get_apex_perk_ids = ::bz_get_apex_perk_ids;
+	api.bz_get_apex_perk_price = ::bz_get_apex_perk_price;
+	api.bz_get_class_ids = ::bz_get_class_ids;
+	api.bz_get_class_price = ::bz_get_class_price;
+	api.bz_get_element_ammo_cost = ::bz_get_element_ammo_cost;
+	api.bz_get_element_weapon_ids = ::bz_get_element_weapon_ids;
+	api.bz_get_element_weapon_name = ::bz_get_element_weapon_name;
+	api.bz_get_element_weapon_price = ::bz_get_element_weapon_price;
+	api.bz_get_item_display_name = ::bz_get_item_display_name;
+	api.bz_get_pap_upgrade_price = ::bz_get_pap_upgrade_price;
+	api.bz_get_perk_t2_price = ::bz_get_perk_t2_price;
+	api.bz_get_special_gear_price = ::bz_get_special_gear_price;
+	api.bz_get_standard_perk_ids = ::bz_get_standard_perk_ids;
+	api.bz_get_standard_perk_price = ::bz_get_standard_perk_price;
+	api.bz_normalize_id = ::bz_normalize_id;
+	return api;
+}

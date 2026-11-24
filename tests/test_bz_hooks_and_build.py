@@ -2360,14 +2360,14 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         counts = {name: len(re.findall(ref_pattern, code)) for name, code in sources.items()}
         budgets = {
             "_bz_hooks.gsc": 65,
-            "_bz_selftest.gsc": 45,
-            "_bz_stations.gsc": 55,
+            "_bz_selftest.gsc": 35,
+            "_bz_stations.gsc": 45,
         }
         for name, budget in budgets.items():
             self.assertIn(name, counts)
             with self.subTest(module=name):
                 self.assertLessEqual(counts[name], budget)
-        self.assertLessEqual(sum(counts.values()), 550, counts)
+        self.assertLessEqual(sum(counts.values()), 499, counts)
 
         selftest_path = MOD_ROOT / "maps" / "_bz_selftest.gsc"
         selftest_code = sources[selftest_path.name]
@@ -2381,6 +2381,35 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         for name, body in re.findall(r"(?ms)^(\w+)\([^\n]*\)\n\{\n(.*?)^\}", selftest_code):
             if not name.startswith("bz_run_"):
                 self.assertNotRegex(body, r"(?i)\b(?:endon|wait|waittill\w*|waitframe)\s*\(", name)
+
+    def test_tesla_powerup_drop_routes_through_patched_map_powerups_module(self) -> None:
+        tesla_src = (
+            "tesla_pvp_thread()\n{\n"
+            "\tif ( self.health - damage < 1 )\n\t{\n\t\tself.health = 1;\n\t}\n"
+            "\telse\n\t{\n\t\tself.health -= damage;\n\t}\n"
+            "}\n"
+            "tesla_arc_damage( source_enemy, player, arc_num )\n{\n"
+            "\tif ( !player.tesla_powerup_dropped )\n\t{\n"
+            "\t\tlevel thread maps\\_zombiemode_powerups::powerup_drop( self.origin );\n"
+            "\t}\n"
+            "}\n"
+        )
+        patched_tesla = self.bm.inject_zombiemode_tesla_hooks(tesla_src)
+        assert isinstance(patched_tesla, str)
+        self.assertNotIn(r"maps\_zombiemode_powerups::powerup_drop", patched_tesla)
+        self.assertIn("if ( IsDefined( level.bz_powerup_drop_fn ) )", patched_tesla)
+        self.assertIn("level thread [[ level.bz_powerup_drop_fn ]]( self.origin );", patched_tesla)
+
+        map_src = b'main()\n{\n\tmaps\\_zombiemode::main("spawners");\n}\n'
+        for slug in ("sumpf", "factory"):
+            mod_name = f"_zombiemode_powerups_bz_{slug}"
+            patched_map = self.bm.inject_map_hooks(
+                map_src,
+                f"nazi_zombie_{slug}",
+                rewire_powerups_module=mod_name,
+            ).decode("latin1")
+            self.assertIn(f"level.bz_powerup_drop_fn = maps\\{mod_name}::powerup_drop;", patched_map)
+            self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { level.bz_powerups_hooked = true; }", patched_map)
 
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory

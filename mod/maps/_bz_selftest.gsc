@@ -24,8 +24,10 @@ bz_selftest_start_enabled()
 	{
 		level thread bz_run_visual_tour();
 	}
+	map_name = bz_get_map_name();
 	if ( GetDvarInt( "bz_test_gauntlet_seed" ) == 1 &&
-		GetDvarInt( "gauntlet_enabled" ) == 1 && bz_get_map_name() == "nazi_zombie_prototype" )
+		GetDvarInt( "gauntlet_enabled" ) == 1 &&
+		( map_name == "nazi_zombie_prototype" || map_name == "nazi_zombie_factory" ) )
 	{
 		level thread bz_run_gauntlet_seed();
 	}
@@ -1446,8 +1448,10 @@ bz_run_visual_tour()
 
 bz_run_gauntlet_seed()
 {
+	map_name = bz_get_map_name();
 	if ( !bz_enabled() || GetDvarInt( "bz_test_gauntlet_seed" ) != 1 ||
-		GetDvarInt( "gauntlet_enabled" ) != 1 || bz_get_map_name() != "nazi_zombie_prototype" )
+		GetDvarInt( "gauntlet_enabled" ) != 1 ||
+		( map_name != "nazi_zombie_prototype" && map_name != "nazi_zombie_factory" ) )
 	{
 		return;
 	}
@@ -1460,12 +1464,19 @@ bz_run_gauntlet_seed()
 		cycle = GetDvarInt( "gauntlet_cycle" );
 		if ( IsDefined( p ) && IsDefined( p.gauntlet_points_applied ) && p.gauntlet_points_applied )
 		{
-			if ( cycle >= 2 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
+			if ( map_name == "nazi_zombie_factory" )
+			{
+				if ( cycle == 1 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
+				{
+					break;
+				}
+			}
+			else if ( cycle >= 2 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
 			{
 				p thread bz_run_gauntlet_wipe();
 				return;
 			}
-			if ( cycle == 1 )
+			else if ( cycle == 1 )
 			{
 				break;
 			}
@@ -1476,6 +1487,48 @@ bz_run_gauntlet_seed()
 	if ( !IsDefined( p ) )
 	{
 		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_state" );
+		return;
+	}
+
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		native_trig = bz_test_unlock_native_pap();
+		wait( 0.15 );
+		if ( !IsDefined( native_trig ) )
+		{
+			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap_trigger" );
+			return;
+		}
+		orig_origin = p.origin;
+		orig_angles = p.angles;
+		orig_score = p.score;
+		p.score = 50000;
+		p SetOrigin( ( -61, 495, 118 ) );
+		p SetPlayerAngles( ( 5, 90, 0 ) );
+		bz_test_equip_native_pap_colt( p );
+		for ( p_tries = 0; p_tries < 40 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != "zombie_colt_upgraded" ); p_tries++ )
+		{
+			wait( 0.05 );
+		}
+		p.bz_pap_console_next_ms = 0;
+		native_trig notify( "trigger", p );
+		for ( d_tries = 0; d_tries < 20 && !bz_is_double_pap_safe( p, "zombie_colt_upgraded" ); d_tries++ )
+		{
+			wait( 0.05 );
+		}
+		native_ok = bz_is_double_pap_safe( p, "zombie_colt_upgraded" );
+		p TakeWeapon( "zombie_colt_upgraded" );
+		if ( p HasWeapon( "bz_acid_sprayer" ) )
+		{
+			p SwitchToWeapon( "bz_acid_sprayer" );
+		}
+		p.score = orig_score;
+		p SetOrigin( orig_origin );
+		p SetPlayerAngles( orig_angles );
+		if ( !native_ok )
+		{
+			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap" );
+		}
 		return;
 	}
 
