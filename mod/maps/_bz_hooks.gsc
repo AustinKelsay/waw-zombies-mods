@@ -2302,9 +2302,10 @@ bz_run_test_p2_selftest()
 		{
 			for ( zi = 0; zi < zlist.size; zi++ )
 			{
-				if ( IsDefined( zlist[zi] ) && IsAlive( zlist[zi] ) )
+				cand = zlist[zi];
+				if ( IsDefined( cand ) && IsAlive( cand ) && !bz_is_dog_entity( cand ) && ( !IsDefined( cand.magic_bullet_shield ) || !cand.magic_bullet_shield ) )
 				{
-					live_z = zlist[zi];
+					live_z = cand;
 					break;
 				}
 			}
@@ -2390,6 +2391,9 @@ bz_run_test_p2_selftest()
 		live_z.health = 50000;
 		live_z.bz_flame_last_ignite_ms = undefined;
 		live_z.bz_flame_dot_active = false;
+		flame_close_org = ( p.origin[0] + 48.0, p.origin[1], p.origin[2] );
+		live_z ForceTeleport( flame_close_org, orig_z_ang );
+		wait( 0.05 );
 		flame_close_dmg = bz_actor_damage_dispatch( live_z, p, p, 50, 0, "MOD_BURNED", "m2_flamethrower_zombie", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
 		flame_close_ok = flame_close_dmg > 50 && IsDefined( live_z.bz_flame_dot_active ) && live_z.bz_flame_dot_active;
 
@@ -2401,7 +2405,19 @@ bz_run_test_p2_selftest()
 		long_dot_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( 10, 50000, false, false );
 		dot_applied = maps\_bz_elem_stock::bz_flame_apply_dot_tick( live_z, p, long_dot_dmg, false, false, 1 );
 		wait( 0.05 );
-		flame_dot_ok = dot_applied && long_dot_dmg > 0 && IsAlive( live_z ) && Int( live_z.health ) < hp_before_dot;
+		hp_after_dot = Int( live_z.health );
+		flame_dot_ok = dot_applied && long_dot_dmg > 0 && IsAlive( live_z ) && hp_after_dot < hp_before_dot;
+		if ( !flame_close_ok || !flame_dot_ok )
+		{
+			fdbg = [];
+			fdbg[0] = maps\_bz_log::kv( "close_dmg", flame_close_dmg );
+			fdbg[1] = maps\_bz_log::kv( "close_ok", bz_bool_int( flame_close_ok ) );
+			fdbg[2] = maps\_bz_log::kv( "dot_ok", bz_bool_int( flame_dot_ok ) );
+			fdbg[3] = maps\_bz_log::kv( "dist", Int( Distance( p.origin, live_z.origin ) ) );
+			fdbg[4] = maps\_bz_log::kv( "hp_before", hp_before_dot );
+			fdbg[5] = maps\_bz_log::kv( "hp_after", hp_after_dot );
+			maps\_bz_log::emit( "SELFTEST_FLAME_DBG", maps\_bz_log::join_fields( fdbg ) );
+		}
 		bz_selftest_check( st, flame_close_ok && flame_dot_ok, "flamethrower_melt_and_dot" );
 
 		// 7. PaP War Club frontal AOE knockback smash on live zombie

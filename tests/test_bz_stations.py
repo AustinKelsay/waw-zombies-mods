@@ -140,14 +140,14 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 self.assertEqual(tuple(by_id["arsenal"].get_field("angles")[i] for i in range(3)), (0, 225, 0))
                 self.assertNotIn("pap", by_id)
             elif map_name == "nazi_zombie_sumpf":
-                # Shi No Numa arsenal moved off central stairwell cutout onto solid -528 upstairs floor
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (9960, 520, -492))
+                # Shi No Numa arsenal moved onto clear east upstairs floor off stairwell & railings
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (10440, 460, -492))
                 self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (10020, 610, -492))
                 self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10280, 610, -492))
                 self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10280, 410, -492))
             elif map_name == "nazi_zombie_asylum":
-                # Verruckt arsenal nudged for clean breathing room from Quick Revive (1149, 402)
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (1010, 390, 96))
+                # Verruckt arsenal aligned cleanly away from doorway and Quick Revive (1149, 402)
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (1060, 310, 96))
 
     def test_unrecognized_map_uses_safe_spawn_offset_fallback_and_floor_snap(self) -> None:
         spawn_ent = FakeEntity("info_player_start", ent_num=50, is_player=False)

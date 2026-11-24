@@ -226,6 +226,38 @@ SYNTHETIC_M7_LAUNCHER_ZOMBIE = (
     "\\projTrailEffect\\weapon/grenade/fx_trail_rifle_grenade"
 )
 
+SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED = (
+    "WEAPONFILE"
+    "\\displayName\\WEAPON_DOUBLEBARREL_SAWED"
+    "\\inventoryType\\primary"
+    "\\weaponType\\bullet"
+    "\\weaponClass\\spread"
+    "\\fireType\\Single Shot"
+    "\\ammoName\\doublebarrel"
+    "\\clipName\\doublebarrel"
+    "\\damage\\150"
+    "\\minDamage\\100"
+    "\\clipSize\\2"
+    "\\maxAmmo\\60"
+    "\\startAmmo\\60"
+    "\\fireTime\\0.35"
+    "\\reloadTime\\1.8"
+    "\\reloadEmptyTime\\1.8"
+    "\\aimDownSight\\1"
+    "\\adsFire\\1"
+    "\\adsUpAnim\\viewmodel_doublebarrel_missing_ads_up"
+    "\\idleAnim\\viewmodel_doublebarrel_idle"
+    "\\emptyIdleAnim\\viewmodel_doublebarrel_idle"
+    "\\fireAnim\\viewmodel_doublebarrel_fire"
+    "\\reloadAnim\\viewmodel_doublebarrel_reload"
+    "\\reloadEmptyAnim\\viewmodel_doublebarrel_reload"
+    "\\fireSound\\weap_dbshotgun_fire"
+    "\\fireSoundPlayer\\weap_dbshotgun_fire_plr"
+    "\\gunModel\\viewmodel_usa_sawed_off_shotgun"
+    "\\worldModel\\weapon_usa_sawed_off_shotgun"
+    "\\viewFlashEffect\\weapon/muzzleflashes/shotgunflash_disallowed"
+)
+
 SYNTHETIC_ZOMBIE_BOWIE_FLOURISH = (
     "WEAPONFILE"
     "\\displayName\\ZOMBIE_BOWIE_FLOURISH"
@@ -350,7 +382,7 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
         )
         self.assertEqual(
             spec_templates["bz_blade_boomerang"],
-            ("zombie_bowie_flourish", "zombie_colt", "colt"),
+            ("zombie_doublebarrel_sawed", "walther", "zombie_colt", "colt"),
         )
         self.assertEqual(
             len({templates[0] for templates in spec_templates.values()}),
@@ -368,8 +400,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             (raw_sp / "m7_launcher_zombie").write_text(
                 SYNTHETIC_M7_LAUNCHER_ZOMBIE, encoding="latin1"
             )
-            (raw_sp / "zombie_bowie_flourish").write_text(
-                SYNTHETIC_ZOMBIE_BOWIE_FLOURISH, encoding="latin1"
+            (raw_sp / "zombie_doublebarrel_sawed").write_text(
+                SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED, encoding="latin1"
             )
             # Also include fallback templates to prove primary distinct templates win
             (raw_sp / "ray_gun").write_text(SYNTHETIC_RAY_GUN, encoding="latin1")
@@ -427,8 +459,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "1",
                     "20",
                     "20",
-                    "viewmodel_knife_bowie",
-                    "weapon_usa_kbar_knife",
+                    "viewmodel_usa_sawed_off_shotgun",
+                    "weapon_usa_sawed_off_shotgun",
                     "0.65",
                 ),
             }
@@ -492,21 +524,26 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 self.assertEqual(acid[ads_key], "")
             self.assertEqual(acid["fireSound"], "weap_raygun_fire")
             self.assertEqual(acid["fireSoundPlayer"], "weap_raygun_fire_plr")
+            self.assertEqual(acid["emptyIdleAnim"], "viewmodel_flamethrower_idle")
+            self.assertEqual(acid["reloadAnim"], "viewmodel_flamethrower_reload")
+            self.assertEqual(acid["reloadEmptyAnim"], "viewmodel_flamethrower_reload")
 
             xbow = staged_pairs["bz_multi_crossbow"]
             self.assertEqual(xbow["fireType"], "Single Shot")
             self.assertEqual(xbow["fireTime"], "0.60")
 
             blade = staged_pairs["bz_blade_boomerang"]
-            self.assertEqual(blade["weaponClass"], "pistol")
             self.assertEqual(blade["fireType"], "Single Shot")
             self.assertEqual(blade["reloadTime"], "0.45")
+            self.assertEqual(blade["reloadEmptyTime"], "0.45")
             self.assertEqual(blade["aimDownSight"], "0")
             self.assertEqual(blade["adsFire"], "0")
-            self.assertEqual(blade["worldModel"], "weapon_usa_kbar_knife")
             self.assertEqual(blade["fireSound"], "melee_swing_plr")
             self.assertEqual(blade["fireSoundPlayer"], "melee_swing_plr")
-            self.assertEqual(blade["fireAnim"], "viewmodel_knife_slash")
+            self.assertEqual(blade["idleAnim"], "viewmodel_doublebarrel_idle")
+            self.assertEqual(blade["fireAnim"], "viewmodel_doublebarrel_fire")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_doublebarrel_reload")
+            self.assertEqual(blade["reloadEmptyAnim"], "viewmodel_doublebarrel_reload")
 
             # generate_staged_mod_csv appends weapon,sp/bz_* entries cleanly without duplicates
             base_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
@@ -611,14 +648,16 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             (raw_sp / "m7_launcher_zombie").write_text(
                 SYNTHETIC_M7_LAUNCHER_ZOMBIE, encoding="latin1"
             )
-            (raw_sp / "zombie_bowie_flourish").write_text(
-                SYNTHETIC_ZOMBIE_BOWIE_FLOURISH, encoding="latin1"
+            (raw_sp / "zombie_doublebarrel_sawed").write_text(
+                SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED, encoding="latin1"
             )
 
-            # Populate Linux lowercase xanim files (deliberately omitting tesla adsDownAnim & knife_slash)
+            # Populate Linux lowercase xanim files (deliberately omitting tesla adsDownAnim & doublebarrel adsUpAnim)
             for anim_name in (
                 "viewmodel_usa_flamethrower_idle",
                 "viewmodel_usa_flamethrower_fire",
+                "viewmodel_flamethrower_idle",
+                "viewmodel_flamethrower_reload",
                 "viewmodel_usa_tesla_idle",
                 "viewmodel_usa_tesla_fire",
                 "viewmodel_usa_tesla_ads_up",
@@ -627,8 +666,9 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 "viewmodel_m1garand_gl_fire",
                 "viewmodel_m1garand_gl_ads_up",
                 "viewmodel_m1garand_gl_ads_fire",
-                "viewmodel_knife_bowie_idle",
-                "viewmodel_knife_bowie_flourish",
+                "viewmodel_doublebarrel_idle",
+                "viewmodel_doublebarrel_fire",
+                "viewmodel_doublebarrel_reload",
             ):
                 (raw_xanim / anim_name).write_bytes(b"XANIM")
 
@@ -659,8 +699,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     (stage_dir / "weapons" / "sp" / "bz_blade_boomerang").read_text(encoding="latin1")
                 )
             )
-            # viewmodel_knife_slash absent in raw/xanim -> falls back safely to template's fireAnim
-            self.assertEqual(blade["fireAnim"], "viewmodel_knife_bowie_flourish")
+            self.assertEqual(blade["fireAnim"], "viewmodel_doublebarrel_fire")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_doublebarrel_reload")
             # Missing optional adsUpAnim cleared to ""
             self.assertEqual(blade["adsUpAnim"], "")
 

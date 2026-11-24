@@ -238,7 +238,7 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 1010, 390, 96 ),
+			( 1060, 310, 96 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -280,8 +280,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 9960, 520, -492 ),
-			( 0, 0, 0 ),
+			( 10440, 460, -492 ),
+			( 0, 180, 0 ),
 			false,
 			false
 		);
@@ -438,7 +438,7 @@ bz_stations_get_model_for_station( map_name, station_id )
 		}
 		if ( sid == "class" )
 		{
-			return "zombie_zapper_tesla_coil";
+			return "zombie_vending_revive_on";
 		}
 		if ( sid == "arsenal" )
 		{
