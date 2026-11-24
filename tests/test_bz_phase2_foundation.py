@@ -909,12 +909,19 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
             self.assertIsNotNone(m, f"Missing macro {macro}")
             self.assertIn("set bz_elements_enabled 1", m.group(0), f"{macro} must enable bz_elements_enabled 1")
 
-        # Classic & Gauntlet keep bz_elements_enabled 0
+        # Classic Mode and Classic Gauntlet macros keep bz_elements_enabled 0,
+        # while Enhanced Gauntlet enables bz_elements_enabled 1 cleanly.
         classic_m = re.search(r"#define\s+BZ_CLASSIC_MODE_ACTION\b.*?(?:\n\n|\Z)", bz_inc_text, re.DOTALL)
         self.assertIsNotNone(classic_m)
         self.assertIn("set bz_elements_enabled 0", classic_m.group(0))
-        self.assertIn("set bz_elements_enabled 0", gauntlet_inc_text)
-        self.assertNotIn("set bz_elements_enabled 1", gauntlet_inc_text)
+        for classic_gauntlet_macro in ("GAUNTLET_SOLO_START_ACTION", "GAUNTLET_CLASSIC_MODE_ACTION"):
+            gm = re.search(rf"#define\s+{classic_gauntlet_macro}\b.*?(?:\n\n|\Z)", gauntlet_inc_text, re.DOTALL)
+            self.assertIsNotNone(gm, f"Missing macro {classic_gauntlet_macro}")
+            self.assertIn("set bz_elements_enabled 0", gm.group(0))
+            self.assertNotIn("set bz_elements_enabled 1", gm.group(0))
+        enh_gm = re.search(r"#define\s+GAUNTLET_ENHANCED_SOLO_START_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc_text, re.DOTALL)
+        self.assertIsNotNone(enh_gm)
+        self.assertIn("set bz_elements_enabled 1", enh_gm.group(0))
 
         # WaW 1.7 GSC compliance: zero foreach, clean tokenization, zero endon in sync callers
         gsc = BzGscRuntime(MOD_ROOT, FakeDvarStore())

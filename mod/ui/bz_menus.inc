@@ -38,21 +38,24 @@
 	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set gauntlet_enabled 0; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0; map nazi_zombie_sumpf";
 
 // Co-op Host Setup toggle action for Base Zombies Enhancements (0 = Off, 1 = Enabled).
-// Keeps the stock map picker available so hosts can select Der Riese or any Stock Map.
+// Independent of gauntlet_enabled so hosts can run Enhancements on any single map
+// OR compose Enhanced Zombie Gauntlet (gauntlet_enabled=1 + bz_enabled=1).
 #define BZ_COOP_TOGGLE_ACTION \
-	execOnDvarIntValue bz_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set gauntlet_enabled 0; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0"; \
+	execOnDvarIntValue bz_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0"; \
 	execOnDvarIntValue bz_enabled 0 "set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0";
 
-// Co-op Host Setup accept action when Base Zombies Enhancements is active.
+// Co-op Host Setup accept action when Base Zombies Enhancements is active (single map).
 #define BZ_COOP_ACCEPT_ACTION \
 	GAUNTLET_CLEAR_RUN_STATE_EXEC \
 	exec "set gauntlet_enabled 0; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0";
 
-// Co-op Host Setup toggle row (0 = Off, 1 = Enhancements).
+// Co-op Host Setup toggle row (0 = Off, 1 = Enhancements). Always visible so hosts can
+// enable Enhancements both in single-map Co-op and inside Zombie Gauntlet.
 #define BZ_COOP_SETUP_TOGGLE( itemIndex ) \
-	CHOICE_DVARFLOATLIST_VIS( itemIndex, "ENHANCEMENTS", bz_enabled, { "Off (Classic)" 0 "Base Zombies" 1 }, BZ_COOP_TOGGLE_ACTION, when( dvarInt( gauntlet_enabled ) == 0 ) )
+	CHOICE_DVARFLOATLIST_VIS( itemIndex, "ENHANCEMENTS", bz_enabled, { "Off (Classic)" 0 "Base Zombies" 1 }, BZ_COOP_TOGGLE_ACTION, 1 )
 
-// Co-op Lobby readout panel when Base Zombies Enhancements is active (hidden in Classic & Gauntlet).
+// Co-op Lobby readout panel when single-map Base Zombies Enhancements is active
+// (Gauntlet lobby panel renders combined status when gauntlet_enabled == 1).
 #define BZ_COOP_LOBBY_STATUS_PANEL( px, py, pw, ph, halign, valign ) \
 	itemDef \
 	{ \
@@ -71,9 +74,9 @@
 		name			bz_lobby_status_text \
 		type			ITEM_TYPE_TEXT \
 		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
-		text			"BASE ZOMBIES ENHANCEMENTS - Perks + Classes + PaP" \
+		text			"BASE ZOMBIES ENHANCEMENTS - Perks + Classes + PaP + Arsenal" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.28 \
+		textscale		0.27 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		BZ_COLOR_ACCENT \
