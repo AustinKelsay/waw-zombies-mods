@@ -1371,8 +1371,8 @@ def inject_clientscript_callbacks_patch(
                 param = connect_match.group("param")
                 hook = (
                     f"{newline}"
-                    f'\tif ( GetDvar( "bz_host_build_id" ) != "" ) {{ SetClientDvar( "bz_host_build_id", "" ); }}{newline}'
-                    f"\tlevel thread bz_check_client_build_parity( {param} );"
+                    f'\tbz_prev_seq = GetDvar( "bz_host_build_seq" );{newline}'
+                    f"\tlevel thread bz_check_client_build_parity( {param}, bz_prev_seq );"
                 )
                 text = text[: connect_match.end()] + hook + text[connect_match.end() :]
             helper = (
@@ -1382,24 +1382,22 @@ def inject_clientscript_callbacks_patch(
                 f'\treturn "{build_id}";{newline}'
                 f"}}{newline}"
                 f"{newline}"
-                f"bz_check_client_build_parity( clientNum ){newline}"
+                f"bz_check_client_build_parity( clientNum, prev_seq ){newline}"
                 f"{{{newline}"
                 f"\tclient_id = bz_get_client_build_id();{newline}"
                 f"\tfor ( i = 0; i < 40; i++ ){newline}"
                 f"\t{{{newline}"
                 f"\t\twait( 0.25 );{newline}"
+                f'\t\tcur_seq = GetDvar( "bz_host_build_seq" );{newline}'
                 f'\t\thost_id = GetDvar( "bz_host_build_id" );{newline}'
-                f'\t\tif ( IsDefined( host_id ) && host_id != "" ){newline}'
+                f'\t\tif ( IsDefined( cur_seq ) && cur_seq != "" && cur_seq != prev_seq && IsDefined( host_id ) && host_id != "" ){newline}'
                 f"\t\t{{{newline}"
-                f'\t\t\tSetClientDvar( "bz_client_build_id", client_id );{newline}'
                 f"\t\t\tif ( host_id != client_id ){newline}"
                 f"\t\t\t{{{newline}"
-                f'\t\t\t\tSetClientDvar( "bz_build_parity_status", "mismatch" );{newline}'
                 f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_MISMATCH|host=" + host_id + ";client=" + client_id );{newline}'
                 f"\t\t\t}}{newline}"
                 f"\t\t\telse{newline}"
                 f"\t\t\t{{{newline}"
-                f'\t\t\t\tSetClientDvar( "bz_build_parity_status", "match" );{newline}'
                 f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_CLIENT|host=" + host_id + ";client=" + client_id + ";status=match" );{newline}'
                 f"\t\t\t}}{newline}"
                 f"\t\t\treturn;{newline}"

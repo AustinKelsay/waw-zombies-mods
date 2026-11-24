@@ -430,6 +430,9 @@ bz_init()
 	level.bz_initialized = true;
 	level.bz_end_game_notified = false;
 	SetDvar( "bz_build_id", maps\_bz_version::bz_get_build_id() );
+	parity_seq = GetDvarInt( "bz_host_build_seq_ctr" ) + 1;
+	SetDvar( "bz_host_build_seq_ctr", "" + parity_seq );
+	level.bz_parity_seq = "" + parity_seq + "_" + GetTime();
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
@@ -777,8 +780,14 @@ bz_on_player_spawned( player )
 		version = maps\_bz_version::bz_get_build_version();
 		commit = maps\_bz_version::bz_get_build_commit();
 		build_id = maps\_bz_version::bz_get_build_id();
+		parity_seq = "1";
+		if ( IsDefined( level.bz_parity_seq ) && level.bz_parity_seq != "" )
+		{
+			parity_seq = level.bz_parity_seq;
+		}
 		player SetClientDvar( "bz_build_id", build_id );
 		player SetClientDvar( "bz_host_build_id", build_id );
+		player SetClientDvar( "bz_host_build_seq", parity_seq );
 		fields = [];
 		fields[0] = bz_log_kv( "version", version );
 		fields[1] = bz_log_kv( "commit", commit );
@@ -914,6 +923,7 @@ bz_on_end_game()
 		{
 			player.bz_build_parity_announced = undefined;
 			player SetClientDvar( "bz_host_build_id", "" );
+			player SetClientDvar( "bz_host_build_seq", "" );
 		}
 	}
 
