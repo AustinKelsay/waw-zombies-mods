@@ -1321,6 +1321,85 @@ def stage_bz_tesla_script(
     return out_path
 
 
+_CSC_LEVEL_NOTIFY_1ARG_RE = re.compile(
+    r"(?P<sig>level_notify\s*\(\s*notify_name\s*\)\s*\{)"
+    r"(?P<body>[^}]*?\blevel\s+notify\s*\(\s*notify_name\s*\)\s*;[^}]*?\})",
+    re.DOTALL,
+)
+
+
+def inject_clientscript_callbacks_patch(source: bytes | str) -> bytes | str:
+    """Ensure clientscripts/_callbacks.csc::level_notify accepts DLC 3-arg notetrack callbacks.
+
+    Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
+    `level_notify(notify_name)`, which throws a client script runtime error when
+    `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
+    notetracks via `level_notify("notetrack", localClientNum, note)`.
+    """
+    is_bytes = isinstance(source, bytes)
+    text = source.decode("latin1") if is_bytes else source
+    if re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
+        return source
+
+    newline = "\r\n" if "\r\n" in text else "\n"
+    patched, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
+        f"level_notify(notify_name, param1, param2){newline}"
+        f"{{{newline}"
+        f"\tlevel notify(notify_name, param1, param2);{newline}"
+        f"}}",
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
+    return patched.encode("latin1") if is_bytes else patched
+
+
+def stage_bz_clientscript_callbacks(
+    tools_root: Path,
+    stage_dir: Path,
+    steam_game: Path | None = None,
+) -> Path | None:
+    """Stage DLC-compatible clientscripts/_callbacks.csc so Cryo Cannon notetracks work on all 4 maps."""
+    stock_bytes: bytes | None = None
+    search_steam = steam_game if steam_game is not None else tools_root
+    for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
+        try:
+            extracted = try_extract_stock_script(
+                map_name, "clientscripts/_callbacks.csc", search_steam, tools_root
+            )
+        except FileNotFoundError:
+            extracted = None
+        if extracted is not None:
+            stock_bytes = extracted
+            break
+
+    if stock_bytes is None:
+        raw_csc = tools_root / "raw" / "clientscripts" / "_callbacks.csc"
+        if raw_csc.is_file():
+            stock_bytes = raw_csc.read_bytes()
+
+    if stock_bytes is None:
+        for base in (search_steam, tools_root):
+            common_ff = base / "zone" / "english" / "common.ff"
+            if common_ff.is_file():
+                try:
+                    stock_bytes = extract_rawfile_from_ff(common_ff, "clientscripts/_callbacks.csc")
+                    break
+                except ValueError:
+                    continue
+
+    if stock_bytes is None:
+        return None
+
+    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes)
+    assert isinstance(patched_bytes, bytes)
+    out_path = stage_dir / "clientscripts" / "_callbacks.csc"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(patched_bytes)
+    return out_path
+
+
 def parse_weapon_file(text: str) -> list[tuple[str, str]]:
     """Parse a WaW 1.7 backslash-delimited WEAPONFILE\\key\\val\\... string."""
     cleaned = text.rstrip("\r\n")
@@ -1513,6 +1592,7 @@ def generate_staged_mod_csv(
                 "_zombiemode_score.gsc",
                 "_laststand.gsc",
                 "_zombiemode_tesla.gsc",
+                "_callbacks.csc",
                 "nazi_zombie_factory_teleporter.gsc",
             )
         )
@@ -1889,6 +1969,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
     stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
+    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify for Cryo Cannon on Nacht/Verruckt)
+    stage_bz_clientscript_callbacks(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
+
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
 
@@ -1900,6 +1983,12 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             p.relative_to(stage_dir).as_posix()
             for p in sorted((stage_dir / "maps").rglob("*.gsc"))
         ]
+        clientscripts_dir = stage_dir / "clientscripts"
+        if clientscripts_dir.is_dir():
+            staged_gscs.extend(
+                p.relative_to(stage_dir).as_posix()
+                for p in sorted(clientscripts_dir.rglob("*.csc"))
+            )
         raw_xmodel_dir = tools_root / "raw" / "xmodel"
         compat_xmodels = [
             xm for xm in DER_RIESE_COMPAT_XMODELS if (raw_xmodel_dir / xm).is_file()
@@ -2110,6 +2199,8 @@ def build_iwd(stage_dir: Path) -> Path:
     gsc_files = sorted((stage_dir / "maps").rglob("*.gsc"))
     if not gsc_files:
         raise RuntimeError(f"No staged GSC files found under {stage_dir / 'maps'}")
+    clientscripts_dir = stage_dir / "clientscripts"
+    csc_files = sorted(clientscripts_dir.rglob("*.csc")) if clientscripts_dir.is_dir() else []
     weapons_sp_dir = stage_dir / "weapons" / "sp"
     weapon_files = (
         sorted(p for p in weapons_sp_dir.iterdir() if p.is_file())
@@ -2120,7 +2211,7 @@ def build_iwd(stage_dir: Path) -> Path:
     with TemporaryDirectory(dir=DIST_DIR) as tmp:
         staged_iwd = Path(tmp) / dist_iwd.name
         with ZipFile(staged_iwd, "w") as archive:
-            for file_path in (*gsc_files, *weapon_files):
+            for file_path in (*gsc_files, *csc_files, *weapon_files):
                 rel = file_path.relative_to(stage_dir).as_posix()
                 archive.writestr(ZipInfo(rel), file_path.read_bytes(), compress_type=ZIP_DEFLATED)
         staged_iwd.replace(dist_iwd)

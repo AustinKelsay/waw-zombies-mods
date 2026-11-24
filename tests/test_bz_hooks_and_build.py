@@ -2247,6 +2247,49 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             f"_bz_hooks.gsc has {len(refs)} cross-file refs (budget <= 130 to stay safely under MAX_PRECACHE_ENTRIES)",
         )
 
+    def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        from zipfile import ZipFile
+
+        import build_mod
+
+        stock_1arg = b"level_notify(notify_name)\n{\n\tlevel notify(notify_name);\n}\n"
+        patched = build_mod.inject_clientscript_callbacks_patch(stock_1arg)
+        assert isinstance(patched, bytes)
+        self.assertIn(b"level_notify(notify_name, param1, param2)", patched)
+        self.assertIn(b"level notify(notify_name, param1, param2);", patched)
+        # Idempotent when already 3-arg DLC callback
+        self.assertEqual(build_mod.inject_clientscript_callbacks_patch(patched), patched)
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools = root / "tools"
+            stage = root / "stage"
+            raw_csc = tools / "raw" / "clientscripts" / "_callbacks.csc"
+            raw_csc.parent.mkdir(parents=True)
+            raw_csc.write_bytes(stock_1arg)
+            (stage / "maps").mkdir(parents=True)
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.5.0-dev\"; }\n", encoding="ascii")
+
+            out_csc = build_mod.stage_bz_clientscript_callbacks(tools, stage, steam_game=root / "steam")
+            self.assertEqual(out_csc, stage / "clientscripts" / "_callbacks.csc")
+            assert out_csc is not None
+            self.assertIn(b"level_notify(notify_name, param1, param2)", out_csc.read_bytes())
+
+            updated_csv = build_mod.generate_staged_mod_csv(
+                "rawfile,maps/_bz_version.gsc\n",
+                ["maps/_bz_version.gsc", "clientscripts/_callbacks.csc"],
+            )
+            self.assertIn("rawfile,clientscripts/_callbacks.csc", updated_csv)
+            self.assertNotRegex(updated_csv, r"(?im)^\s*fx\s*,")
+
+            with patch.object(build_mod, "DIST_DIR", root / "dist"):
+                iwd = build_mod.build_iwd(stage)
+            with ZipFile(iwd) as archive:
+                self.assertIn("clientscripts/_callbacks.csc", archive.namelist())
+                self.assertIn(b"level_notify(notify_name, param1, param2)", archive.read("clientscripts/_callbacks.csc"))
+
 
 if __name__ == "__main__":
     unittest.main()

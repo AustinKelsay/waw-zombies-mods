@@ -3154,7 +3154,14 @@ bz_run_visual_tour()
 			bz_test_visual_phase( weap_slugs[i] + "_idle" );
 			wait( 0.6 );
 			bz_on_weapon_fired( p, weap );
-			wait( 0.35 );
+			if ( weap_slugs[i] == "crossbow" )
+			{
+				wait( 1.05 );
+			}
+			else
+			{
+				wait( 0.35 );
+			}
 			bz_test_visual_phase( weap_slugs[i] + "_active" );
 			wait( 0.6 );
 			wait( 7.0 );
