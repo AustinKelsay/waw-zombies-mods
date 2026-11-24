@@ -166,15 +166,7 @@ bz_special_get_round_zombie_health( round_num )
 
 bz_special_is_hidden_spawning_dog( ent )
 {
-	if ( !IsDefined( ent ) )
-	{
-		return false;
-	}
-	if ( IsDefined( ent.animname ) && ent.animname == "zombie_dog" && IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
-	{
-		return true;
-	}
-	return false;
+	return maps\_bz_hooks::bz_is_spawning_dog( ent );
 }
 
 bz_special_resolve_stock_fx( kind )

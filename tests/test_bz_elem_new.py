@@ -1091,7 +1091,8 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
         self.assertFalse(bool(dog_spawning.get_field("bz_is_frozen")))
         self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0)
         self.assertTrue(bool(dog_active.get_field("bz_is_frozen")))
-        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.01)
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.55)
+        self.assertFalse(bool(dog_active.get_field("ignoreall")))
 
 
 if __name__ == "__main__":

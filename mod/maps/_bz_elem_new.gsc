@@ -150,15 +150,7 @@ bz_elem_new_resolve_cryo_fx()
 
 bz_elem_new_is_hidden_spawning_dog( ent )
 {
-	if ( !IsDefined( ent ) )
-	{
-		return false;
-	}
-	if ( IsDefined( ent.animname ) && ent.animname == "zombie_dog" && IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
-	{
-		return true;
-	}
-	return false;
+	return maps\_bz_hooks::bz_is_spawning_dog( ent );
 }
 
 // ---------------------------------------------------------------------------
