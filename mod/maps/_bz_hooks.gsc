@@ -1869,3 +1869,37 @@ bz_get_hud_lane_y( base_y )
 	}
 	return y;
 }
+
+// Local function pointers used by the gated live selftests.
+bz_hooks_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_actor_damage_dispatch = ::bz_actor_damage_dispatch;
+	api.bz_bool_int = ::bz_bool_int;
+	api.bz_box_cost_modify = ::bz_box_cost_modify;
+	api.bz_elements_enabled = ::bz_elements_enabled;
+	api.bz_get_class_safe = ::bz_get_class_safe;
+	api.bz_get_element_primary_weapons = ::bz_get_element_primary_weapons;
+	api.bz_get_max_primary_weapons = ::bz_get_max_primary_weapons;
+	api.bz_get_revive_time = ::bz_get_revive_time;
+	api.bz_get_weapon_safe = ::bz_get_weapon_safe;
+	api.bz_global_damage_ads_wrapper = ::bz_global_damage_ads_wrapper;
+	api.bz_global_damage_wrapper = ::bz_global_damage_wrapper;
+	api.bz_has_apex_safe = ::bz_has_apex_safe;
+	api.bz_has_perk_safe = ::bz_has_perk_safe;
+	api.bz_is_dog_entity = ::bz_is_dog_entity;
+	api.bz_is_double_pap_safe = ::bz_is_double_pap_safe;
+	api.bz_is_spawning_dog = ::bz_is_spawning_dog;
+	api.bz_on_end_game = ::bz_on_end_game;
+	api.bz_on_item_purchased = ::bz_on_item_purchased;
+	api.bz_on_menu_response = ::bz_on_menu_response;
+	api.bz_on_player_downed = ::bz_on_player_downed;
+	api.bz_on_round_start = ::bz_on_round_start;
+	api.bz_on_wall_buy = ::bz_on_wall_buy;
+	api.bz_on_weapon_fired = ::bz_on_weapon_fired;
+	api.bz_player_damage_override = ::bz_player_damage_override;
+	api.bz_points_modify = ::bz_points_modify;
+	api.bz_recompute_zombie_move_rate = ::bz_recompute_zombie_move_rate;
+	api.bz_save_zombie_base_move_rate = ::bz_save_zombie_base_move_rate;
+	return api;
+}

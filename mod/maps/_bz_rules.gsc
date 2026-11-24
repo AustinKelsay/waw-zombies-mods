@@ -224,7 +224,7 @@ bz_get_apex_perk_price( apex_id )
 		return undefined;
 	}
 
-	// Temporary testing cap: Apex perks set to 8000 (standard: 20000).
+	// Apex Perks use the tuned 8,000-point cap.
 	return 8000;
 }
 
@@ -235,7 +235,7 @@ bz_get_class_price( class_id )
 		return undefined;
 	}
 
-	// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+	// Classes use the tuned 5,000-point cap.
 	return 5000;
 }
 
@@ -244,7 +244,7 @@ bz_get_pap_upgrade_price( upgrade_id )
 	id = bz_normalize_id( upgrade_id );
 	if ( id == "double_pap" )
 	{
-		// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+		// Double Pack-a-Punch uses the tuned 5,000-point cap.
 		return 5000;
 	}
 	if ( id == "pap_knife" || id == "pap_bowie" || id == "pap_cluster" )
@@ -304,7 +304,7 @@ bz_get_element_weapon_id_from_weapon( weapon_name )
 bz_get_element_weapon_price( item_id )
 {
 	id = bz_normalize_id( item_id );
-	// Temporary testing cap: max cost capped at 5000 (standard: 6500/7000/7500/6000).
+	// Elemental Weapons use the tuned 5,000-point cap.
 	if ( id == "acid_sprayer" )
 	{
 		return 5000;
@@ -338,7 +338,7 @@ bz_get_special_gear_price( item_id )
 	}
 	if ( id == "portal_grenade" )
 	{
-		// Temporary testing cap: max cost capped at 5000 (standard: 6000).
+		// Portal Grenade uses the tuned 5,000-point cap.
 		return 5000;
 	}
 

@@ -85,13 +85,13 @@ bz_stations_is_station_enabled( station_id )
 	}
 	if ( sid == "arsenal" )
 	{
-		return maps\_bz_hooks::bz_pap_enabled() ||
-			maps\_bz_hooks::bz_elements_enabled() ||
+		return bz_pap_enabled() ||
+			bz_elements_enabled() ||
 			maps\_bz_hooks::bz_companions_enabled();
 	}
 	if ( sid == "pap" )
 	{
-		return maps\_bz_hooks::bz_pap_enabled();
+		return bz_pap_enabled();
 	}
 	return false;
 }
@@ -922,7 +922,7 @@ bz_stations_sync_stock_perks( player )
 	{
 		return;
 	}
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 
 	if ( player HasPerk( "specialty_armorvest" ) )
 	{
@@ -1008,14 +1008,14 @@ bz_stations_sync_player_ui( player, feedback )
 		return;
 	}
 
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	bz_stations_sync_stock_perks( player );
 	if ( bz_stations_player_has_bowie( player ) )
 	{
 		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
 	}
 
-	score = maps\_bz_state::bz_state_get_score_safe( player );
+	score = bz_state_get_score_safe( player );
 	active_class = maps\_bz_state::bz_state_get_class( player );
 	weapon_name = bz_stations_get_player_weapon_safe( player );
 
@@ -1026,7 +1026,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 	else
 	{
-		cls_name = maps\_bz_rules::bz_get_item_display_name( "class", active_class );
+		cls_name = bz_get_item_display_name( "class", active_class );
 		if ( !IsDefined( cls_name ) )
 		{
 			cls_name = active_class;
@@ -1150,7 +1150,7 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_pap_single_pap", "NEED 5000" );
 	}
 
-	dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
+	dpap_cost = bz_get_pap_upgrade_price( "double_pap" );
 	if ( is_dpap )
 	{
 		player SetClientDvar( "ui_bz_pap_double_pap", "MAXED (II)" );
@@ -1168,8 +1168,8 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_pap_double_pap", "NEED " + dpap_cost );
 	}
 
-	knife_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "pap_knife" );
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
+	knife_cost = bz_get_pap_upgrade_price( "pap_knife" );
+	if ( bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
 	{
 		player SetClientDvar( "ui_bz_pap_pap_knife", "OWNED" );
 	}
@@ -1182,8 +1182,8 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_pap_pap_knife", "NEED " + knife_cost );
 	}
 
-	bowie_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "pap_bowie" );
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
+	bowie_cost = bz_get_pap_upgrade_price( "pap_bowie" );
+	if ( bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
 	{
 		player SetClientDvar( "ui_bz_pap_pap_bowie", "OWNED" );
 	}
@@ -1200,8 +1200,8 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_pap_pap_bowie", "NEED " + bowie_cost );
 	}
 
-	cluster_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "pap_cluster" );
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_cluster", weapon_name ) )
+	cluster_cost = bz_get_pap_upgrade_price( "pap_cluster" );
+	if ( bz_state_has_pap_upgrade( player, "pap_cluster", weapon_name ) )
 	{
 		player SetClientDvar( "ui_bz_pap_pap_cluster", "OWNED" );
 	}
@@ -1215,13 +1215,13 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	// Phase 2 Elemental & Special Arsenal status dvars
-	elements_on = maps\_bz_hooks::bz_elements_enabled();
+	elements_on = bz_elements_enabled();
 	elem_ids = maps\_bz_rules::bz_get_element_weapon_ids();
 	for ( i = 0; i < elem_ids.size; i++ )
 	{
 		eid = elem_ids[i];
 		e_cost = maps\_bz_rules::bz_get_element_weapon_price( eid );
-		e_weap = maps\_bz_rules::bz_get_element_weapon_name( eid );
+		e_weap = bz_get_element_weapon_name( eid );
 		if ( !elements_on )
 		{
 			player SetClientDvar( "ui_bz_elem_" + eid, "DISABLED" );
@@ -1260,7 +1260,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 	else if ( melee_slot == "bowie" )
 	{
-		if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
+		if ( bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
 		{
 			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP BOWIE" );
 		}
@@ -1271,7 +1271,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 	else
 	{
-		if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
+		if ( bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
 		{
 			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP KNIFE" );
 		}
@@ -1281,7 +1281,7 @@ bz_stations_sync_player_ui( player, feedback )
 		}
 	}
 
-	wc_cost = maps\_bz_rules::bz_get_special_gear_price( "war_club" );
+	wc_cost = bz_get_special_gear_price( "war_club" );
 	if ( !elements_on )
 	{
 		player SetClientDvar( "ui_bz_gear_war_club", "DISABLED" );
@@ -1306,7 +1306,7 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_gear_war_club", "NEED " + wc_cost );
 	}
 
-	pap_wc_cost = maps\_bz_rules::bz_get_special_gear_price( "pap_war_club" );
+	pap_wc_cost = bz_get_special_gear_price( "pap_war_club" );
 	if ( !elements_on )
 	{
 		player SetClientDvar( "ui_bz_gear_pap_war_club", "DISABLED" );
@@ -1345,7 +1345,7 @@ bz_stations_sync_player_ui( player, feedback )
 		player SetClientDvar( "ui_bz_gear_equip_bowie", "EQUIP FREE" );
 	}
 
-	portal_cost = maps\_bz_rules::bz_get_special_gear_price( "portal_grenade" );
+	portal_cost = bz_get_special_gear_price( "portal_grenade" );
 	if ( !elements_on )
 	{
 		player SetClientDvar( "ui_bz_portal", "DISABLED" );
@@ -1379,7 +1379,7 @@ bz_stations_on_player_connect( player )
 	{
 		return;
 	}
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	player.bz_station_open = false;
 	player.bz_active_station_id = "";
 	player.bz_active_station_menu = "";
@@ -1392,7 +1392,7 @@ bz_stations_on_player_spawned( player )
 	{
 		return;
 	}
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	bz_stations_sync_player_ui( player, "Select an item to purchase." );
 	if ( !IsDefined( player.bz_station_prompt_watching ) || !player.bz_station_prompt_watching )
 	{
@@ -1445,9 +1445,9 @@ bz_stations_open_for_player( player, station_id )
 	bz_stations_hide_prompt_hud( player );
 	player openMenu( menu_name );
 
-	score = maps\_bz_state::bz_state_get_score_safe( player );
+	score = bz_state_get_score_safe( player );
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "station", sid );
 	fields[2] = bz_log_kv( "menu", menu_name );
 	fields[3] = bz_log_kv( "score", score );
@@ -1457,22 +1457,22 @@ bz_stations_open_for_player( player, station_id )
 
 bz_stations_try_buy_single_pap( player, weapon_name )
 {
-	maps\_bz_state::bz_state_ensure_init( player );
-	score = maps\_bz_state::bz_state_get_score_safe( player );
+	bz_state_ensure_init( player );
+	score = bz_state_get_score_safe( player );
 	cost = 5000;
 	norm = bz_normalize_id( weapon_name );
 
 	if ( norm == "" || norm == "none" )
 	{
-		return maps\_bz_state::bz_make_purchase_result( "missing_prereq", "single_pap", cost, score );
+		return bz_make_purchase_result( "missing_prereq", "single_pap", cost, score );
 	}
 	if ( bz_stations_is_weapon_pap( player, norm ) )
 	{
-		return maps\_bz_state::bz_make_purchase_result( "already_owned", "single_pap", cost, score );
+		return bz_make_purchase_result( "already_owned", "single_pap", cost, score );
 	}
 	if ( score < cost )
 	{
-		return maps\_bz_state::bz_make_purchase_result( "insufficient_points", "single_pap", cost, score );
+		return bz_make_purchase_result( "insufficient_points", "single_pap", cost, score );
 	}
 
 	player.score = score - cost;
@@ -1481,7 +1481,7 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 		player.bz_pap_weapons = [];
 	}
 	player.bz_pap_weapons[norm] = true;
-	return maps\_bz_state::bz_make_purchase_result( "ok", "single_pap", cost, player.score );
+	return bz_make_purchase_result( "ok", "single_pap", cost, player.score );
 }
 
 bz_stations_give_element_primary( player, weap_name )
@@ -1513,7 +1513,7 @@ bz_stations_give_element_primary( player, weap_name )
 
 bz_stations_format_feedback( category, item_id, res )
 {
-	disp = maps\_bz_rules::bz_get_item_display_name( category, item_id );
+	disp = bz_get_item_display_name( category, item_id );
 	if ( !IsDefined( disp ) )
 	{
 		if ( category == "pap" && item_id == "single_pap" )
@@ -1560,7 +1560,7 @@ bz_stations_format_feedback( category, item_id, res )
 bz_stations_emit_purchase_event( player, menu, category, item_id, status, cost, score )
 {
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "menu", menu );
 	fields[2] = bz_log_kv( "category", category );
 	fields[3] = bz_log_kv( "item", item_id );
@@ -1614,7 +1614,7 @@ bz_stations_on_menu_response( player, menu, response )
 		player closeMenu();
 
 		cfields = [];
-		cfields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+		cfields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 		cfields[1] = bz_log_kv( "menu", norm_menu );
 		bz_log_emit( "STATION_CLOSE", bz_log_join( cfields ) );
 		return true;
@@ -1669,7 +1669,7 @@ bz_stations_on_menu_response( player, menu, response )
 	}
 	else
 	{
-		score_now = maps\_bz_state::bz_state_get_score_safe( player );
+		score_now = bz_state_get_score_safe( player );
 		bz_stations_emit_purchase_event( player, norm_menu, "unknown", item_id, "invalid_action", 0, score_now );
 		bz_stations_sync_player_ui( player, "Unknown station command." );
 		return true;
@@ -1677,7 +1677,7 @@ bz_stations_on_menu_response( player, menu, response )
 
 	if ( !maps\_bz_hooks::bz_is_gate_open( gate ) )
 	{
-		score_now = maps\_bz_state::bz_state_get_score_safe( player );
+		score_now = bz_state_get_score_safe( player );
 		bz_stations_emit_purchase_event( player, norm_menu, category, item_id, "gate_disabled", 0, score_now );
 		bz_stations_sync_player_ui( player, "Feature disabled in this match." );
 		return true;
@@ -1726,7 +1726,7 @@ bz_stations_on_menu_response( player, menu, response )
 	}
 	else if ( category == "element_weapon" )
 	{
-		target_weap = maps\_bz_rules::bz_get_element_weapon_name( item_id );
+		target_weap = bz_get_element_weapon_name( item_id );
 		already_has = ( IsDefined( target_weap ) && target_weap != "" && player HasWeapon( target_weap ) );
 		res = maps\_bz_state::bz_try_buy_element_weapon( player, item_id, already_has );
 		if ( res.ok && IsDefined( res.weapon_name ) && res.weapon_name != "" )
@@ -1802,4 +1802,70 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_pap_enabled()
+{
+	return maps\_bz_hooks::bz_pap_enabled();
+}
+
+bz_elements_enabled()
+{
+	return maps\_bz_hooks::bz_elements_enabled();
+}
+
+bz_state_ensure_init( player )
+{
+	maps\_bz_state::bz_state_ensure_init( player );
+}
+
+bz_state_get_score_safe( player )
+{
+	return maps\_bz_state::bz_state_get_score_safe( player );
+}
+
+bz_get_item_display_name( category, item_id )
+{
+	return maps\_bz_rules::bz_get_item_display_name( category, item_id );
+}
+
+bz_get_pap_upgrade_price( upgrade_id )
+{
+	return maps\_bz_rules::bz_get_pap_upgrade_price( upgrade_id );
+}
+
+bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
+{
+	return maps\_bz_state::bz_state_has_pap_upgrade( player, upgrade_id, weapon_name );
+}
+
+bz_get_element_weapon_name( item_id )
+{
+	return maps\_bz_rules::bz_get_element_weapon_name( item_id );
+}
+
+bz_get_special_gear_price( item_id )
+{
+	return maps\_bz_rules::bz_get_special_gear_price( item_id );
+}
+
+bz_get_player_label( player )
+{
+	return maps\_bz_hooks::bz_get_player_label( player );
+}
+
+bz_make_purchase_result( status, item_id, cost, remaining_score )
+{
+	return maps\_bz_state::bz_make_purchase_result( status, item_id, cost, remaining_score );
+}
+
+// Local function pointers used by the gated live selftests.
+bz_stations_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_stations_format_prompt_text = ::bz_stations_format_prompt_text;
+	api.bz_stations_is_weapon_pap = ::bz_stations_is_weapon_pap;
+	api.bz_stations_open_for_player = ::bz_stations_open_for_player;
+	api.bz_stations_try_buy_single_pap = ::bz_stations_try_buy_single_pap;
+	return api;
 }

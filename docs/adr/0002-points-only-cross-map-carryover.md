@@ -17,3 +17,7 @@ Between Stages, Zombie Gauntlet resets weapons, perks, and map doors to each sto
 - Each Stage plays authentically to its stock map's native weapon box, perks, and progression layout.
 - Economic skill compounds across a Run without requiring custom cross-map weapon or perk asset porting.
 - Cycle 2+ balancing hinges on tuning the Points Floor multiplier and Prep Phase duration rather than reconciling missing map assets.
+
+## Classic and Enhanced Zombie Gauntlet
+
+Classic Zombie Gauntlet carries points and active stock perks across Stages as described in [ADR-0004](0004-perk-carryover-across-stages.md). Enhanced Zombie Gauntlet (`gauntlet_enabled=1` and `bz_enabled=1`) also carries Base Zombies progression through [the persistence bridge](../../mod/maps/_bz_gauntlet_bridge.gsc). The bridge stores permanent-per-Run gear in `gauntlet_bz_perm`, alive-only Base Zombies perks in `gauntlet_bz_perks`, and alive-only Elemental Weapons and their Pack-a-Punch tiers in `gauntlet_bz_weapons`.

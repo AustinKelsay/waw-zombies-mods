@@ -1940,3 +1940,17 @@ bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
 }
+
+// Local function pointers used by the gated live selftests.
+bz_special_weapons_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_special_close_portal = ::bz_special_close_portal;
+	api.bz_special_fire_blade_boomerang = ::bz_special_fire_blade_boomerang;
+	api.bz_special_fire_multi_crossbow = ::bz_special_fire_multi_crossbow;
+	api.bz_special_portal_tick = ::bz_special_portal_tick;
+	api.bz_special_push_zombie_safely = ::bz_special_push_zombie_safely;
+	api.bz_special_try_activate_portal = ::bz_special_try_activate_portal;
+	api.bz_special_war_club_smash = ::bz_special_war_club_smash;
+	return api;
+}

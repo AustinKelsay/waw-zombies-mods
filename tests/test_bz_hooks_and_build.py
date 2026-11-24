@@ -2290,11 +2290,16 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             sources[path.name] = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
         ref_pattern = r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+"
         counts = {name: len(re.findall(ref_pattern, code)) for name, code in sources.items()}
-        for name, budget in (("_bz_hooks.gsc", 65), ("_bz_selftest.gsc", 80)):
+        budgets = {
+            "_bz_hooks.gsc": 65,
+            "_bz_selftest.gsc": 45,
+            "_bz_stations.gsc": 55,
+        }
+        for name, budget in budgets.items():
             self.assertIn(name, counts)
             with self.subTest(module=name):
                 self.assertLessEqual(counts[name], budget)
-        self.assertLessEqual(sum(counts.values()), 700, counts)
+        self.assertLessEqual(sum(counts.values()), 550, counts)
 
         selftest_path = MOD_ROOT / "maps" / "_bz_selftest.gsc"
         selftest_code = sources[selftest_path.name]

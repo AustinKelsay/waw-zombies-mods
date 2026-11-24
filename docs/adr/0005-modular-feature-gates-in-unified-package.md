@@ -15,3 +15,9 @@ All Base Experience Enhancements (Perks Expansion, 6-Class System, Pack-a-Punch 
 
 - Every Enhancement owns its own GSC module(s), offline contract tests, structured telemetry events, and dvar Feature Gate defaulting to `0` (Classic Mode untouched).
 - All modules share one build-staged hook seam in `scripts/build_mod.py` and stay collectively within WaW's 400-FX asset ceiling across all four Stock Maps (especially Der Riese at 329/400 FX).
+
+## Base Zombies economy and live verification
+
+The tuned Base Zombies economy caps purchases at 5,000 points for Tier 2 Perks, Classes, Pack-a-Punch upgrades, Elemental Weapons, and Special Gear. Apex Perks use an 8,000-point cap.
+
+The explicitly gated live scenarios stay in [`_bz_selftest.gsc`](../../mod/maps/_bz_selftest.gsc). The selftest module uses grouped callbacks from the modules that own the tested functions to reduce cross-file compiler references and preserve headroom under WaW 1.7's `MAX_PRECACHE_ENTRIES` limit.

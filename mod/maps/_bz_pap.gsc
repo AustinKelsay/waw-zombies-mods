@@ -4,7 +4,7 @@
 //   - 4-Map Pack-a-Punch: native *_upgraded swap on Der Riese where present,
 //     graceful scripted Tier 1 PaP (+100% bullet damage + full ammo) on Nacht,
 //     Verruckt, Shi No Numa, or any weapon lacking a native *_upgraded asset.
-//   - Double Pack-a-Punch (10,000 pts): +75% bullet damage, +50% reserve ammo
+//   - Double Pack-a-Punch (5,000 pts): +75% bullet damage, +50% reserve ammo
 //     (composing with Double Ammo to 3.0x), strictly independent of Elemental
 //     Weapons.
 //   - PaP Knife (5,000 pts, 3x melee) & PaP Bowie Knife (5,000 pts, 1-hit kill
@@ -1696,4 +1696,17 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+// Local function pointers used by the gated live selftests.
+bz_pap_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_pap_detonate_cluster = ::bz_pap_detonate_cluster;
+	api.bz_pap_has_native_upgrade_entry = ::bz_pap_has_native_upgrade_entry;
+	api.bz_pap_is_weapon_papped = ::bz_pap_is_weapon_papped;
+	api.bz_pap_on_native_weapon_taken = ::bz_pap_on_native_weapon_taken;
+	api.bz_pap_try_native_console_upgrade = ::bz_pap_try_native_console_upgrade;
+	api.bz_pap_update_native_prompt_hud = ::bz_pap_update_native_prompt_hud;
+	return api;
 }
