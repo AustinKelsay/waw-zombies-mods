@@ -1384,6 +1384,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
 
+    # Stage stock DLC weapon definition files missing from base iw_*.iwd into stage_dir/weapons/sp/
+    # so build_iwd() packs them into waw_gauntlet.iwd. Under fs_game, WaW 1.7 resolves weapons/sp/*
+    # via IWD/disk search paths; without these in waw_gauntlet.iwd, DLC weapons (Gewehr 43, Kar98k,
+    # MP40, Wunderwaffe, PaP guns, perk bottles, etc.) fall back to the pink Default Weapon box.
+    # Kept out of mod.csv so zero fastfile FX assets are added.
+    stage_dlc_iwd_weapon_files(tools_root=tools_root, steam_game=steam_game, stage_dir=stage_dir)
+
     import verify_hud_menus
 
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
@@ -1515,27 +1522,79 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
             assetlist_csv.unlink(missing_ok=True)
 
 
+def stage_dlc_iwd_weapon_files(
+    tools_root: Path,
+    steam_game: Path,
+    stage_dir: Path,
+) -> list[str]:
+    """Copy stock DLC weapon defs missing from base main/iw_*.iwd into stage_dir/weapons/sp/.
+
+    In CoD:WaW 1.7 with fs_game active, BG_LoadWeaponDef loads weapon files from .iwd / disk
+    for DLC maps (Verruckt, Shi No Numa, Der Riese). Packing the missing stock weapons/sp/*
+    text definitions into waw_gauntlet.iwd (without adding them to mod.csv) restores all DLC
+    wall/box/PaP weapons while adding zero fastfile FX assets.
+    """
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    stock_iwd_weapons: set[str] = set()
+    main_dir = steam_game / "main"
+    if main_dir.is_dir():
+        for iwd_path in sorted(main_dir.glob("iw_*.iwd")):
+            try:
+                with ZipFile(iwd_path, "r") as archive:
+                    for name in archive.namelist():
+                        norm = name.replace("\\", "/")
+                        if norm.startswith("weapons/sp/") and not norm.endswith("/"):
+                            stock_iwd_weapons.add(norm[len("weapons/sp/") :].lower())
+            except Exception:
+                continue
+
+    out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    staged_relpaths: list[str] = []
+    for src_path in sorted(raw_weapons_dir.iterdir()):
+        if not src_path.is_file():
+            continue
+        if src_path.name.lower() in stock_iwd_weapons:
+            continue
+        dst_path = out_dir / src_path.name
+        if dst_path.exists():
+            continue
+        shutil.copy2(src_path, dst_path)
+        staged_relpaths.append(f"weapons/sp/{src_path.name}")
+    return staged_relpaths
+
+
 def build_iwd(stage_dir: Path) -> Path:
-    """Package staged maps/*.gsc into dist/waw_gauntlet/waw_gauntlet.iwd.
+    """Package staged maps/*.gsc and weapons/sp/* into dist/waw_gauntlet/waw_gauntlet.iwd.
 
     In CoD:WaW 1.7, <map>.ff loads after mod.ff and takes precedence over mod.ff
-    for rawfile (.gsc) assets that already exist inside the stock map fastfile.
+    for rawfile (.gsc) assets that already exist inside the stock map fastfile, and
+    fs_game loads DLC/mod weapon definitions from weapons/sp/* inside .iwd archives.
     Shipping waw_gauntlet.iwd alongside mod.ff (matching Treyarch's Launcher)
-    ensures stock map script overrides take precedence cleanly while mod.ff
-    carries compiled fastfile assets (menus, localized strings, new scripts).
+    ensures both stock map script overrides and all DLC/Base Zombies weapons load
+    cleanly without adding fastfile FX assets.
     """
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     dist_iwd = DIST_DIR / f"{MOD_NAME}.iwd"
     gsc_files = sorted((stage_dir / "maps").rglob("*.gsc"))
     if not gsc_files:
         raise RuntimeError(f"No staged GSC files found under {stage_dir / 'maps'}")
+    weapons_sp_dir = stage_dir / "weapons" / "sp"
+    weapon_files = (
+        sorted(p for p in weapons_sp_dir.iterdir() if p.is_file())
+        if weapons_sp_dir.is_dir()
+        else []
+    )
 
     with TemporaryDirectory(dir=DIST_DIR) as tmp:
         staged_iwd = Path(tmp) / dist_iwd.name
         with ZipFile(staged_iwd, "w") as archive:
-            for gsc_path in gsc_files:
-                rel = gsc_path.relative_to(stage_dir).as_posix()
-                archive.writestr(ZipInfo(rel), gsc_path.read_bytes(), compress_type=ZIP_DEFLATED)
+            for file_path in (*gsc_files, *weapon_files):
+                rel = file_path.relative_to(stage_dir).as_posix()
+                archive.writestr(ZipInfo(rel), file_path.read_bytes(), compress_type=ZIP_DEFLATED)
         staged_iwd.replace(dist_iwd)
     return dist_iwd
 

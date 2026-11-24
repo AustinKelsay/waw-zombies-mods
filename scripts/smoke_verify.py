@@ -46,6 +46,10 @@ FATAL_LOG_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("Unknown GSC function", re.compile(r"unknown function", re.IGNORECASE)),
     ("Sys_Error", re.compile(r"Sys_Error|Fatal error", re.IGNORECASE)),
     ("Fastfile load failure", re.compile(r"ERROR: Could not find zone 'mod'", re.IGNORECASE)),
+    (
+        "Missing weapon file",
+        re.compile(r"WARNING:\s*Could not load weapon file\s+'weapons/sp/", re.IGNORECASE),
+    ),
 )
 
 GAUNTLET_EVENT_RE = re.compile(r"GAUNTLET_EVENT\|([A-Z0-9_]+)\|(.*)")
