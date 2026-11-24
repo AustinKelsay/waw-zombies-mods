@@ -2430,6 +2430,20 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         )
         self.assertEqual(patched.count(hook), 2)
 
+        # Shi No Numa calls maps\_zombiemode_weapons_sumpf::init(); rewiring must route it to the patched wrapper.
+        sumpf_zm = (
+            b"main()\n{\n\tmaps\\_zombiemode_weapons_sumpf::init();\n\tlevel thread round_think();\n}\n"
+            b"round_think()\n{\n\tround_wait();\n}\n"
+            b"end_game()\n{\n\tlevel.intermission = true;\n}\n"
+        )
+        patched_sumpf_zm = self.bm.inject_zombiemode_hooks(
+            sumpf_zm,
+            "nazi_zombie_sumpf",
+            rewire_weapons_module="_zombiemode_weapons_bz_sumpf",
+        ).decode("latin1")
+        self.assertIn(r"maps\_zombiemode_weapons_bz_sumpf::init();", patched_sumpf_zm)
+        self.assertNotIn(r"maps\_zombiemode_weapons_sumpf::", patched_sumpf_zm)
+
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory
         from unittest.mock import patch

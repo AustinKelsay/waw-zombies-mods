@@ -498,6 +498,7 @@ def _rewire_stock_module_refs(
     rewire_spawner_module: str | None = None,
 ) -> str:
     if rewire_weapons_module:
+        text = text.replace("maps\\_zombiemode_weapons_sumpf::", f"maps\\{rewire_weapons_module}::")
         text = text.replace("maps\\_zombiemode_weapons::", f"maps\\{rewire_weapons_module}::")
     if rewire_perks_module:
         text = text.replace("maps\\_zombiemode_perks::", f"maps\\{rewire_perks_module}::")
@@ -2049,9 +2050,15 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # waw_solo_fov() stay intact while preserving era parity across all 4 stock maps).
     for map_name in STOCK_MAPS:
         weapons_mod: str | None = None
-        weapons_stock = try_extract_stock_script(
-            map_name, "maps/_zombiemode_weapons.gsc", steam_game, tools_root
-        )
+        weapons_stock: bytes | None = None
+        if map_name == "nazi_zombie_sumpf":
+            weapons_stock = try_extract_stock_script(
+                map_name, "maps/_zombiemode_weapons_sumpf.gsc", steam_game, tools_root
+            )
+        if weapons_stock is None:
+            weapons_stock = try_extract_stock_script(
+                map_name, "maps/_zombiemode_weapons.gsc", steam_game, tools_root
+            )
         if weapons_stock is not None:
             weapons_mod = zombiemode_weapons_module_for_map(map_name)
             weapons_patched = inject_zombiemode_weapons_hooks(weapons_stock)
