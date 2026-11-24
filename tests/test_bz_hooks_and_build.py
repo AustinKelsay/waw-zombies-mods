@@ -1581,6 +1581,42 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Mystery Box cost routes through bz_box_cost_modify
         self.assertIn("maps\\_bz_hooks::bz_box_cost_modify( user, self.zombie_cost )", patched)
 
+        # Verruckt / Shi No Numa / Der Riese use local `cost` inside treasure_chest_think()
+        # and `self.zombie_cost` for wall-buy cabinets in weapon_spawn_think() — only the box must be discounted!
+        dlc_weapons = (
+            "treasure_chest_think()\n"
+            "{\n"
+            "\tcost = self.zombie_cost;\n"
+            "\tif( is_player_valid( user ) && user.score >= cost )\n"
+            "\t{\n"
+            "\t\tuser maps\\_zombiemode_score::minus_to_player_score( cost );\n"
+            "\t}\n"
+            "\telse if ( user.score < cost )\n"
+            "\t{\n"
+            "\t\tcontinue;\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "weapon_spawn_think()\n"
+            "{\n"
+            "\tprimaryWeapons = player GetWeaponsListPrimaries();\n"
+            "\tif( primaryWeapons.size >= 2 )\n"
+            "\t{\n"
+            "\t\tplayer TakeWeapon( player GetCurrentWeapon() );\n"
+            "\t}\n"
+            "\tplayer maps\\_zombiemode_score::minus_to_player_score( self.zombie_cost );\n"
+            "}\n"
+        ).encode("latin1")
+        dlc_patched = self.bm.inject_zombiemode_weapons_hooks(dlc_weapons).decode("latin1")
+        self.assertIn("user.score >= maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
+        self.assertIn("user.score < maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
+        self.assertIn(
+            "user maps\\_zombiemode_score::minus_to_player_score( maps\\_bz_hooks::bz_box_cost_modify( user, cost ) );",
+            dlc_patched,
+        )
+        # Wall-buy cabinet in weapon_spawn_think() must remain untouched!
+        self.assertIn("player maps\\_zombiemode_score::minus_to_player_score( self.zombie_cost );", dlc_patched)
+
         with self.assertRaises(ValueError):
             self.bm.inject_zombiemode_weapons_hooks(b"init()\n{\n}\n")
 
@@ -1661,6 +1697,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", patched_ls)
         self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", patched_ls)
         self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", patched_ls)
+        self.assertIn("\tself reviveplayer();", patched_ls)
 
         # Real installed stock scripts (runs on plebdev-ultra when WaW fastfiles exist)
         try:

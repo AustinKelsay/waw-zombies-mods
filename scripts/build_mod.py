@@ -81,11 +81,19 @@ GET_PRIMARIES_ENT_RE = re.compile(
     r"\b(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GetWeaponsListPrimaries[ \t]*\([ \t]*\)",
     re.IGNORECASE,
 )
+CHEST_THINK_DEF_RE = re.compile(
+    r"^treasure_chest_think\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+TOP_LEVEL_FUNC_DEF_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*\([^)]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
 CHEST_SCORE_CHECK_RE = re.compile(
-    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)\.score[ \t]*>=[ \t]*self\.zombie_cost\b"
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)\.score[ \t]*(?P<op>>=|<)[ \t]*(?P<cost>self\.zombie_cost|cost)\b"
 )
 CHEST_SCORE_DEDUCT_RE = re.compile(
-    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*self\.zombie_cost[ \t]*\)"
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*(?P<cost>self\.zombie_cost|cost)[ \t]*\)"
 )
 JUGG_HEALTH_BLOCK_RE = re.compile(
     r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\];(?P<trailing>[ \t]*)\r?'
@@ -587,18 +595,30 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
             "in _zombiemode_weapons.gsc"
         )
 
-    # Route Mystery Box cost checks and deductions through bz_box_cost_modify (noop when bz_enabled=0)
-    text = CHEST_SCORE_CHECK_RE.sub(
-        lambda m: f"{m.group('ent')}.score >= maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost )",
-        text,
-    )
-    text = CHEST_SCORE_DEDUCT_RE.sub(
-        lambda m: (
-            f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
-            f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost ) )"
-        ),
-        text,
-    )
+    # Route Mystery Box cost checks and deductions strictly inside treasure_chest_think()
+    # through bz_box_cost_modify (noop when bz_enabled=0). Supports both Nacht's direct
+    # `self.zombie_cost` and Verruckt/Shi No Numa/Der Riese's local `cost` variable without
+    # accidentally discounting wall buys / weapon cabinets in weapon_spawn_think().
+    chest_match = CHEST_THINK_DEF_RE.search(text)
+    if chest_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=chest_match.end())
+        chest_end = next_fn.start() if next_fn is not None else len(text)
+        chest_body = text[chest_match.start() : chest_end]
+        chest_body = CHEST_SCORE_CHECK_RE.sub(
+            lambda m: (
+                f"{m.group('ent')}.score {m.group('op')} "
+                f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} )"
+            ),
+            chest_body,
+        )
+        chest_body = CHEST_SCORE_DEDUCT_RE.sub(
+            lambda m: (
+                f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
+                f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} ) )"
+            ),
+            chest_body,
+        )
+        text = text[: chest_match.start()] + chest_body + text[chest_end:]
 
     # Inject guarded wall-buy weapon purchase hook (Sapper Wall-Buy Traps)
     def _inject_wall_weapon(match: re.Match[str]) -> str:
@@ -769,6 +789,7 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
     solo_hook = (
         f"{all_indent}if ( maps\\_bz_hooks::bz_enabled() && GetPlayers().size == 1 && maps\\_bz_perks::bz_perks_try_consume_solo_revive( self ) ){newline}"
         f"{all_indent}{{{newline}"
+        f"{all_indent}\tself reviveplayer();{newline}"
         f"{all_indent}\tself.health = self.maxhealth;{newline}"
         f"{all_indent}\tmaps\\_bz_perks::bz_perks_apply_revive_completed( self, self );{newline}"
         f"{all_indent}\treturn;{newline}"
