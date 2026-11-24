@@ -245,6 +245,7 @@ clear_run_state()
 	SetDvar( "gauntlet_spectators", "" );
 	SetDvar( "gauntlet_bz_perm", "" );
 	SetDvar( "gauntlet_bz_perks", "" );
+	SetDvar( "gauntlet_bz_weapons", "" );
 }
 
 sanitize_token( raw )

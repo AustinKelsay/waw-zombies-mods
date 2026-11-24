@@ -10,14 +10,16 @@
 //   - gauntlet_bz_perks : Alive-only perks (carried across Stage clears when alive;
 //                         cleared on death/spectator just like _gauntlet_perks):
 //                         Standard Perks (stock + custom), Perk Tier 2, Apex Perks.
+//   - gauntlet_bz_weapons : Alive-only Elemental Weapons and their PaP tiers.
 //
-// Both dvars are cleared automatically on Run Reset, Team Wipe, and Lobby Disband.
+// The ledgers are cleared on Run Reset, Team Wipe, and Lobby Disband.
 // Strictly WaW 1.7 GSC compliant (indexed for-loops only; no foreach; no endon).
 
 clear_bz_gauntlet_dvars()
 {
 	SetDvar( "gauntlet_bz_perm", "" );
 	SetDvar( "gauntlet_bz_perks", "" );
+	SetDvar( "gauntlet_bz_weapons", "" );
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,48 @@ bz_gauntlet_code_to_apex( code )
 	if ( c == "bs" )
 	{
 		return "blast_shield";
+	}
+	return "";
+}
+
+bz_gauntlet_weapon_to_code( weapon )
+{
+	if ( weapon == "bz_acid_sprayer" )
+	{
+		return "ac";
+	}
+	if ( weapon == "bz_cryo_cannon" )
+	{
+		return "cr";
+	}
+	if ( weapon == "bz_multi_crossbow" )
+	{
+		return "xb";
+	}
+	if ( weapon == "bz_blade_boomerang" )
+	{
+		return "bm";
+	}
+	return "";
+}
+
+bz_gauntlet_code_to_weapon( code )
+{
+	if ( code == "ac" )
+	{
+		return "bz_acid_sprayer";
+	}
+	if ( code == "cr" )
+	{
+		return "bz_cryo_cannon";
+	}
+	if ( code == "xb" )
+	{
+		return "bz_multi_crossbow";
+	}
+	if ( code == "bm" )
+	{
+		return "bz_blade_boomerang";
 	}
 	return "";
 }
@@ -446,6 +490,84 @@ parse_perks_record( raw )
 	return rec;
 }
 
+// Encodes owned Elemental Weapon primaries as comma-separated "<code>:<tier>" pairs.
+encode_weapons_record( player )
+{
+	if ( !bz_gauntlet_player_is_alive_non_spectator( player ) )
+	{
+		return "";
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) )
+	{
+		return "";
+	}
+
+	tokens = [];
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		weapon = primaries[i];
+		code = bz_gauntlet_weapon_to_code( weapon );
+		if ( code == "" )
+		{
+			continue;
+		}
+
+		tier = 0;
+		if ( bz_is_weapon_double_pap( player, weapon ) )
+		{
+			tier = 2;
+		}
+		else if ( maps\_bz_pap::bz_pap_is_scripted_single_pap( player, weapon ) ||
+			maps\_bz_stations::bz_stations_is_weapon_pap( player, weapon ) )
+		{
+			tier = 1;
+		}
+		tokens[tokens.size] = code + ":" + tier;
+	}
+
+	if ( tokens.size == 0 )
+	{
+		return "";
+	}
+	return bz_gauntlet_join_csv( tokens );
+}
+
+parse_weapons_record( raw )
+{
+	records = [];
+	if ( !IsDefined( raw ) || raw == "" )
+	{
+		return records;
+	}
+
+	seen = [];
+	tokens = StrTok( raw, "," );
+	for ( i = 0; i < tokens.size; i++ )
+	{
+		pair = StrTok( tokens[i], ":" );
+		// StrTok skips empty fields, so compare the complete token as well.
+		if ( pair.size != 2 || tokens[i] != pair[0] + ":" + pair[1] )
+		{
+			continue;
+		}
+		weapon = bz_gauntlet_code_to_weapon( pair[0] );
+		tier = pair[1];
+		if ( weapon == "" || IsDefined( seen[weapon] ) || ( tier != "0" && tier != "1" && tier != "2" ) )
+		{
+			continue;
+		}
+
+		seen[weapon] = true;
+		rec = SpawnStruct();
+		rec.weapon_name = weapon;
+		rec.pap_tier = Int( tier );
+		records[records.size] = rec;
+	}
+	return records;
+}
+
 // ---------------------------------------------------------------------------
 // Host Dvar Ledger Helpers (Keyed by maps\_gauntlet_state::make_player_key)
 // ---------------------------------------------------------------------------
@@ -549,7 +671,7 @@ get_dvar_entry( dvar_name, player_key )
 	return "";
 }
 
-record_player_bz_state( player_guid, player_name, perm_str, perks_str )
+record_player_bz_state( player_guid, player_name, perm_str, perks_str, weapons_str )
 {
 	key = maps\_gauntlet_state::make_player_key( player_guid, player_name );
 	if ( key == "" )
@@ -559,6 +681,7 @@ record_player_bz_state( player_guid, player_name, perm_str, perks_str )
 
 	upsert_dvar_entry( "gauntlet_bz_perm", key, perm_str );
 	upsert_dvar_entry( "gauntlet_bz_perks", key, perks_str );
+	upsert_dvar_entry( "gauntlet_bz_weapons", key, weapons_str );
 	return true;
 }
 
@@ -568,7 +691,7 @@ record_player_bz_state( player_guid, player_name, perm_str, perks_str )
 
 snapshot_player_bz_state( player, current_map )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
@@ -583,7 +706,12 @@ snapshot_player_bz_state( player, current_map )
 
 	perm_str = encode_perm_record( player );
 	perks_str = encode_perks_record( player );
-	record_player_bz_state( guid, name, perm_str, perks_str );
+	weapons_str = "";
+	if ( bz_elements_enabled() )
+	{
+		weapons_str = encode_weapons_record( player );
+	}
+	record_player_bz_state( guid, name, perm_str, perks_str, weapons_str );
 
 	map_label = "";
 	if ( IsDefined( current_map ) )
@@ -601,19 +729,146 @@ snapshot_player_bz_state( player, current_map )
 	{
 		perks_log = perks_str;
 	}
+	weapons_log = "none";
+	if ( weapons_str != "" )
+	{
+		weapons_log = weapons_str;
+	}
 
 	fields = [];
 	fields[0] = bz_log_kv( "player", player_key );
 	fields[1] = bz_log_kv( "map", map_label );
 	fields[2] = bz_log_kv( "perm", perm_log );
 	fields[3] = bz_log_kv( "perks", perks_log );
+	fields[4] = bz_log_kv( "weapons", weapons_log );
 	bz_log_emit( "GAUNTLET_BZ_SAVED", bz_log_join( fields ) );
 	return true;
 }
 
+save_all_players_bz_state( current_map )
+{
+	if ( !bz_enabled() )
+	{
+		return;
+	}
+
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		snapshot_player_bz_state( players[i], current_map );
+	}
+}
+
+// Preserve Elemental Weapons already held. Prefer replacing the spawn pistol
+// when a carried primary needs a slot.
+bz_gauntlet_make_primary_room( player, max_primaries )
+{
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) || primaries.size < max_primaries )
+	{
+		return true;
+	}
+	if ( primaries.size > max_primaries )
+	{
+		return false;
+	}
+
+	replace = "";
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		weapon = primaries[i];
+		if ( weapon == "colt" || weapon == "zombie_colt" )
+		{
+			replace = weapon;
+			break;
+		}
+		if ( replace == "" && !IsSubStr( weapon, "bz_" ) )
+		{
+			replace = weapon;
+		}
+	}
+	if ( replace == "" )
+	{
+		return false;
+	}
+
+	player TakeWeapon( replace );
+	return !player HasWeapon( replace );
+}
+
+restore_weapons_record( player, raw )
+{
+	applied = SpawnStruct();
+	applied.weapons = 0;
+	applied.dpap = 0;
+	if ( !bz_elements_enabled() || !bz_gauntlet_player_is_alive_non_spectator( player ) )
+	{
+		return applied;
+	}
+
+	records = parse_weapons_record( raw );
+	if ( records.size == 0 )
+	{
+		return applied;
+	}
+
+	max_primaries = maps\_bz_hooks::bz_get_max_primary_weapons( player );
+	pap_enabled = bz_pap_enabled();
+	if ( pap_enabled )
+	{
+		maps\_bz_pap::bz_pap_ensure_player_tables( player );
+	}
+
+	for ( i = 0; i < records.size; i++ )
+	{
+		rec = records[i];
+		weapon = rec.weapon_name;
+		if ( !player HasWeapon( weapon ) )
+		{
+			if ( !bz_gauntlet_make_primary_room( player, max_primaries ) )
+			{
+				continue;
+			}
+			player GiveWeapon( weapon );
+			if ( !player HasWeapon( weapon ) )
+			{
+				continue;
+			}
+			player GiveMaxAmmo( weapon );
+			if ( ( player GetCurrentWeapon() ) == "none" )
+			{
+				player SwitchToWeapon( weapon );
+			}
+		}
+
+		applied.weapons++;
+		if ( !pap_enabled )
+		{
+			continue;
+		}
+		if ( rec.pap_tier >= 1 )
+		{
+			player.bz_single_pap_weapons[weapon] = true;
+			player.bz_pap_weapons[weapon] = true;
+		}
+		if ( rec.pap_tier >= 2 )
+		{
+			maps\_bz_state::bz_state_mark_weapon_double_pap( player, weapon );
+			maps\_bz_pap::bz_pap_apply_reserve_ammo( player, weapon );
+		}
+		if ( bz_is_weapon_double_pap( player, weapon ) )
+		{
+			applied.dpap++;
+		}
+	}
+
+	bz_pap_update_hud( player );
+	return applied;
+}
+
 restore_player_bz_state( player, current_map )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
@@ -633,6 +888,7 @@ restore_player_bz_state( player, current_map )
 
 	perm_raw = get_dvar_entry( "gauntlet_bz_perm", player_key );
 	perks_raw = get_dvar_entry( "gauntlet_bz_perks", player_key );
+	weapons_raw = get_dvar_entry( "gauntlet_bz_weapons", player_key );
 
 	perm = parse_perm_record( perm_raw );
 	perks = parse_perks_record( perks_raw );
@@ -645,7 +901,7 @@ restore_player_bz_state( player, current_map )
 		maps\_bz_classes::bz_class_update_hud( player );
 	}
 
-	if ( maps\_bz_hooks::bz_pap_enabled() )
+	if ( bz_pap_enabled() )
 	{
 		if ( perm.pap_knife )
 		{
@@ -662,7 +918,7 @@ restore_player_bz_state( player, current_map )
 		}
 		if ( perm.pap_knife || perm.pap_bowie || perm.pap_cluster )
 		{
-			maps\_bz_pap::bz_pap_update_hud( player );
+			bz_pap_update_hud( player );
 		}
 	}
 
@@ -672,7 +928,7 @@ restore_player_bz_state( player, current_map )
 		player.bz_has_bowie = true;
 	}
 
-	if ( maps\_bz_hooks::bz_elements_enabled() )
+	if ( bz_elements_enabled() )
 	{
 		if ( perm.owns_war_club )
 		{
@@ -749,7 +1005,10 @@ restore_player_bz_state( player, current_map )
 		maps\_bz_perks::bz_perks_update_hud( player );
 	}
 
-	// 3. Recompute composed runtime modifiers (Titan + Jugg I/II, Stamin-Up, Lightweight Heavy)
+	// 3. Restore primaries after Mule Kick sets the slot cap and Double Ammo is active.
+	applied_loadout = restore_weapons_record( player, weapons_raw );
+
+	// 4. Recompute composed runtime modifiers (Titan + Jugg I/II, Stamin-Up, Lightweight Heavy)
 	//    and sync per-player station menu dvars with carried-over/floored Gauntlet points.
 	maps\_bz_hooks::bz_recompute_player_speed( player );
 	maps\_bz_hooks::bz_recompute_player_max_health( player );
@@ -788,6 +1047,8 @@ restore_player_bz_state( player, current_map )
 	fields[6] = bz_log_kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
 	fields[7] = bz_log_kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
 	fields[8] = bz_log_kv( "melee_slot", applied_melee );
+	fields[9] = bz_log_kv( "bz_weapons", applied_loadout.weapons );
+	fields[10] = bz_log_kv( "bz_dpap", applied_loadout.dpap );
 	bz_log_emit( "GAUNTLET_BZ_RESTORED", bz_log_join( fields ) );
 	return true;
 }
@@ -796,7 +1057,7 @@ restore_player_bz_state( player, current_map )
 // so nobody stays trapped inside a station popup during the celebration/transition.
 close_all_bz_station_menus()
 {
-	if ( !maps\_bz_hooks::bz_enabled() )
+	if ( !bz_enabled() )
 	{
 		return 0;
 	}
@@ -843,4 +1104,29 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_enabled()
+{
+	return maps\_bz_hooks::bz_enabled();
+}
+
+bz_elements_enabled()
+{
+	return maps\_bz_hooks::bz_elements_enabled();
+}
+
+bz_pap_enabled()
+{
+	return maps\_bz_hooks::bz_pap_enabled();
+}
+
+bz_is_weapon_double_pap( player, weapon )
+{
+	return maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon );
+}
+
+bz_pap_update_hud( player )
+{
+	maps\_bz_pap::bz_pap_update_hud( player );
 }

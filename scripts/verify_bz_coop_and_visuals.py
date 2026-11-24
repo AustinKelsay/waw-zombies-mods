@@ -90,7 +90,7 @@ def _has_seeded_perm_and_perks(perm: str, perks: str) -> bool:
 
 
 def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check the first enhanced Stage handoff (class, perks, war_club, pap_war_club)."""
+    """Check the first enhanced Stage handoff for class, perks, gear, and Elemental Weapons."""
     events = bz.parse_bz_events(log_text)
     gauntlet = parse_gauntlet_events(log_text)
     errors = engine_errors(log_text)
@@ -113,10 +113,12 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         if matches(e, "GAUNTLET_BZ_SAVED", map=source)
         and e.fields.get("player")
         and _has_seeded_perm_and_perks(e.fields.get("perm", ""), e.fields.get("perks", ""))
+        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
     }
     if not saved_players:
         errors.append(
-            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), and perks (su,mk)"
+            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), "
+            "perks (su,mk), and weapons ac:2 and cr:0"
         )
     for event_type, fields in (
         ("STAGE_CLEAR", {"map": source, "next_map": destination}),
@@ -133,13 +135,15 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
             **{"class": "titan", "war_club": "1", "pap_war_club": "1", "melee_slot": "war_club"},
         )
         and e.fields.get("player") in saved_players
-        and e.fields.get("t1", "").isdecimal()
-        and int(e.fields["t1"]) >= 2
+        and all(
+            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
+            for key, minimum in (("t1", 2), ("bz_weapons", 2), ("bz_dpap", 1))
+        )
         for e in events
     ):
         errors.append(
             f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, "
-            "war_club=1, pap_war_club=1, melee_slot=war_club"
+            "war_club=1, pap_war_club=1, melee_slot=war_club, bz_weapons>=2, bz_dpap>=1"
         )
     return events, errors
 

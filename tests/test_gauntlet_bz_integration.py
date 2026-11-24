@@ -2,7 +2,7 @@
 
 Exercises real GSC scripts via tests/gsc_interpreter.py:
   - mod/maps/_bz_gauntlet_bridge.gsc (cross-stage persistence, serialization, restore, menu close)
-  - mod/maps/_gauntlet_state.gsc (clear_run_state wipes gauntlet_bz_perm & gauntlet_bz_perks)
+  - mod/maps/_gauntlet_state.gsc (clear_run_state wipes the Base Zombies ledgers)
   - mod/maps/_gauntlet_perks.gsc (Titan + Juggernog I/II maxhealth composition & loss)
   - mod/maps/_gauntlet_mode.gsc (Stage Clear / checkpoint / restore wiring)
   - mod/ui/gauntlet_menus.inc, mod/ui/bz_menus.inc, mod/ui/pc_gamesetup_coop.menu
@@ -333,6 +333,7 @@ class TestGauntletBzIntegration(unittest.TestCase):
         dvars = _make_enhanced_dvars()
         dvars.set("gauntlet_bz_perm", "g_1=titan|pk|knife")
         dvars.set("gauntlet_bz_perks", "g_1=jg,su|jg|bs")
+        dvars.set("gauntlet_bz_weapons", "g_1=ac:2,cr:0")
 
         gsc = GauntletBzRuntime(MOD_ROOT, dvars)
         gsc.level.set_field("script", "nazi_zombie_prototype")
@@ -352,10 +353,11 @@ class TestGauntletBzIntegration(unittest.TestCase):
         self.assertFalse(p.get_field("bz_station_open"))
         self.assertEqual(p.closed_menus, 1)
 
-        # clear_run_state wipes both gauntlet_bz_perm and gauntlet_bz_perks
+        # clear_run_state wipes all Base Zombies ledgers.
         gsc.call(GAUNTLET_STATE_MOD, "clear_run_state")
         self.assertEqual(dvars.get("gauntlet_bz_perm"), "")
         self.assertEqual(dvars.get("gauntlet_bz_perks"), "")
+        self.assertEqual(dvars.get("gauntlet_bz_weapons"), "")
 
     def test_solo_and_coop_enhanced_gauntlet_menu_contracts(self) -> None:
         ui_dir = MOD_ROOT / "ui"
@@ -379,8 +381,19 @@ class TestGauntletBzIntegration(unittest.TestCase):
             m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
             self.assertIsNotNone(m, f"Missing {macro}")
             self.assertNotIn("set bz_enabled 0", m.group(0))
-            self.assertIn("set gauntlet_bz_perm", m.group(0))
-            self.assertIn("set gauntlet_bz_perks", m.group(0))
+        for macro in (
+            "GAUNTLET_CLEAR_RUN_STATE_EXEC",
+            "GAUNTLET_SOLO_START_ACTION",
+            "GAUNTLET_ENHANCED_SOLO_START_ACTION",
+            "GAUNTLET_CLASSIC_MODE_ACTION",
+            "GAUNTLET_COOP_TOGGLE_ACTION",
+            "GAUNTLET_COOP_FRESH_LOCK_ACTION",
+        ):
+            with self.subTest(macro=macro):
+                m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
+                self.assertIsNotNone(m, f"Missing {macro}")
+                for ledger in ("gauntlet_bz_perm", "gauntlet_bz_perks", "gauntlet_bz_weapons"):
+                    self.assertIn(f"set {ledger}", m.group(0))
 
         # 4. GAUNTLET_ENHANCED_SOLO_START_ACTION enables Gauntlet + full Phase 1/2 BZ gates
         enh_m = re.search(r"#define\s+GAUNTLET_ENHANCED_SOLO_START_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
