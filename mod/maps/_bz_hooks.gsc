@@ -12,6 +12,51 @@
 //   - ASCII-only telemetry via maps\_bz_log.
 
 // ---------------------------------------------------------------------------
+// Local Forwarding Helpers (keeps cross-file GSC compiler precache entries
+// well under WaW 1.7's 1,024 MAX_PRECACHE_ENTRIES limit across all 4 maps)
+// ---------------------------------------------------------------------------
+
+bz_log_kv( k, v )
+{
+	return maps\_bz_log::kv( k, v );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_get_class_safe( player )
+{
+	return maps\_bz_state::bz_state_get_class( player );
+}
+
+bz_is_double_pap_safe( player, weapon_name )
+{
+	return maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name );
+}
+
+bz_has_perk_safe( player, perk_id )
+{
+	return maps\_bz_state::bz_state_has_perk( player, perk_id );
+}
+
+bz_has_apex_safe( player, apex_id )
+{
+	return maps\_bz_state::bz_state_has_apex( player, apex_id );
+}
+
+bz_get_weapon_safe( player )
+{
+	return maps\_bz_stations::bz_stations_get_player_weapon_safe( player );
+}
+
+// ---------------------------------------------------------------------------
 // Feature Gates (defaulting to 0 / disabled when unset)
 // ---------------------------------------------------------------------------
 
@@ -335,9 +380,9 @@ bz_register_box_weapons()
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "count", ids.size );
-	fields[1] = maps\_bz_log::kv( "weapons", weap_csv );
-	maps\_bz_log::emit( "ELEMENTS_BOX_REGISTER", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "count", ids.size );
+	fields[1] = bz_log_kv( "weapons", weap_csv );
+	bz_log_emit( "ELEMENTS_BOX_REGISTER", bz_log_join( fields ) );
 	return true;
 }
 
@@ -407,13 +452,13 @@ bz_init()
 	bz_register_box_weapons();
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
-	fields[1] = maps\_bz_log::kv( "perks", bz_bool_int( bz_perks_enabled() ) );
-	fields[2] = maps\_bz_log::kv( "classes", bz_bool_int( bz_classes_enabled() ) );
-	fields[3] = maps\_bz_log::kv( "pap", bz_bool_int( bz_pap_enabled() ) );
-	fields[4] = maps\_bz_log::kv( "elements", bz_bool_int( bz_elements_enabled() ) );
-	fields[5] = maps\_bz_log::kv( "companions", bz_bool_int( bz_companions_enabled() ) );
-	maps\_bz_log::emit( "BZ_INIT", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "map", bz_get_map_name() );
+	fields[1] = bz_log_kv( "perks", bz_bool_int( bz_perks_enabled() ) );
+	fields[2] = bz_log_kv( "classes", bz_bool_int( bz_classes_enabled() ) );
+	fields[3] = bz_log_kv( "pap", bz_bool_int( bz_pap_enabled() ) );
+	fields[4] = bz_log_kv( "elements", bz_bool_int( bz_elements_enabled() ) );
+	fields[5] = bz_log_kv( "companions", bz_bool_int( bz_companions_enabled() ) );
+	bz_log_emit( "BZ_INIT", bz_log_join( fields ) );
 
 	entries = get_hook_entries( "init" );
 	if ( IsDefined( entries ) )
@@ -732,12 +777,12 @@ bz_on_player_spawned( player )
 		version = maps\_bz_version::bz_get_build_version();
 		commit = maps\_bz_version::bz_get_build_commit();
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "version", version );
-		fields[1] = maps\_bz_log::kv( "commit", commit );
-		fields[2] = maps\_bz_log::kv( "build_id", maps\_bz_version::bz_get_build_id() );
-		fields[3] = maps\_bz_log::kv( "player", bz_build_parity_label( bz_get_player_label( player ) ) );
-		fields[4] = maps\_bz_log::kv( "map", bz_build_parity_label( bz_get_map_name() ) );
-		maps\_bz_log::emit( "BUILD_PARITY", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "version", version );
+		fields[1] = bz_log_kv( "commit", commit );
+		fields[2] = bz_log_kv( "build_id", maps\_bz_version::bz_get_build_id() );
+		fields[3] = bz_log_kv( "player", bz_build_parity_label( bz_get_player_label( player ) ) );
+		fields[4] = bz_log_kv( "map", bz_build_parity_label( bz_get_map_name() ) );
+		bz_log_emit( "BUILD_PARITY", bz_log_join( fields ) );
 		player IPrintLn( "Base Zombies v" + version + " (" + commit + ") - Co-op: all players must share mod.ff + waw_gauntlet.iwd" );
 	}
 
@@ -769,8 +814,8 @@ bz_on_player_downed( player )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", bz_get_player_label( player ) );
-	maps\_bz_log::emit( "PLAYER_DOWNED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	bz_log_emit( "PLAYER_DOWNED", bz_log_join( fields ) );
 
 	entries = get_hook_entries( "player_downed" );
 	if ( IsDefined( entries ) )
@@ -828,8 +873,8 @@ bz_on_round_start( round_num )
 	level.bz_current_round = r;
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "round", r );
-	maps\_bz_log::emit( "ROUND_START", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "round", r );
+	bz_log_emit( "ROUND_START", bz_log_join( fields ) );
 
 	entries = get_hook_entries( "round_start" );
 	if ( IsDefined( entries ) )
@@ -869,8 +914,8 @@ bz_on_end_game()
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
-	maps\_bz_log::emit( "END_GAME", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "map", bz_get_map_name() );
+	bz_log_emit( "END_GAME", bz_log_join( fields ) );
 
 	entries = get_hook_entries( "end_game" );
 	if ( IsDefined( entries ) )
@@ -1377,7 +1422,7 @@ bz_get_revive_time( reviver, base_time )
 	has_qr2 = false;
 	if ( bz_perks_enabled() )
 	{
-		has_qr = maps\_bz_state::bz_state_has_perk( reviver, "quick_revive" ) || reviver HasPerk( "specialty_quickrevive" );
+		has_qr = bz_has_perk_safe( reviver, "quick_revive" ) || reviver HasPerk( "specialty_quickrevive" );
 		has_qr2 = maps\_bz_state::bz_state_has_perk_t2( reviver, "quick_revive" );
 	}
 	else if ( reviver HasPerk( "specialty_quickrevive" ) )
@@ -1388,7 +1433,7 @@ bz_get_revive_time( reviver, base_time )
 	class_id = "";
 	if ( bz_classes_enabled() )
 	{
-		class_id = maps\_bz_state::bz_state_get_class( reviver );
+		class_id = bz_get_class_safe( reviver );
 	}
 
 	res = maps\_bz_rules::bz_calc_revive_time( t_base, has_qr, has_qr2, class_id );
@@ -1897,7 +1942,7 @@ bz_run_test_selftest()
 
 	if ( !IsDefined( p ) )
 	{
-		maps\_bz_log::emit( "BZ_SELFTEST_FAIL", "reason=no_alive_player" );
+		bz_log_emit( "BZ_SELFTEST_FAIL", "reason=no_alive_player" );
 		return;
 	}
 
@@ -1950,7 +1995,7 @@ bz_run_test_selftest()
 
 	// 2. Specialty Perk Station: Standard Perks, Tier 2, and all 4 Apex Perks
 	bz_on_menu_response( p, "bz_station_perks", "buy_perk:staminup" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_has_perk( p, "staminup" ) && p.bz_move_speed_scale > 1.0, "perk_staminup" );
+	bz_selftest_check( st, bz_has_perk_safe( p, "staminup" ) && p.bz_move_speed_scale > 1.0, "perk_staminup" );
 
 	bz_on_menu_response( p, "bz_station_perks", "buy_perk:mule_kick" );
 	bz_selftest_check( st, bz_get_max_primary_weapons( p ) == 3, "perk_mule_kick_3" );
@@ -1968,14 +2013,14 @@ bz_run_test_selftest()
 	bz_selftest_check( st, maps\_bz_state::bz_state_has_perk_t2( p, "juggernog" ) && Int( p.maxhealth ) == 220, "perk_jugg_t2_220" );
 
 	bz_on_menu_response( p, "bz_station_perks", "buy_apex:double_ammo" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "double_ammo" ), "apex_double_ammo" );
+	bz_selftest_check( st, bz_has_apex_safe( p, "double_ammo" ), "apex_double_ammo" );
 
 	bz_on_menu_response( p, "bz_station_perks", "buy_apex:lightweight_heavy" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "lightweight_heavy" ), "apex_lightweight_heavy" );
+	bz_selftest_check( st, bz_has_apex_safe( p, "lightweight_heavy" ), "apex_lightweight_heavy" );
 
 	bz_on_menu_response( p, "bz_station_perks", "buy_apex:blast_shield" );
 	bs_dmg = p bz_player_damage_override( p, p, 80, 0, "MOD_GRENADE_SPLASH", "stielhandgranate", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
-	bz_selftest_check( st, maps\_bz_state::bz_state_has_apex( p, "blast_shield" ) && bs_dmg == 0, "apex_blast_shield" );
+	bz_selftest_check( st, bz_has_apex_safe( p, "blast_shield" ) && bs_dmg == 0, "apex_blast_shield" );
 
 	bz_on_menu_response( p, "bz_station_perks", "buy_apex:second_chance" );
 	sc_ready_before = IsDefined( p.bz_second_chance_ready ) && p.bz_second_chance_ready;
@@ -1994,11 +2039,11 @@ bz_run_test_selftest()
 	bz_on_menu_response( p, "bz_station_class", "buy_class:medic" );
 	p SetPerk( "specialty_quickrevive" );
 	medic_rev_time = bz_get_revive_time( p, 3.0 );
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "medic" && medic_rev_time <= 0.1, "class_medic" );
+	bz_selftest_check( st, bz_get_class_safe( p ) == "medic" && medic_rev_time <= 0.1, "class_medic" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
 	titan_hp = Int( p.maxhealth );
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "titan" && titan_hp == 440, "class_titan_440hp" );
+	bz_selftest_check( st, bz_get_class_safe( p ) == "titan" && titan_hp == 440, "class_titan_440hp" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:sapper" );
 	sapper_nades = maps\_bz_classes::bz_sapper_get_total_grenades( p );
@@ -2025,7 +2070,7 @@ bz_run_test_selftest()
 	{
 		traps_after = level.bz_class_traps.size;
 	}
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "sapper" && sapper_nades == 10 && sapper_after_throw == 9 && Int( p.maxhealth ) == 220 && traps_after > traps_before, "class_sapper_10nades" );
+	bz_selftest_check( st, bz_get_class_safe( p ) == "sapper" && sapper_nades == 10 && sapper_after_throw == 9 && Int( p.maxhealth ) == 220 && traps_after > traps_before, "class_sapper_10nades" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:daredevil" );
 	dd_fall = p bz_player_damage_override( undefined, undefined, 150, 0, "MOD_FALLING", "none", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
@@ -2035,7 +2080,7 @@ bz_run_test_selftest()
 	{
 		p SetVelocity( ( dd_vel[0], dd_vel[1], 100 ) );
 	}
-	dd_ok = maps\_bz_state::bz_state_get_class( p ) == "daredevil" &&
+	dd_ok = bz_get_class_safe( p ) == "daredevil" &&
 		dd_fall == 0 &&
 		IsDefined( dd_slam ) && dd_slam.damage > 0 &&
 		IsDefined( p.bz_daredevil_burst_active ) && p.bz_daredevil_burst_active;
@@ -2086,7 +2131,7 @@ bz_run_test_selftest()
 		wait( 0.1 );
 		live_actor_dmg_ok = IsDefined( ghost_z ) && IsAlive( ghost_z ) && Int( ghost_z.health ) < 5000 && Int( ghost_z.health ) > 0;
 	}
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "assassin" && hs_dmg >= 500 && ghost_ok, "class_assassin_ghost" );
+	bz_selftest_check( st, bz_get_class_safe( p ) == "assassin" && hs_dmg >= 500 && ghost_ok, "class_assassin_ghost" );
 	bz_selftest_check( st, live_actor_dmg_ok, "live_actor_damage_extra" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:broker" );
@@ -2095,7 +2140,7 @@ bz_run_test_selftest()
 	score_before_live = Int( p.score );
 	p maps\_zombiemode_score::add_to_player_score( 100 );
 	live_score_delta = Int( p.score ) - score_before_live;
-	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
+	bz_selftest_check( st, bz_get_class_safe( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
 
 	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP (via real native vending_upgrade trigger on Der Riese) + PaP Bowie + PaP Cluster
 	cur_w = "";
@@ -2118,7 +2163,7 @@ bz_run_test_selftest()
 		wait( 0.15 );
 		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired, "pap_native_unlock_hook" );
 
-		base_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		base_w = bz_get_weapon_safe( p );
 		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )
 		{
 			base_fallthrough = !maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
@@ -2142,7 +2187,7 @@ bz_run_test_selftest()
 		w_wait = 0.0;
 		while ( w_wait < 2.0 )
 		{
-			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			cur_w = bz_get_weapon_safe( p );
 			if ( cur_w == upg_w && !p IsSwitchingWeapons() )
 			{
 				break;
@@ -2160,12 +2205,12 @@ bz_run_test_selftest()
 			native_trig notify( "trigger", p );
 		}
 		dpap_wait = 0.0;
-		while ( dpap_wait < 1.0 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) )
+		while ( dpap_wait < 1.0 && !bz_is_double_pap_safe( p, cur_w ) )
 		{
 			wait( 0.05 );
 			dpap_wait = dpap_wait + 0.05;
 		}
-		native_dpap_ok = maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) &&
+		native_dpap_ok = bz_is_double_pap_safe( p, cur_w ) &&
 			Int( p.score ) == ( score_before_dpap - dpap_cost );
 		bz_selftest_check( st, native_dpap_ok, "pap_double_native_console" );
 	}
@@ -2175,7 +2220,7 @@ bz_run_test_selftest()
 		w_wait = 0.0;
 		while ( w_wait < 2.0 )
 		{
-			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			cur_w = bz_get_weapon_safe( p );
 			if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
 			{
 				break;
@@ -2186,7 +2231,7 @@ bz_run_test_selftest()
 		bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
 
 		bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
-		bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+		bz_selftest_check( st, bz_is_double_pap_safe( p, cur_w ), "pap_double" );
 	}
 
 	p SetPerk( "specialty_altmelee" );
@@ -2204,14 +2249,14 @@ bz_run_test_selftest()
 
 	// 6. Down-Reset vs Class/PaP Persistence Boundary
 	bz_on_player_downed( p );
-	down_reset_ok = !maps\_bz_state::bz_state_has_perk( p, "staminup" ) &&
-		!maps\_bz_state::bz_state_has_perk( p, "mule_kick" ) &&
+	down_reset_ok = !bz_has_perk_safe( p, "staminup" ) &&
+		!bz_has_perk_safe( p, "mule_kick" ) &&
 		!maps\_bz_state::bz_state_has_perk_t2( p, "juggernog" ) &&
-		!maps\_bz_state::bz_state_has_apex( p, "second_chance" ) &&
-		!maps\_bz_state::bz_state_has_apex( p, "blast_shield" ) &&
+		!bz_has_apex_safe( p, "second_chance" ) &&
+		!bz_has_apex_safe( p, "blast_shield" ) &&
 		bz_get_max_primary_weapons( p ) == 2 &&
-		maps\_bz_state::bz_state_get_class( p ) == "broker" &&
-		maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) &&
+		bz_get_class_safe( p ) == "broker" &&
+		bz_is_double_pap_safe( p, cur_w ) &&
 		maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_bowie", "" ) &&
 		maps\_bz_state::bz_state_has_pap_upgrade( p, "pap_cluster", "" );
 	bz_selftest_check( st, down_reset_ok, "down_reset_boundary" );
@@ -2229,25 +2274,25 @@ bz_run_test_selftest()
 	if ( st.failed == 0 )
 	{
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "map", map_name );
-		fields[1] = maps\_bz_log::kv( "checks", st.passed );
-		fields[2] = maps\_bz_log::kv( "stations", expected_stations );
-		fields[3] = maps\_bz_log::kv( "titan_hp", titan_hp );
-		fields[4] = maps\_bz_log::kv( "sapper_nades", sapper_nades );
-		fields[5] = maps\_bz_log::kv( "broker_pts", broker_pts );
-		fields[6] = maps\_bz_log::kv( "broker_box", broker_box );
-		fields[7] = maps\_bz_log::kv( "dpap_weapon", cur_w );
-		fields[8] = maps\_bz_log::kv( "assassin_ghost", bz_bool_int( ghost_ok ) );
-		maps\_bz_log::emit( "BZ_SELFTEST_PASS", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "map", map_name );
+		fields[1] = bz_log_kv( "checks", st.passed );
+		fields[2] = bz_log_kv( "stations", expected_stations );
+		fields[3] = bz_log_kv( "titan_hp", titan_hp );
+		fields[4] = bz_log_kv( "sapper_nades", sapper_nades );
+		fields[5] = bz_log_kv( "broker_pts", broker_pts );
+		fields[6] = bz_log_kv( "broker_box", broker_box );
+		fields[7] = bz_log_kv( "dpap_weapon", cur_w );
+		fields[8] = bz_log_kv( "assassin_ghost", bz_bool_int( ghost_ok ) );
+		bz_log_emit( "BZ_SELFTEST_PASS", bz_log_join( fields ) );
 	}
 	else
 	{
 		ffields = [];
-		ffields[0] = maps\_bz_log::kv( "map", map_name );
-		ffields[1] = maps\_bz_log::kv( "passed", st.passed );
-		ffields[2] = maps\_bz_log::kv( "failed", st.failed );
-		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
-		maps\_bz_log::emit( "BZ_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
+		ffields[0] = bz_log_kv( "map", map_name );
+		ffields[1] = bz_log_kv( "passed", st.passed );
+		ffields[2] = bz_log_kv( "failed", st.failed );
+		ffields[3] = bz_log_kv( "reasons", st.fail_list );
+		bz_log_emit( "BZ_SELFTEST_FAIL", bz_log_join( ffields ) );
 	}
 }
 
@@ -2288,7 +2333,7 @@ bz_run_test_p2_selftest()
 
 	if ( !IsDefined( p ) )
 	{
-		maps\_bz_log::emit( "BZ_P2_SELFTEST_FAIL", "reason=no_alive_player" );
+		bz_log_emit( "BZ_P2_SELFTEST_FAIL", "reason=no_alive_player" );
 		return;
 	}
 
@@ -2524,13 +2569,13 @@ bz_run_test_p2_selftest()
 		if ( !flame_close_ok || !flame_dot_ok )
 		{
 			fdbg = [];
-			fdbg[0] = maps\_bz_log::kv( "close_dmg", flame_close_dmg );
-			fdbg[1] = maps\_bz_log::kv( "close_ok", bz_bool_int( flame_close_ok ) );
-			fdbg[2] = maps\_bz_log::kv( "dot_ok", bz_bool_int( flame_dot_ok ) );
-			fdbg[3] = maps\_bz_log::kv( "dist", Int( Distance( p.origin, live_z.origin ) ) );
-			fdbg[4] = maps\_bz_log::kv( "hp_before", hp_before_dot );
-			fdbg[5] = maps\_bz_log::kv( "hp_after", hp_after_dot );
-			maps\_bz_log::emit( "SELFTEST_FLAME_DBG", maps\_bz_log::join_fields( fdbg ) );
+			fdbg[0] = bz_log_kv( "close_dmg", flame_close_dmg );
+			fdbg[1] = bz_log_kv( "close_ok", bz_bool_int( flame_close_ok ) );
+			fdbg[2] = bz_log_kv( "dot_ok", bz_bool_int( flame_dot_ok ) );
+			fdbg[3] = bz_log_kv( "dist", Int( Distance( p.origin, live_z.origin ) ) );
+			fdbg[4] = bz_log_kv( "hp_before", hp_before_dot );
+			fdbg[5] = bz_log_kv( "hp_after", hp_after_dot );
+			bz_log_emit( "SELFTEST_FLAME_DBG", bz_log_join( fdbg ) );
 		}
 		bz_selftest_check( st, flame_close_ok && flame_dot_ok, "flamethrower_melt_and_dot" );
 
@@ -2678,26 +2723,26 @@ bz_run_test_p2_selftest()
 	if ( st.failed == 0 )
 	{
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "map", map_name );
-		fields[1] = maps\_bz_log::kv( "checks", st.passed );
-		fields[2] = maps\_bz_log::kv( "box_weapons", box_count );
-		fields[3] = maps\_bz_log::kv( "primaries", prim_count );
-		fields[4] = maps\_bz_log::kv( "titan_tesla_hp", titan_tesla_hp );
-		fields[5] = maps\_bz_log::kv( "acid_brittle_dmg", acid_brittle_dmg );
-		fields[6] = maps\_bz_log::kv( "cryo_shatter_dmg", cryo_shatter_dmg );
-		fields[7] = maps\_bz_log::kv( "xbow_bolts", xbow_bolts );
-		fields[8] = maps\_bz_log::kv( "portal_warped", bz_bool_int( portal_warped ) );
-		fields[9] = maps\_bz_log::kv( "cleanup", bz_bool_int( cleanup_ok ) );
-		maps\_bz_log::emit( "BZ_P2_SELFTEST_PASS", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "map", map_name );
+		fields[1] = bz_log_kv( "checks", st.passed );
+		fields[2] = bz_log_kv( "box_weapons", box_count );
+		fields[3] = bz_log_kv( "primaries", prim_count );
+		fields[4] = bz_log_kv( "titan_tesla_hp", titan_tesla_hp );
+		fields[5] = bz_log_kv( "acid_brittle_dmg", acid_brittle_dmg );
+		fields[6] = bz_log_kv( "cryo_shatter_dmg", cryo_shatter_dmg );
+		fields[7] = bz_log_kv( "xbow_bolts", xbow_bolts );
+		fields[8] = bz_log_kv( "portal_warped", bz_bool_int( portal_warped ) );
+		fields[9] = bz_log_kv( "cleanup", bz_bool_int( cleanup_ok ) );
+		bz_log_emit( "BZ_P2_SELFTEST_PASS", bz_log_join( fields ) );
 	}
 	else
 	{
 		ffields = [];
-		ffields[0] = maps\_bz_log::kv( "map", map_name );
-		ffields[1] = maps\_bz_log::kv( "passed", st.passed );
-		ffields[2] = maps\_bz_log::kv( "failed", st.failed );
-		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
-		maps\_bz_log::emit( "BZ_P2_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
+		ffields[0] = bz_log_kv( "map", map_name );
+		ffields[1] = bz_log_kv( "passed", st.passed );
+		ffields[2] = bz_log_kv( "failed", st.failed );
+		ffields[3] = bz_log_kv( "reasons", st.fail_list );
+		bz_log_emit( "BZ_P2_SELFTEST_FAIL", bz_log_join( ffields ) );
 	}
 }
 
@@ -2882,11 +2927,11 @@ bz_run_coop_selftest()
 			level.bz_native_pap_unlock_hook_fired, "native_pap_unlock_hook" );
 
 		bz_test_equip_native_pap_colt( p );
-		cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		cur_w = bz_get_weapon_safe( p );
 		for ( tries = 0; tries < 40 && ( cur_w != "zombie_colt_upgraded" || p IsSwitchingWeapons() ); tries++ )
 		{
 			wait( 0.05 );
-			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			cur_w = bz_get_weapon_safe( p );
 		}
 		bz_selftest_check( st, cur_w == "zombie_colt_upgraded" && !p IsSwitchingWeapons(), "native_pap_colt_equipped" );
 		p SetOrigin( ( -61, 515, 153 ) );
@@ -2895,11 +2940,11 @@ bz_run_coop_selftest()
 		{
 			bz_test_check_native_prompt( st, p, native_trig );
 			native_trig notify( "trigger", p );
-			for ( tries = 0; tries < 20 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ); tries++ )
+			for ( tries = 0; tries < 20 && !bz_is_double_pap_safe( p, cur_w ); tries++ )
 			{
 				wait( 0.05 );
 			}
-			bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "native_double_pap" );
+			bz_selftest_check( st, bz_is_double_pap_safe( p, cur_w ), "native_double_pap" );
 		}
 
 		dog = bz_test_find_active_dog();
@@ -2921,19 +2966,19 @@ bz_run_coop_selftest()
 
 	if ( st.failed == 0 )
 	{
-		maps\_bz_log::emit( "BZ_COOP_SELFTEST_PASS", "map=" + map_name + ";checks=" + st.passed +
+		bz_log_emit( "BZ_COOP_SELFTEST_PASS", "map=" + map_name + ";checks=" + st.passed +
 			";build_id=" + build_id + ";dog_rate=" + dog_rate );
 	}
 	else
 	{
-		maps\_bz_log::emit( "BZ_COOP_SELFTEST_FAIL", "map=" + map_name + ";passed=" + st.passed +
+		bz_log_emit( "BZ_COOP_SELFTEST_FAIL", "map=" + map_name + ";passed=" + st.passed +
 			";failed=" + st.failed + ";reasons=" + st.fail_list );
 	}
 }
 
 bz_test_visual_phase( name )
 {
-	maps\_bz_log::emit( "VISUAL_TOUR_PHASE", "phase=" + name + ";t=" + GetTime() );
+	bz_log_emit( "VISUAL_TOUR_PHASE", "phase=" + name + ";t=" + GetTime() );
 }
 
 bz_test_visual_pose( p, pos, station )
@@ -2961,7 +3006,7 @@ bz_run_visual_tour()
 	}
 	if ( !IsDefined( p ) )
 	{
-		maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=no_spawned_host" );
+		bz_log_emit( "VISUAL_TOUR_FAIL", "reason=no_spawned_host" );
 		return;
 	}
 
@@ -3012,7 +3057,7 @@ bz_run_visual_tour()
 		id = ids[i];
 		if ( !IsDefined( level.bz_stations ) || !IsDefined( level.bz_stations[id] ) )
 		{
-			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + id );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + id );
 			return;
 		}
 
@@ -3032,7 +3077,7 @@ bz_run_visual_tour()
 		{
 			fwd = AnglesToForward( station.angles );
 			org = station.origin;
-			pos = ( org[0] + fwd[0] * 64, org[1] + fwd[1] * 64, org[2] + 8 );
+			pos = ( org[0] + fwd[0] * 48, org[1] + fwd[1] * 48, org[2] + 8 );
 			bz_test_visual_pose( p, pos, station );
 			wait( 0.8 );
 		}
@@ -3041,7 +3086,7 @@ bz_run_visual_tour()
 		if ( !IsDefined( p.bz_station_prompt_hud ) || p.bz_station_prompt_hud.alpha != 1 ||
 			p.bz_station_prompt_text != prompt )
 		{
-			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + id );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + id );
 			return;
 		}
 		bz_test_visual_phase( slug + "_" + id + "_prompt" );
@@ -3057,7 +3102,7 @@ bz_run_visual_tour()
 		bz_on_menu_response( p, "bz_station_perks", "buy_t2:mule_kick" );
 		if ( bz_get_max_primary_weapons( p ) != 4 )
 		{
-			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_mule_kick_ii" );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_mule_kick_ii" );
 			return;
 		}
 		primaries = p GetWeaponsListPrimaries();
@@ -3087,7 +3132,7 @@ bz_run_visual_tour()
 			weap = maps\_bz_rules::bz_get_element_weapon_name( items[i] );
 			if ( !p HasWeapon( weap ) )
 			{
-				maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_weapon;weapon=" + weap );
+				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_weapon;weapon=" + weap );
 				return;
 			}
 			p SwitchToWeapon( weap );
@@ -3097,7 +3142,7 @@ bz_run_visual_tour()
 			}
 			if ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap )
 			{
-				maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap );
+				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap );
 				return;
 			}
 			bz_test_visual_phase( weap_slugs[i] + "_idle" );
@@ -3125,20 +3170,20 @@ bz_run_visual_tour()
 		wait( 0.25 );
 		if ( !IsDefined( native_trig ) || !IsDefined( p.bz_pap_prompt_hud ) || p.bz_pap_prompt_hud.alpha != 1 )
 		{
-			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_prompt" );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_prompt" );
 			return;
 		}
 		bz_test_visual_phase( "native_pap_prompt" );
 		wait( 0.6 );
 		p.bz_pap_console_next_ms = 0;
 		native_trig notify( "trigger", p );
-		for ( d_tries = 0; d_tries < 20 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, "zombie_colt_upgraded" ); d_tries++ )
+		for ( d_tries = 0; d_tries < 20 && !bz_is_double_pap_safe( p, "zombie_colt_upgraded" ); d_tries++ )
 		{
 			wait( 0.05 );
 		}
-		if ( !maps\_bz_state::bz_state_is_weapon_double_pap( p, "zombie_colt_upgraded" ) )
+		if ( !bz_is_double_pap_safe( p, "zombie_colt_upgraded" ) )
 		{
-			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_ii" );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_ii" );
 			return;
 		}
 		bz_test_visual_phase( "native_pap_ii_badge" );
@@ -3146,7 +3191,7 @@ bz_run_visual_tour()
 		phase_count = phase_count + 2;
 	}
 
-	maps\_bz_log::emit( "VISUAL_TOUR_DONE", "map=" + map_name + ";phases=" + phase_count );
+	bz_log_emit( "VISUAL_TOUR_DONE", "map=" + map_name + ";phases=" + phase_count );
 }
 
 bz_run_gauntlet_seed()
@@ -3171,7 +3216,7 @@ bz_run_gauntlet_seed()
 	}
 	if ( !IsDefined( p ) )
 	{
-		maps\_bz_log::emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_points" );
+		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_points" );
 		return;
 	}
 
@@ -3199,15 +3244,15 @@ bz_run_gauntlet_seed()
 			bz_on_item_purchased( p, "pap", "double_pap", double_pap, acid );
 		}
 	}
-	if ( !maps\_bz_state::bz_state_has_perk( p, "staminup" ) ||
-		!maps\_bz_state::bz_state_has_perk( p, "mule_kick" ) ||
-		maps\_bz_state::bz_state_get_class( p ) != "titan" ||
+	if ( !bz_has_perk_safe( p, "staminup" ) ||
+		!bz_has_perk_safe( p, "mule_kick" ) ||
+		bz_get_class_safe( p ) != "titan" ||
 		!maps\_bz_state::bz_state_owns_war_club( p ) || !p HasWeapon( acid ) || !p HasWeapon( "bz_cryo_cannon" ) ||
-		!maps\_bz_state::bz_state_is_weapon_double_pap( p, acid ) )
+		!bz_is_double_pap_safe( p, acid ) )
 	{
-		maps\_bz_log::emit( "GAUNTLET_BZ_SEED_FAIL", "reason=incomplete_seed" );
+		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=incomplete_seed" );
 		return;
 	}
 
-	maps\_bz_log::emit( "GAUNTLET_BZ_SEEDED", "map=nazi_zombie_prototype;class=titan;weapons=2" );
+	bz_log_emit( "GAUNTLET_BZ_SEEDED", "map=nazi_zombie_prototype;class=titan;weapons=2" );
 }

@@ -297,13 +297,15 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 f"Expected {expected_count} station script_models on {map_name}",
             )
             models_by_station = {mdl.get_field("bz_station_id"): mdl.get_field("model") for mdl in models}
-            self.assertEqual(models_by_station["arsenal"], "zombie_treasure_box")
-            if map_name == "nazi_zombie_factory":
-                self.assertEqual(models_by_station["class"], "zombie_vending_revive_on")
-            elif map_name == "nazi_zombie_prototype":
+            if map_name == "nazi_zombie_prototype":
                 self.assertEqual(models_by_station["perks"], "static_berlin_ger_radio")
                 self.assertEqual(models_by_station["class"], "dest_peleliu_generator_mobile_dmg0")
+                self.assertEqual(models_by_station["arsenal"], "german_grenade_bag")
                 self.assertEqual(models_by_station["pap"], "global_explosive_barrel_japanese")
+            else:
+                self.assertEqual(models_by_station["arsenal"], "zombie_treasure_box")
+                if map_name == "nazi_zombie_factory":
+                    self.assertEqual(models_by_station["class"], "zombie_vending_revive_on")
 
             for mdl in models:
                 self.assertEqual(

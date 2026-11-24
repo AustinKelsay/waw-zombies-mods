@@ -2235,6 +2235,18 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 
+    def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
+        # WaW 1.7's GSC compiler enforces a 1,024-entry MAX_PRECACHE_ENTRIES table across
+        # the active compile chain (Der Riese & Shi No Numa overflowed at 205 refs in _bz_hooks.gsc).
+        source = (MOD_ROOT / "maps" / "_bz_hooks.gsc").read_text(encoding="latin1")
+        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        refs = re.findall(r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+", code_only)
+        self.assertLessEqual(
+            len(refs),
+            130,
+            f"_bz_hooks.gsc has {len(refs)} cross-file refs (budget <= 130 to stay safely under MAX_PRECACHE_ENTRIES)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

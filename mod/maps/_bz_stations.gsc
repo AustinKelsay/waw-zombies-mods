@@ -500,7 +500,7 @@ bz_stations_get_model_for_station( map_name, station_id )
 		}
 		if ( sid == "arsenal" )
 		{
-			return "zombie_treasure_box";
+			return "german_grenade_bag";
 		}
 		if ( sid == "pap" )
 		{
@@ -675,7 +675,7 @@ bz_stations_ensure_prompt_hud( player )
 	hud.horzAlign = "center";
 	hud.vertAlign = "bottom";
 	hud.x = 0;
-	hud.y = -112;
+	hud.y = -132;
 	hud.fontScale = 1.45;
 	hud.alpha = 0;
 	hud.sort = 10;
