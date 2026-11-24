@@ -1259,6 +1259,43 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
                 self.assertIs(self.p1.weapon_clips, UNDEFINED)
                 self.assertTrue(self.gsc.call(STATIONS_MOD, "bz_stations_is_element_ammo_full", self.p1, weapon))
 
+    def test_arsenal_element_ammo_refill_handles_waw17_engine_stock_clamp(self) -> None:
+        self.dvars.set("bz_enabled", "1")
+        self.dvars.set("bz_perks_enabled", "1")
+        self.dvars.set("bz_pap_enabled", "1")
+        self.dvars.set("bz_elements_enabled", "1")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+
+        weapon = "bz_acid_sprayer"
+        self.p1.set_field("score", 30000)
+        self.p1.weapons = {weapon}
+        self.p1.weapon_stocks = {weapon: 0}
+        self.p1.weapon_clips = {weapon: 0}
+        self.gsc.call(STATE_MOD, "bz_state_mark_weapon_double_pap", self.p1, weapon)
+        self.gsc.call(STATE_MOD, "bz_try_buy_apex", self.p1, "double_ammo")
+
+        orig_exec = self.gsc._exec_method
+
+        def clamped_exec(receiver, method, args, line):
+            if method == "setweaponammostock" and len(args) >= 2:
+                return orig_exec(receiver, method, [args[0], min(int(args[1]), 160)], line)
+            return orig_exec(receiver, method, args, line)
+
+        with patch.object(self.gsc, "_exec_method", side_effect=clamped_exec):
+            score_before = int(self.p1.get_field("score"))
+            self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:acid_sprayer")
+            self.assertEqual(int(self.p1.get_field("score")), score_before - 2500)
+            self.assertEqual(self.p1.weapon_stocks[weapon], 160)
+            self.assertEqual(self.p1.get_field("bz_pap_target_stock")[weapon], 480)
+            self.assertTrue(self.gsc.call(STATIONS_MOD, "bz_stations_is_element_ammo_full", self.p1, weapon))
+            self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "FULL")
+
+            # Clicking again while at the WaW 1.7 clamped max stock must reject already_full with 0 pts spent.
+            self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:acid_sprayer")
+            self.assertEqual(int(self.p1.get_field("score")), score_before - 2500)
+            self.assertIn("already full", self.p1.client_dvars["ui_bz_feedback"].lower())
+
     def test_arsenal_phase2_buy_element_and_buy_gear_end_to_end_with_melee_swaps_and_ui_dvars(self) -> None:
         self.dvars.set("bz_enabled", "1")
         self.dvars.set("bz_perks_enabled", "1")

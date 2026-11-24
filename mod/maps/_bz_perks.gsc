@@ -931,6 +931,15 @@ bz_perks_apply_double_ammo_to_player( player )
 		{
 			player.bz_weapon_max_reserve[w] = target_max;
 			player SetWeaponAmmoStock( w, target_max );
+			actual = player GetWeaponAmmoStock( w );
+			if ( IsDefined( actual ) && actual > 0 && actual < target_max )
+			{
+				if ( !IsDefined( player.bz_elem_engine_cap ) )
+				{
+					player.bz_elem_engine_cap = [];
+				}
+				player.bz_elem_engine_cap[w] = actual;
+			}
 			updated++;
 		}
 	}

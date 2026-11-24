@@ -207,6 +207,15 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 	target_stock = Int( Int( base_max ) * ammo_mult );
 	player SetWeaponAmmoStock( weap, target_stock );
 	player.bz_pap_target_stock[weap] = target_stock;
+	actual_stock = player GetWeaponAmmoStock( weap );
+	if ( IsDefined( actual_stock ) && actual_stock > 0 && actual_stock < target_stock )
+	{
+		if ( !IsDefined( player.bz_elem_engine_cap ) )
+		{
+			player.bz_elem_engine_cap = [];
+		}
+		player.bz_elem_engine_cap[weap] = actual_stock;
+	}
 	return target_stock;
 }
 

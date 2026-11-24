@@ -284,8 +284,8 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 1090, -365, 96 ),
-			( 0, 90, 0 ),
+			( 1100, -295, 96 ),
+			( 0, 180, 0 ),
 			false,
 			false
 		);
@@ -1077,9 +1077,23 @@ bz_stations_get_element_target_stock( player, weap_name )
 	return Int( Int( base_max ) * ammo_mult );
 }
 
+bz_stations_get_element_effective_max_stock( player, weap_name )
+{
+	target_stock = bz_stations_get_element_target_stock( player, weap_name );
+	if ( IsDefined( player.bz_elem_engine_cap ) && IsDefined( player.bz_elem_engine_cap[weap_name] ) )
+	{
+		cap = Int( player.bz_elem_engine_cap[weap_name] );
+		if ( cap > 0 && cap < target_stock )
+		{
+			return cap;
+		}
+	}
+	return target_stock;
+}
+
 bz_stations_is_element_ammo_full( player, weap_name )
 {
-	if ( player GetWeaponAmmoStock( weap_name ) < bz_stations_get_element_target_stock( player, weap_name ) )
+	if ( player GetWeaponAmmoStock( weap_name ) < bz_stations_get_element_effective_max_stock( player, weap_name ) )
 	{
 		return false;
 	}
@@ -1608,9 +1622,19 @@ bz_stations_refill_element_ammo( player, weap_name )
 
 	target_stock = bz_stations_get_element_target_stock( player, weap_name );
 	player SetWeaponAmmoStock( weap_name, target_stock );
-	if ( IsDefined( player.bz_pap_target_stock ) )
+	if ( !IsDefined( player.bz_pap_target_stock ) )
 	{
-		player.bz_pap_target_stock[weap_name] = target_stock;
+		player.bz_pap_target_stock = [];
+	}
+	player.bz_pap_target_stock[weap_name] = target_stock;
+	actual_stock = player GetWeaponAmmoStock( weap_name );
+	if ( IsDefined( actual_stock ) && actual_stock > 0 && actual_stock < target_stock )
+	{
+		if ( !IsDefined( player.bz_elem_engine_cap ) )
+		{
+			player.bz_elem_engine_cap = [];
+		}
+		player.bz_elem_engine_cap[weap_name] = actual_stock;
 	}
 }
 

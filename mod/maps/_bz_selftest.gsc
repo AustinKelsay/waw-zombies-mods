@@ -1242,7 +1242,7 @@ bz_run_visual_tour()
 		{
 			fwd = AnglesToForward( station.angles );
 			org = station.origin;
-			pos = ( org[0] + fwd[0] * 48, org[1] + fwd[1] * 48, org[2] + 8 );
+			pos = ( org[0] + fwd[0] * 58, org[1] + fwd[1] * 58, org[2] );
 			bz_test_visual_pose( p, pos, station );
 			wait( 0.8 );
 		}
@@ -1528,10 +1528,19 @@ bz_test_arsenal_acid_ammo_refill( p )
 	score_before = p.score;
 	handled = bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
 
-	// Acid Sprayer reserves are 120 base, 180 with Double PaP, and 360 with both upgrades.
-	return handled && bz_is_double_pap_safe( p, acid ) && bz_has_apex_safe( p, "double_ammo" ) &&
-		p.score == score_before - 2500 && p GetWeaponAmmoStock( acid ) == 360 &&
+	// Acid Sprayer reserves target 360 with Double PaP (1.5x) + Double Ammo (2.0x),
+	// while WaW 1.7 clamps SetWeaponAmmoStock to WeaponMaxAmmo (120). Verify target
+	// tracking, full engine stock/clip refill, and repeat-click already_full rejection.
+	target_ok = IsDefined( p.bz_pap_target_stock ) && IsDefined( p.bz_pap_target_stock[acid] ) &&
+		p.bz_pap_target_stock[acid] == 360;
+	stock_ok = p GetWeaponAmmoStock( acid ) >= WeaponMaxAmmo( acid ) &&
 		p GetWeaponAmmoClip( acid ) == WeaponClipSize( acid );
+	score_after_refill = p.score;
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+	repeat_blocked = ( p.score == score_after_refill );
+
+	return handled && bz_is_double_pap_safe( p, acid ) && bz_has_apex_safe( p, "double_ammo" ) &&
+		score_after_refill == score_before - 2500 && target_ok && stock_ok && repeat_blocked;
 }
 
 bz_test_double_pap_element( p, weapon )
