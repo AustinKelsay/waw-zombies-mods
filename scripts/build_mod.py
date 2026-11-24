@@ -244,6 +244,32 @@ VERIFIED_ALL_4_MAP_FX: frozenset[str] = frozenset(
     }
 )
 
+# Explicit WaW 1.7 hitloc multipliers required when cloning non-bullet stock templates
+# (gas / projectile) to weaponType=bullet. Stock non-bullet templates omit loc* keys,
+# which WaW defaults to 0.0 for bullet weapons — silently zeroing both bullet hits and
+# scripted DoDamage(..., player) calls (which use hitloc="none") while the weapon is held.
+BZ_ELEMENT_LOC_MULTIPLIERS: dict[str, str] = {
+    "locNone": "1",
+    "locHelmet": "1",
+    "locHead": "1",
+    "locNeck": "1",
+    "locTorsoUpper": "1",
+    "locTorsoLower": "1",
+    "locRightArmUpper": "1",
+    "locRightArmLower": "1",
+    "locRightHand": "1",
+    "locLeftArmUpper": "1",
+    "locLeftArmLower": "1",
+    "locLeftHand": "1",
+    "locRightLegUpper": "1",
+    "locRightLegLower": "1",
+    "locRightFoot": "1",
+    "locLeftLegUpper": "1",
+    "locLeftLegLower": "1",
+    "locLeftFoot": "1",
+    "locGun": "0",
+}
+
 # Canonical Phase 2 zero-FX cloned primary weapon definitions (ADR-0003).
 # Each weapon clones a verified stock template at build time, enforces inventoryType=primary
 # and a distinct ammoName/clipName pool, and clears any FX outside VERIFIED_ALL_4_MAP_FX.
@@ -252,6 +278,7 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
         "bz_acid_sprayer",
         ("m2_flamethrower_zombie", "ray_gun"),
         {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Acid Sprayer",
             "inventoryType": "primary",
             "weaponType": "bullet",
@@ -291,6 +318,7 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
         "bz_cryo_cannon",
         ("tesla_gun", "ray_gun"),
         {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Cryo Cannon",
             "inventoryType": "primary",
             "weaponType": "bullet",
@@ -314,6 +342,7 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
         "bz_multi_crossbow",
         ("m7_launcher_zombie", "fg42_scoped", "m1garand_gl", "zombie_m1garand", "kar98k"),
         {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Multi-Crossbow",
             "inventoryType": "primary",
             "weaponType": "bullet",
@@ -338,6 +367,7 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
         "bz_blade_boomerang",
         ("zombie_doublebarrel_sawed", "walther", "zombie_colt", "colt"),
         {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Blade Boomerang",
             "inventoryType": "primary",
             "weaponType": "bullet",

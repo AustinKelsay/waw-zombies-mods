@@ -488,6 +488,12 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 self.assertEqual(pairs["altWeapon"], "")
                 self.assertEqual(pairs["damage"], "1")
                 self.assertEqual(pairs["minDamage"], "1")
+                for loc_key, loc_val in self.bm.BZ_ELEMENT_LOC_MULTIPLIERS.items():
+                    self.assertEqual(
+                        pairs.get(loc_key),
+                        loc_val,
+                        f"{weap_name} must define {loc_key}={loc_val} so bullet hits and DoDamage(..., player) are not zeroed",
+                    )
                 self.assertEqual(pairs["explosionInnerDamage"], "0")
                 self.assertEqual(pairs["explosionOuterDamage"], "0")
                 self.assertEqual(pairs["explosionRadius"], "0")
