@@ -585,7 +585,7 @@ class TestBzStationMenusManifestAndWaw17Compliance(unittest.TestCase):
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
 
         for menu_name in EXPECTED_MENUS:
-            rel = f"ui/{menu_name}.menu"
+            rel = f"ui/scriptmenus/{menu_name}.menu"
             self.assertIn(f'loadMenu {{ "{rel}" }}', patch_menus)
             self.assertIn(f"menufile,{rel}", mod_csv)
 
@@ -599,6 +599,30 @@ class TestBzStationMenusManifestAndWaw17Compliance(unittest.TestCase):
                 stripped.startswith(("fx,", "weapon,", "xmodel,")),
                 f"Forbidden asset type in mod.csv (400-FX safety): {line}",
             )
+
+    def test_raw_ui_overlay_preserves_and_restores_stock_files(self) -> None:
+        import build_mod
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage_dir = root / "mods" / "waw_gauntlet"
+            raw_ui = root / "raw" / "ui"
+            (stage_dir / "ui" / "scriptmenus").mkdir(parents=True)
+            raw_ui.mkdir(parents=True)
+
+            stock_patch = raw_ui / "patch_menus.txt"
+            stock_patch.write_bytes(b"// stock patch_menus\n")
+            (stage_dir / "ui" / "patch_menus.txt").write_bytes(b"// patched patch_menus\n")
+            (stage_dir / "ui" / "scriptmenus" / "bz_station_perks.menu").write_bytes(b"// perks\n")
+
+            backups = build_mod._overlay_staged_ui_into_raw(stage_dir=stage_dir, tools_root=root)
+            self.assertEqual(stock_patch.read_bytes(), b"// patched patch_menus\n")
+            self.assertTrue((raw_ui / "scriptmenus" / "bz_station_perks.menu").is_file())
+
+            build_mod._restore_raw_ui_overlay(backups)
+            self.assertEqual(stock_patch.read_bytes(), b"// stock patch_menus\n")
+            self.assertFalse((raw_ui / "scriptmenus" / "bz_station_perks.menu").exists())
 
     def test_bz_stations_and_hooks_are_waw17_compliant(self) -> None:
         gsc = BzGscRuntime(MOD_ROOT, FakeDvarStore())

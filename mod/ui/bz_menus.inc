@@ -81,3 +81,12 @@
 		autowrapped \
 		decoration \
 	}
+
+// Solo Nazi Zombies level entry with a unique preview group key (p_id) separate from
+// the stock loadscreen shader (p_shader_map), preventing preview title/description
+// text overlap with stock map entries in ui/levels.menu (levels_unlock).
+#define BZ_ZOMBIE_CHOICE_BUTTON( itemNum, textArg, action, p_id, p_shader_map, pdesc, offset, action2 ) \
+	CHOICE_BUTTON_FOCUS_VIS( itemNum, textArg, action, LOCAL_MAP_SHOW( p_id, textArg, offset, action2 );, ;, when( dvarString( language ) != "german" && NOT_CHEAT_CONDITION ) ) \
+	PREPROC_SHADER_DRAW_ALIGNED_VIS( 0 -160 275 164 HORIZONTAL_ALIGN_CENTER VERTICAL_ALIGN_CENTER, 0 5, "loadscreen_"p_shader_map, 1 1 1 1, 0, 0, 0 0 0 0, when( dvarString( language ) != "german" && NOT_CHEAT_CONDITION ) name "image_"p_id group "map_image_group" ) \
+	CHOICE_POPMENU_TITLE_VIS( textArg, when( dvarString( language ) != "german" && NOT_CHEAT_CONDITION ) name "image_"p_id group "map_image_group" rect 0 -55 275 164 HORIZONTAL_ALIGN_CENTER VERTICAL_ALIGN_CENTER forecolor MENU_GOLD ) \
+	CHOICE_POPMENU_SUBTITLE_ALIGN_VIS( pdesc, ITEM_ALIGN_LEFT, when( dvarString( language ) != "german" && NOT_CHEAT_CONDITION ) name "image_"p_id group "map_image_group" rect 0 56 275 164 HORIZONTAL_ALIGN_CENTER VERTICAL_ALIGN_CENTER )

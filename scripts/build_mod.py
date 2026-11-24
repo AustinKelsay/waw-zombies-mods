@@ -1201,7 +1201,7 @@ def patch_levels_menu_bz(source: str) -> str:
     # 2. Inject Solo Enhancements buttons for all 4 Stock Maps at slots 6..9 alongside ZOMBIE GAUNTLET
     if "BZ_SOLO_START_ACTION" not in text:
         gauntlet_lvl_re = re.compile(
-            r'^(?P<indent>[ \t]*)ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
+            r'^(?P<indent>[ \t]*)(?:BZ_)?ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
             re.MULTILINE,
         )
         match = gauntlet_lvl_re.search(text)
@@ -1209,17 +1209,17 @@ def patch_levels_menu_bz(source: str) -> str:
             raise ValueError("Could not locate levels_unlock ZOMBIE GAUNTLET entry in ui/levels.menu")
         indent = match.group("indent")
         bz_entries = (
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS: DER RIESE", BZ_SOLO_START_ACTION, '
-            f'"nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS: DER RIESE", BZ_SOLO_START_ACTION, '
+            f'"bz_factory", "nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP & Arsenal).", '
             f'18, exec "set ui_load_index 18" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 7, "ENHANCEMENTS: NACHT", BZ_SOLO_START_PROTOTYPE_ACTION, '
-            f'"nazi_zombie_prototype", "Base Zombies Enhancements on Nacht der Untoten (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 7, "ENHANCEMENTS: NACHT", BZ_SOLO_START_PROTOTYPE_ACTION, '
+            f'"bz_prototype", "nazi_zombie_prototype", "Base Zombies Enhancements on Nacht der Untoten (Perks, Classes, PaP & Arsenal).", '
             f'15, exec "set ui_load_index 15" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 8, "ENHANCEMENTS: VERRUCKT", BZ_SOLO_START_ASYLUM_ACTION, '
-            f'"nazi_zombie_asylum", "Base Zombies Enhancements on Verruckt (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 8, "ENHANCEMENTS: VERRUCKT", BZ_SOLO_START_ASYLUM_ACTION, '
+            f'"bz_asylum", "nazi_zombie_asylum", "Base Zombies Enhancements on Verruckt (Perks, Classes, PaP & Arsenal).", '
             f'16, exec "set ui_load_index 16" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 9, "ENHANCEMENTS: SHI NO NUMA", BZ_SOLO_START_SUMPF_ACTION, '
-            f'"nazi_zombie_sumpf", "Base Zombies Enhancements on Shi No Numa (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 9, "ENHANCEMENTS: SHI NO NUMA", BZ_SOLO_START_SUMPF_ACTION, '
+            f'"bz_sumpf", "nazi_zombie_sumpf", "Base Zombies Enhancements on Shi No Numa (Perks, Classes, PaP & Arsenal).", '
             f'17, exec "set ui_load_index 17" )'
         )
         text = text[: match.end()] + f"{newline}{bz_entries}" + text[match.end() :]
@@ -1389,7 +1389,50 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
     apply_bz_menu_patches(stage_dir=stage_dir)
 
+    # Mirror Base Zombies station popups under ui/scriptmenus/ so WaW 1.7 PrecacheMenu()
+    # and openMenu() resolve ui/scriptmenus/bz_station_*.menu cleanly in-game.
+    scriptmenus_dir = stage_dir / "ui" / "scriptmenus"
+    scriptmenus_dir.mkdir(parents=True, exist_ok=True)
+    for menu_src in sorted((stage_dir / "ui").glob("bz_station_*.menu")):
+        shutil.copy2(menu_src, scriptmenus_dir / menu_src.name)
+
     return stage_dir
+
+
+def _overlay_staged_ui_into_raw(stage_dir: Path, tools_root: Path) -> list[tuple[Path, bytes | None]]:
+    """Temporarily overlay staged ui/ files onto tools_root/raw/ui/ for linker_pc.exe.
+
+    In CoD:WaW 1.7, linker_pc.exe resolves menufile assets (and #include'd .inc files)
+    from raw/ ahead of mods/<moddir>/ whenever a stock file of the same name exists in
+    raw/. Overlaying staged ui/ files before linking and restoring them immediately
+    afterward guarantees mod.ff compiles our patched menus while leaving raw/ untouched.
+    """
+    staged_ui_dir = stage_dir / "ui"
+    raw_dir = tools_root / "raw"
+    backups: list[tuple[Path, bytes | None]] = []
+    if not staged_ui_dir.is_dir():
+        return backups
+
+    for src_path in sorted(staged_ui_dir.rglob("*")):
+        if not src_path.is_file():
+            continue
+        rel = src_path.relative_to(stage_dir)
+        dst_path = raw_dir / rel
+        prior = dst_path.read_bytes() if dst_path.is_file() else None
+        backups.append((dst_path, prior))
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dst_path)
+    return backups
+
+
+def _restore_raw_ui_overlay(backups: list[tuple[Path, bytes | None]]) -> None:
+    """Restore tools_root/raw/ui/ files backed up by _overlay_staged_ui_into_raw()."""
+    for dst_path, prior in reversed(backups):
+        if prior is not None:
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            dst_path.write_bytes(prior)
+        else:
+            dst_path.unlink(missing_ok=True)
 
 
 def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
@@ -1409,6 +1452,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
 
     prior_zone_csv = zone_csv.read_bytes() if zone_csv.exists() else None
     prior_assetlist_csv = assetlist_csv.read_bytes() if assetlist_csv.exists() else None
+    raw_ui_backups: list[tuple[Path, bytes | None]] = []
     if zone_out.exists():
         zone_out.unlink()
 
@@ -1416,6 +1460,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
         shutil.copy2(mod_csv_src, zone_csv)
         if not assetlist_csv.exists():
             assetlist_csv.write_bytes(b"")
+        raw_ui_backups = _overlay_staged_ui_into_raw(stage_dir=stage_dir, tools_root=tools_root)
 
         env = os.environ.copy()
         env["WAW_STEAM_ROOT"] = str(steam_root)
@@ -1459,6 +1504,7 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
         zone_out.unlink(missing_ok=True)
         return dist_ff
     finally:
+        _restore_raw_ui_overlay(raw_ui_backups)
         if prior_zone_csv is not None:
             zone_csv.write_bytes(prior_zone_csv)
         else:
