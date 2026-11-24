@@ -2253,29 +2253,20 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         from zipfile import ZipFile
 
         import build_mod
+        import verify_hud_menus
 
         stock_1arg = (
             b"localclientconnect(clientNum)\n{\n\tlevel notify(\"connected\");\n}\n"
             b"level_notify(notify_name)\n{\n\tlevel notify(notify_name);\n}\n"
         )
-        patched = build_mod.inject_clientscript_callbacks_patch(stock_1arg, build_id="0.5.0-abc1234")
+        patched = build_mod.inject_clientscript_callbacks_patch(stock_1arg)
         assert isinstance(patched, bytes)
         self.assertIn(b"level_notify(notify_name, param1, param2)", patched)
         self.assertIn(b"level notify(notify_name, param1, param2);", patched)
-        self.assertIn(b"bz_check_client_build_parity( clientNum, bz_prev_seq )", patched)
-        self.assertIn(b'return "0.5.0-abc1234";', patched)
-        self.assertIn(b'GetDvar( "bz_host_build_id" )', patched)
-        self.assertIn(b'GetDvar( "bz_host_build_seq" )', patched)
-        self.assertIn(b"BZ_EVENT|BUILD_PARITY_MISMATCH|", patched)
-        # WaW 1.7 CSC SetClientDvar rejects custom dvars; CSC parity must never call SetClientDvar.
+        # WaW 1.7 CSC SetClientDvar rejects custom dvars; _callbacks.csc must stay clean.
         self.assertNotIn(b"SetClientDvar", patched)
-        # Guests must not early-exit on local bz_enabled before polling host_id
-        self.assertNotIn(b'GetDvarInt( "bz_enabled" )', patched)
         # Idempotent when already patched
-        self.assertEqual(
-            build_mod.inject_clientscript_callbacks_patch(patched, build_id="0.5.0-abc1234"),
-            patched,
-        )
+        self.assertEqual(build_mod.inject_clientscript_callbacks_patch(patched), patched)
 
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2288,13 +2279,12 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.5.0-dev\"; }\n", encoding="ascii")
 
             out_csc = build_mod.stage_bz_clientscript_callbacks(
-                tools, stage, steam_game=root / "steam", build_id="0.5.0-abc1234"
+                tools, stage, steam_game=root / "steam"
             )
             self.assertEqual(out_csc, stage / "clientscripts" / "_callbacks.csc")
             assert out_csc is not None
             csc_bytes = out_csc.read_bytes()
             self.assertIn(b"level_notify(notify_name, param1, param2)", csc_bytes)
-            self.assertIn(b'return "0.5.0-abc1234";', csc_bytes)
 
             updated_csv = build_mod.generate_staged_mod_csv(
                 "rawfile,maps/_bz_version.gsc\n",
@@ -2309,68 +2299,22 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 self.assertIn("clientscripts/_callbacks.csc", archive.namelist())
                 self.assertIn(b"level_notify(notify_name, param1, param2)", archive.read("clientscripts/_callbacks.csc"))
 
-            # Execute patched CSC in offline runtime: a retained bz_host_build_id from a prior
-            # match must be cleared in localclientconnect so Classic Mode stays a noop and a new
-            # Enhanced match compares only against the current host's published ID.
-            csc_gsc = stage / "clientscripts" / "_callbacks.gsc"
-            csc_gsc.write_bytes(csc_bytes)
-
-            class _CscRuntime(BzGscRuntime):
-                def __init__(
-                    self,
-                    mod_root: Path,
-                    dvars: FakeDvarStore,
-                    publish_on_wait: tuple[str, str] | None = None,
-                ) -> None:
-                    super().__init__(mod_root, dvars)
-                    self.printed: list[str] = []
-                    self.publish_on_wait = publish_on_wait
-
-                def _call_builtin(self, name_lower: str, args: list[Any], line: int) -> tuple[bool, Any]:
-                    if name_lower == "println":
-                        self.printed.append(str(args[0]))
-                        return True, UNDEFINED
-                    if name_lower == "wait":
-                        if self.publish_on_wait is not None:
-                            self.dvars.set("bz_host_build_id", self.publish_on_wait[0])
-                            self.dvars.set("bz_host_build_seq", self.publish_on_wait[1])
-                        return True, UNDEFINED
-                    return super()._call_builtin(name_lower, args, line)
-
-            # 1) Entering Classic Mode with a stale previous-match host ID & seq: zero parity logs.
-            classic_dvars = FakeDvarStore()
-            classic_dvars.set("bz_host_build_id", "0.5.0-stale")
-            classic_dvars.set("bz_host_build_seq", "1_1000")
-            classic_rt = _CscRuntime(stage, classic_dvars)
-            classic_rt.call("clientscripts/_callbacks", "localclientconnect", 0)
-            prev_seq = classic_rt._threads[-1][2][1]
-            classic_rt.call("clientscripts/_callbacks", "bz_check_client_build_parity", 0, prev_seq)
-            self.assertEqual(classic_rt.printed, [])
-
-            # 2) Entering Enhanced match with a stale ID & seq: ignores stale seq and matches new host ID.
-            enh_dvars = FakeDvarStore()
-            enh_dvars.set("bz_host_build_id", "0.5.0-stale")
-            enh_dvars.set("bz_host_build_seq", "1_1000")
-            enh_rt = _CscRuntime(stage, enh_dvars, publish_on_wait=("0.5.0-abc1234", "2_2000"))
-            enh_rt.call("clientscripts/_callbacks", "localclientconnect", 0)
-            prev_seq2 = enh_rt._threads[-1][2][1]
-            enh_rt.call("clientscripts/_callbacks", "bz_check_client_build_parity", 0, prev_seq2)
+        # Retail-visible client-package parity stamp across all 4 station menus
+        for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
+            raw_menu = menu_path.read_text(encoding="latin1")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.5.0-abc1234")
             self.assertEqual(
-                enh_rt.printed,
-                ["BZ_EVENT|BUILD_PARITY_CLIENT|host=0.5.0-abc1234;client=0.5.0-abc1234;status=match"],
+                verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
+                [],
+                f"Brace imbalance in stamped {menu_path.name}",
             )
-
-            # 3) Mismatch against new host ID emits BUILD_PARITY_MISMATCH.
-            mm_dvars = FakeDvarStore()
-            mm_dvars.set("bz_host_build_seq", "1_1000")
-            mm_rt = _CscRuntime(stage, mm_dvars, publish_on_wait=("0.5.0-other99", "2_3000"))
-            mm_rt.call("clientscripts/_callbacks", "localclientconnect", 0)
-            prev_seq3 = mm_rt._threads[-1][2][1]
-            mm_rt.call("clientscripts/_callbacks", "bz_check_client_build_parity", 0, prev_seq3)
-            self.assertEqual(
-                mm_rt.printed,
-                ["BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.5.0-other99;client=0.5.0-abc1234"],
-            )
+            self.assertIn('"BUILD: 0.5.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.5.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.5.0-abc1234 != HOST ', stamped)
+            # Idempotent
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.5.0-abc1234"), stamped)
+            # Tracked menu remains unstamped
+            self.assertNotIn("bz_parity_mismatch", raw_menu)
 
 
 if __name__ == "__main__":

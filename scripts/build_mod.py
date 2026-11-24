@@ -1326,97 +1326,41 @@ _CSC_LEVEL_NOTIFY_1ARG_RE = re.compile(
     r"(?P<body>[^}]*?\blevel\s+notify\s*\(\s*notify_name\s*\)\s*;[^}]*?\})",
     re.DOTALL,
 )
-_CSC_LOCAL_CLIENT_CONNECT_RE = re.compile(
-    r"(?P<header>localclientconnect\s*\(\s*(?P<param>\w+)\s*\)\s*\{)",
-    re.IGNORECASE,
-)
 
 
-def inject_clientscript_callbacks_patch(
-    source: bytes | str,
-    build_id: str | None = None,
-) -> bytes | str:
-    """Ensure clientscripts/_callbacks.csc supports 3-arg notetracks and client build parity.
+def inject_clientscript_callbacks_patch(source: bytes | str) -> bytes | str:
+    """Ensure clientscripts/_callbacks.csc::level_notify accepts DLC 3-arg notetrack callbacks.
 
-    1. Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
-       `level_notify(notify_name)`, which throws a client script runtime error when
-       `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
-       notetracks via `level_notify("notetrack", localClientNum, note)`.
-    2. When `build_id` is supplied, embeds an independent client-package fingerprint
-       (`bz_get_client_build_id()`) and hooks `localclientconnect` to compare it against
-       the host-published `bz_host_build_id` client dvar (complete noop in Classic Mode).
+    Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
+    `level_notify(notify_name)`, which throws a client script runtime error when
+    `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
+    notetracks via `level_notify("notetrack", localClientNum, note)`.
     """
     is_bytes = isinstance(source, bytes)
     text = source.decode("latin1") if is_bytes else source
+    if re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
+        return source
+
     newline = "\r\n" if "\r\n" in text else "\n"
-
-    if not re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
-        text, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
-            f"level_notify(notify_name, param1, param2){newline}"
-            f"{{{newline}"
-            f"\tlevel notify(notify_name, param1, param2);{newline}"
-            f"}}",
-            text,
-            count=1,
-        )
-        if count != 1:
-            raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
-
-    if build_id is not None:
-        if not re.fullmatch(r"[0-9a-zA-Z_.-]+", build_id):
-            raise ValueError("Invalid Base Zombies client build ID")
-        if "bz_check_client_build_parity(" not in text:
-            connect_match = _CSC_LOCAL_CLIENT_CONNECT_RE.search(text)
-            if connect_match is not None:
-                param = connect_match.group("param")
-                hook = (
-                    f"{newline}"
-                    f'\tbz_prev_seq = GetDvar( "bz_host_build_seq" );{newline}'
-                    f"\tlevel thread bz_check_client_build_parity( {param}, bz_prev_seq );"
-                )
-                text = text[: connect_match.end()] + hook + text[connect_match.end() :]
-            helper = (
-                f"{newline}"
-                f"bz_get_client_build_id(){newline}"
-                f"{{{newline}"
-                f'\treturn "{build_id}";{newline}'
-                f"}}{newline}"
-                f"{newline}"
-                f"bz_check_client_build_parity( clientNum, prev_seq ){newline}"
-                f"{{{newline}"
-                f"\tclient_id = bz_get_client_build_id();{newline}"
-                f"\tfor ( i = 0; i < 40; i++ ){newline}"
-                f"\t{{{newline}"
-                f"\t\twait( 0.25 );{newline}"
-                f'\t\tcur_seq = GetDvar( "bz_host_build_seq" );{newline}'
-                f'\t\thost_id = GetDvar( "bz_host_build_id" );{newline}'
-                f'\t\tif ( IsDefined( cur_seq ) && cur_seq != "" && cur_seq != prev_seq && IsDefined( host_id ) && host_id != "" ){newline}'
-                f"\t\t{{{newline}"
-                f"\t\t\tif ( host_id != client_id ){newline}"
-                f"\t\t\t{{{newline}"
-                f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_MISMATCH|host=" + host_id + ";client=" + client_id );{newline}'
-                f"\t\t\t}}{newline}"
-                f"\t\t\telse{newline}"
-                f"\t\t\t{{{newline}"
-                f'\t\t\t\tprintln( "BZ_EVENT|BUILD_PARITY_CLIENT|host=" + host_id + ";client=" + client_id + ";status=match" );{newline}'
-                f"\t\t\t}}{newline}"
-                f"\t\t\treturn;{newline}"
-                f"\t\t}}{newline}"
-                f"\t}}{newline}"
-                f"}}{newline}"
-            )
-            text = text + helper
-
-    return text.encode("latin1") if is_bytes else text
+    patched, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
+        f"level_notify(notify_name, param1, param2){newline}"
+        f"{{{newline}"
+        f"\tlevel notify(notify_name, param1, param2);{newline}"
+        f"}}",
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
+    return patched.encode("latin1") if is_bytes else patched
 
 
 def stage_bz_clientscript_callbacks(
     tools_root: Path,
     stage_dir: Path,
     steam_game: Path | None = None,
-    build_id: str | None = None,
 ) -> Path | None:
-    """Stage DLC-compatible clientscripts/_callbacks.csc with Cryo notetrack & client parity support."""
+    """Stage DLC-compatible clientscripts/_callbacks.csc so Cryo Cannon notetracks work on all 4 maps."""
     stock_bytes: bytes | None = None
     search_steam = steam_game if steam_game is not None else tools_root
     for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
@@ -1448,13 +1392,63 @@ def stage_bz_clientscript_callbacks(
     if stock_bytes is None:
         return None
 
-    resolved_id = build_id if build_id is not None else f"{BZ_BUILD_VERSION}-{resolve_git_short_sha(REPO_ROOT)}"
-    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes, build_id=resolved_id)
+    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes)
     assert isinstance(patched_bytes, bytes)
     out_path = stage_dir / "clientscripts" / "_callbacks.csc"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(patched_bytes)
     return out_path
+
+
+def stamp_bz_station_menu_build_parity(menu_text: str, build_id: str) -> str:
+    """Stamp an independent retail-visible client-package build fingerprint & mismatch alert into a station menu."""
+    if not re.fullmatch(r"[0-9a-zA-Z_.-]+", build_id):
+        raise ValueError("Invalid Base Zombies client build ID")
+    if '"bz_parity_mismatch"' in menu_text:
+        return menu_text
+
+    newline = "\r\n" if "\r\n" in menu_text else "\n"
+    # Insert just before the final closing braces of `menuDef { ... }` inside outer `{ ... }`.
+    closing_re = re.compile(r"(?P<tail>\r?\n\t\}\r?\n\}\s*)$")
+    match = closing_re.search(menu_text)
+    if match is None:
+        raise ValueError("Could not locate closing menuDef brace in Base Zombies station menu")
+
+    snippet = (
+        f"{newline}"
+        f"\t\t// Build-stamped local mod.ff fingerprint & retail-visible host parity alert{newline}"
+        f"\t\titemDef{newline}"
+        f"\t\t{{{newline}"
+        f'\t\t\tname\t\t\t"bz_parity_ok"{newline}'
+        f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
+        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f'\t\t\ttext\t\t\t"BUILD: {build_id}"{newline}'
+        f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
+        f"\t\t\ttextscale\t\t0.22{newline}"
+        f"\t\t\ttextstyle\t\tITEM_TEXTSTYLE_SHADOWED{newline}"
+        f"\t\t\ttextalign\t\tITEM_ALIGN_RIGHT{newline}"
+        f"\t\t\ttextaligny\t\t11{newline}"
+        f"\t\t\tforecolor\t\t0.70 0.78 0.85 0.90{newline}"
+        f'\t\t\tvisible\t\t\twhen( dvarString( "bz_host_build_id" ) == "" || dvarString( "bz_host_build_id" ) == "{build_id}" );{newline}'
+        f"\t\t\tdecoration{newline}"
+        f"\t\t}}{newline}"
+        f"\t\titemDef{newline}"
+        f"\t\t{{{newline}"
+        f'\t\t\tname\t\t\t"bz_parity_mismatch"{newline}'
+        f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
+        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f'\t\t\texp\t\t\t\ttext( "BUILD MISMATCH! LOCAL {build_id} != HOST " + dvarString( "bz_host_build_id" ) );{newline}'
+        f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
+        f"\t\t\ttextscale\t\t0.22{newline}"
+        f"\t\t\ttextstyle\t\tITEM_TEXTSTYLE_SHADOWED{newline}"
+        f"\t\t\ttextalign\t\tITEM_ALIGN_CENTER{newline}"
+        f"\t\t\ttextaligny\t\t11{newline}"
+        f"\t\t\tforecolor\t\t1.0 0.25 0.25 1.0{newline}"
+        f'\t\t\tvisible\t\t\twhen( dvarString( "bz_host_build_id" ) != "" && dvarString( "bz_host_build_id" ) != "{build_id}" );{newline}'
+        f"\t\t\tdecoration{newline}"
+        f"\t\t}}"
+    )
+    return menu_text[: match.start()] + snippet + match.group("tail")
 
 
 def parse_weapon_file(text: str) -> list[tuple[str, str]]:
@@ -2027,12 +2021,11 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
     stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
-    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify + client build parity)
+    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify for Cryo Cannon on Nacht/Verruckt)
     stage_bz_clientscript_callbacks(
         tools_root=tools_root,
         stage_dir=stage_dir,
         steam_game=steam_game,
-        build_id=f"{BZ_BUILD_VERSION}-{build_commit}",
     )
 
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
@@ -2076,12 +2069,18 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
     apply_bz_menu_patches(stage_dir=stage_dir)
 
-    # Mirror Base Zombies station popups under ui/scriptmenus/ so WaW 1.7 PrecacheMenu()
-    # and openMenu() resolve ui/scriptmenus/bz_station_*.menu cleanly in-game.
+    # Mirror Base Zombies station popups under ui/scriptmenus/ with build-stamped local
+    # mod.ff parity indicators so WaW 1.7 PrecacheMenu()/openMenu() resolve them cleanly
+    # and show retail-visible host/client mismatch alerts without modifying tracked menus.
     scriptmenus_dir = stage_dir / "ui" / "scriptmenus"
     scriptmenus_dir.mkdir(parents=True, exist_ok=True)
+    build_id = f"{BZ_BUILD_VERSION}-{build_commit}"
     for menu_src in sorted((stage_dir / "ui").glob("bz_station_*.menu")):
-        shutil.copy2(menu_src, scriptmenus_dir / menu_src.name)
+        stamped = stamp_bz_station_menu_build_parity(menu_src.read_text(encoding="latin1"), build_id)
+        brace_errors = verify_hud_menus.validate_menu_braces(stamped, filename=menu_src.name)
+        if brace_errors:
+            raise ValueError(f"Parity-stamped menu {menu_src.name} failed brace validation: {brace_errors}")
+        (scriptmenus_dir / menu_src.name).write_text(stamped, encoding="latin1")
 
     return stage_dir
 
