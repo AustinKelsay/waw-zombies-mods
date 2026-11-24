@@ -442,6 +442,14 @@ def zombiemode_dogs_module_for_map(map_name: str) -> str:
     return f"_zombiemode_dogs_bz_{slug}"
 
 
+def zombiemode_powerups_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_powerups script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_powerups_bz_{slug}"
+
+
 def extract_stock_script(
     map_name: str, rawfile_rel: str, steam_game: Path, tools_root: Path
 ) -> bytes:
@@ -476,6 +484,7 @@ def _rewire_stock_module_refs(
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
     rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> str:
     if rewire_weapons_module:
         text = text.replace("maps\\_zombiemode_weapons::", f"maps\\{rewire_weapons_module}::")
@@ -483,6 +492,8 @@ def _rewire_stock_module_refs(
         text = text.replace("maps\\_zombiemode_perks::", f"maps\\{rewire_perks_module}::")
     if rewire_dogs_module:
         text = text.replace("maps\\_zombiemode_dogs::", f"maps\\{rewire_dogs_module}::")
+    if rewire_powerups_module:
+        text = text.replace("maps\\_zombiemode_powerups::", f"maps\\{rewire_powerups_module}::")
     return text
 
 
@@ -493,6 +504,7 @@ def inject_map_hooks(
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
     rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> bytes:
     """Inject Gauntlet + guarded Base Zombies bootstrap hooks and rewire maps\\_zombiemode::main(...)."""
     text = script_bytes.decode("latin1")
@@ -524,6 +536,7 @@ def inject_map_hooks(
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
         rewire_dogs_module=rewire_dogs_module,
+        rewire_powerups_module=rewire_powerups_module,
     )
     return patched.encode("latin1")
 
@@ -535,6 +548,7 @@ def inject_zombiemode_hooks(
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
     rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> bytes:
     """Inject strictly gated Gauntlet & Base Zombies hooks into a stock map's maps/_zombiemode.gsc.
 
@@ -645,6 +659,7 @@ def inject_zombiemode_hooks(
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
         rewire_dogs_module=rewire_dogs_module,
+        rewire_powerups_module=rewire_powerups_module,
     )
     return text.encode("latin1")
 
@@ -931,7 +946,12 @@ def inject_zombiemode_perks_hooks(
     return text.encode("latin1")
 
 
-def inject_zombiemode_dogs_hooks(script_bytes: bytes) -> bytes:
+def inject_zombiemode_dogs_hooks(
+    script_bytes: bytes,
+    *,
+    rewire_weapons_module: str | None = None,
+    rewire_powerups_module: str | None = None,
+) -> bytes:
     """Patch stock maps/_zombiemode_dogs.gsc to keep bz_spawning_dog set through Show().
 
     Stock dog_spawn_fx() clears ignoreall and calls stop_magic_bullet_shield(), then waits
@@ -979,6 +999,11 @@ def inject_zombiemode_dogs_hooks(script_bytes: bytes) -> bytes:
             f"Could not locate stop_magic_bullet_shield()/show() spawn markers in _zombiemode_dogs.gsc "
             f"(stop_hits={stop_hits}, show_hits={show_hits})"
         )
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+        rewire_powerups_module=rewire_powerups_module,
+    )
     return text.encode("latin1")
 
 
@@ -1471,7 +1496,15 @@ def generate_staged_mod_csv(
             stem.startswith("_bz_")
             or stem.startswith("_zombiemode_weapons_bz_")
             or stem.startswith("_zombiemode_perks_bz_")
-            or stem in ("_zombiemode_score.gsc", "_laststand.gsc", "_zombiemode_tesla.gsc")
+            or stem.startswith("_zombiemode_dogs_bz_")
+            or stem.startswith("_zombiemode_powerups_bz_")
+            or stem
+            in (
+                "_zombiemode_score.gsc",
+                "_laststand.gsc",
+                "_zombiemode_tesla.gsc",
+                "nazi_zombie_factory_teleporter.gsc",
+            )
         )
         if not is_bz_script:
             continue
@@ -1701,15 +1734,53 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             perks_dst.write_bytes(perks_patched)
 
         dogs_mod: str | None = None
+        powerups_mod: str | None = None
         dogs_stock = try_extract_stock_script(
             map_name, "maps/_zombiemode_dogs.gsc", steam_game, tools_root
         )
         if dogs_stock is not None:
             dogs_mod = zombiemode_dogs_module_for_map(map_name)
-            dogs_patched = inject_zombiemode_dogs_hooks(dogs_stock)
+            powerups_stock = try_extract_stock_script(
+                map_name, "maps/_zombiemode_powerups.gsc", steam_game, tools_root
+            )
+            if powerups_stock is not None and b"maps\\_zombiemode_dogs::" in powerups_stock:
+                powerups_mod = zombiemode_powerups_module_for_map(map_name)
+                powerups_patched = _rewire_stock_module_refs(
+                    powerups_stock.decode("latin1"),
+                    rewire_weapons_module=weapons_mod,
+                    rewire_dogs_module=dogs_mod,
+                    rewire_powerups_module=powerups_mod,
+                ).encode("latin1")
+                powerups_dst = stage_dir / "maps" / f"{powerups_mod}.gsc"
+                powerups_dst.parent.mkdir(parents=True, exist_ok=True)
+                powerups_dst.write_bytes(powerups_patched)
+
+            dogs_patched = inject_zombiemode_dogs_hooks(
+                dogs_stock,
+                rewire_weapons_module=weapons_mod,
+                rewire_powerups_module=powerups_mod,
+            )
             dogs_dst = stage_dir / "maps" / f"{dogs_mod}.gsc"
             dogs_dst.parent.mkdir(parents=True, exist_ok=True)
             dogs_dst.write_bytes(dogs_patched)
+
+            teleporter_rel = f"maps/{map_name}_teleporter.gsc"
+            teleporter_stock = try_extract_stock_script(
+                map_name, teleporter_rel, steam_game, tools_root
+            )
+            if teleporter_stock is not None and (
+                b"maps\\_zombiemode_dogs::" in teleporter_stock
+                or b"maps\\_zombiemode_powerups::" in teleporter_stock
+            ):
+                teleporter_patched = _rewire_stock_module_refs(
+                    teleporter_stock.decode("latin1"),
+                    rewire_weapons_module=weapons_mod,
+                    rewire_dogs_module=dogs_mod,
+                    rewire_powerups_module=powerups_mod,
+                ).encode("latin1")
+                teleporter_dst = stage_dir / teleporter_rel
+                teleporter_dst.parent.mkdir(parents=True, exist_ok=True)
+                teleporter_dst.write_bytes(teleporter_patched)
 
         rawfile_rel = f"maps/{map_name}.gsc"
         ff_path = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
@@ -1720,6 +1791,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
             rewire_dogs_module=dogs_mod,
+            rewire_powerups_module=powerups_mod,
         )
         dst = stage_dir / rawfile_rel
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1732,6 +1804,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
             rewire_dogs_module=dogs_mod,
+            rewire_powerups_module=powerups_mod,
         )
         zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
         zm_dst.parent.mkdir(parents=True, exist_ok=True)

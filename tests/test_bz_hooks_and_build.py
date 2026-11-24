@@ -1936,6 +1936,41 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             patched.index("ai.bz_spawning_dog = false;"),
         )
 
+        # Verify generate_staged_mod_csv includes per-map dog/powerups modules and teleporter script
+        base_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
+        staged_csv = self.bm.generate_staged_mod_csv(
+            base_csv,
+            [
+                "maps/_zombiemode_dogs_bz_sumpf.gsc",
+                "maps/_zombiemode_dogs_bz_factory.gsc",
+                "maps/_zombiemode_powerups_bz_factory.gsc",
+                "maps/nazi_zombie_factory_teleporter.gsc",
+            ],
+        )
+        for rel in (
+            "maps/_zombiemode_dogs_bz_sumpf.gsc",
+            "maps/_zombiemode_dogs_bz_factory.gsc",
+            "maps/_zombiemode_powerups_bz_factory.gsc",
+            "maps/nazi_zombie_factory_teleporter.gsc",
+        ):
+            self.assertIn(f"rawfile,{rel}", staged_csv.splitlines())
+
+        # Verify _rewire_stock_module_refs routes Der Riese teleporter & powerups dog callers cleanly
+        teleporter_src = (
+            "teleporter_dogs()\n{\n"
+            "\tmaps\\_zombiemode_dogs::special_dog_spawn( undefined, 4 );\n"
+            "\tss thread maps\\_zombiemode_powerups::special_powerup_drop( ss.origin );\n"
+            "}\n"
+        )
+        rewired_tp = self.bm._rewire_stock_module_refs(
+            teleporter_src,
+            rewire_dogs_module="_zombiemode_dogs_bz_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        )
+        self.assertIn("maps\\_zombiemode_dogs_bz_factory::special_dog_spawn", rewired_tp)
+        self.assertIn("maps\\_zombiemode_powerups_bz_factory::special_powerup_drop", rewired_tp)
+        self.assertNotIn("maps\\_zombiemode_dogs::", rewired_tp)
+
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")
         self.assertIn("if ( maps\\_bz_hooks::bz_enabled() )", patched)
