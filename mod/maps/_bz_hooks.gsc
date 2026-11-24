@@ -483,7 +483,10 @@ bz_init()
 		}
 	}
 	level thread bz_watch_connecting_players();
-	level thread bz_watch_max_ammo_powerups();
+	if ( !IsDefined( level.bz_powerups_hooked ) || !level.bz_powerups_hooked )
+	{
+		level thread bz_watch_max_ammo_powerups();
+	}
 
 	maps\_bz_selftest::bz_selftest_start_enabled();
 }
@@ -634,13 +637,6 @@ bz_notify_all_players_max_ammo()
 	{
 		return;
 	}
-	now = GetTime();
-	if ( IsDefined( level.bz_last_max_ammo_notify_ms ) && now >= level.bz_last_max_ammo_notify_ms &&
-		( now - level.bz_last_max_ammo_notify_ms ) < 200 )
-	{
-		return;
-	}
-	level.bz_last_max_ammo_notify_ms = now;
 
 	players = GetPlayers();
 	if ( IsDefined( players ) )
@@ -655,9 +651,10 @@ bz_notify_all_players_max_ammo()
 	}
 }
 
-// Primary Max Ammo delivery is injected into stock _zombiemode_powerups::full_ammo_powerup().
-// Keep a 1-frame (50ms) fallback drop watcher for unpatched/unit-test environments,
-// deduplicated by bz_notify_all_players_max_ammo()'s 200ms debounce.
+// Primary Max Ammo delivery is injected into stock _zombiemode_powerups::full_ammo_powerup()
+// (with per-map _zombiemode_spawner_bz_* -> _zombiemode_powerups_bz_* rewiring).
+// Keep a 1-frame (50ms) fallback drop watcher strictly for unpatched/unit-test environments
+// where level.bz_powerups_hooked is not set.
 bz_watch_max_ammo_powerups()
 {
 	level endon( "end_game" );
@@ -892,7 +889,6 @@ bz_on_end_game()
 		return;
 	}
 	level.bz_end_game_notified = true;
-	level.bz_last_max_ammo_notify_ms = undefined;
 
 	players = GetPlayers();
 	for ( i = 0; i < players.size; i++ )

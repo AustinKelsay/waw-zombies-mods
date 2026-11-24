@@ -2023,6 +2023,32 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             "{ level.bz_test_full_ammo_powerup = maps\\_zombiemode_powerups_bz_factory::full_ammo_powerup; }",
             factory_map,
         )
+        self.assertIn(
+            "if ( maps\\_bz_hooks::bz_enabled() ) { level.bz_powerups_hooked = true; }",
+            factory_map,
+        )
+
+        # Verify spawner -> powerups -> full_ammo_powerup rewiring and polling disablement
+        spawner_src = (
+            "zombie_death_points( origin )\n{\n"
+            "\tlevel thread maps\\_zombiemode_powerups::powerup_drop( origin );\n"
+            "}\n"
+        )
+        rewired_spawner = self.bm._rewire_stock_module_refs(
+            spawner_src,
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+            rewire_spawner_module="_zombiemode_spawner_bz_factory",
+        )
+        self.assertIn("maps\\_zombiemode_powerups_bz_factory::powerup_drop", rewired_spawner)
+        self.assertNotIn("maps\\_zombiemode_powerups::", rewired_spawner)
+
+        dvars = FakeDvarStore()
+        dvars.set("bz_enabled", "1")
+        gsc = BzGscRuntime(MOD_ROOT, dvars)
+        gsc.level.set_field("bz_powerups_hooked", True)
+        gsc.call(BZ_HOOKS_MOD, "bz_init")
+        launched = [name for _, name, _ in gsc._threads]
+        self.assertNotIn("bz_watch_max_ammo_powerups", launched)
 
     def test_mod_csv_stages_bz_scripts_and_supports_future_bz_modules(self) -> None:
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")

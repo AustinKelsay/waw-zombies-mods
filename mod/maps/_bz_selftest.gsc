@@ -857,7 +857,8 @@ bz_run_p2_selftest()
 	bz_selftest_check( st, watcher_ok && portal_fx_ok && portal_warped && portal_excluded_z, "portal_grenade_warp_and_exclude_z" );
 
 	max_charges = maps\_bz_rules::bz_get_portal_max_charges();
-	if ( IsDefined( level.bz_test_full_ammo_powerup ) )
+	stock_powerup_ok = IsDefined( level.bz_test_full_ammo_powerup );
+	if ( stock_powerup_ok )
 	{
 		max_drop = Spawn( "script_origin", p.origin );
 		level thread [[ level.bz_test_full_ammo_powerup ]]( max_drop );
@@ -867,12 +868,7 @@ bz_run_p2_selftest()
 			max_drop Delete();
 		}
 	}
-	else
-	{
-		maps\_bz_hooks::bz_notify_all_players_max_ammo();
-		wait( 0.1 );
-	}
-	portal_refilled = maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges;
+	portal_refilled = stock_powerup_ok && maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges;
 	bz_selftest_check( st, portal_charges_before == max_charges && portal_charges_after == max_charges - 1 &&
 		portal_refilled, "portal_grenade_max_ammo_refill" );
 
