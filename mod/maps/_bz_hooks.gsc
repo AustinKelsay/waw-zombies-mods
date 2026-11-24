@@ -1590,9 +1590,59 @@ bz_recompute_player_max_health( player )
 }
 
 // ---------------------------------------------------------------------------
+// Unified Hellhound Detection & Protection Helpers
+// GetAiSpeciesArray("axis", "all") includes Hellhounds; these guards prevent
+// script CC loops from freezing dog animations or breaking dog_spawn_fx().
+// ---------------------------------------------------------------------------
+
+bz_is_dog_entity( ent )
+{
+	if ( !IsDefined( ent ) )
+	{
+		return false;
+	}
+	if ( IsDefined( ent.animname ) && tolower( "" + ent.animname ) == "zombie_dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.targetname ) && tolower( "" + ent.targetname ) == "zombie_dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.species ) && tolower( "" + ent.species ) == "dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.is_dog ) && ent.is_dog )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_is_spawning_dog( ent )
+{
+	if ( !bz_is_dog_entity( ent ) )
+	{
+		return false;
+	}
+	if ( IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.magic_bullet_shield ) && ent.magic_bullet_shield )
+	{
+		return true;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------
 // Unified Zombie Move-Rate & Stun/Freeze/Slow Composition
 // Priority: Frozen/Stunned (0.01 + ignoreall) > Acid Slow (0.60) > Flame (0.80) > Base.
 // Prevents Flamethrower 0.80 from overwriting Cryo/Acid and keeps overlapping stuns intact.
+// Hellhounds are protected: spawning dogs are skipped untouched; active dogs
+// never clamp below 0.55 moveplaybackrate and never have ignoreall flipped.
 // ---------------------------------------------------------------------------
 
 bz_save_zombie_base_move_rate( zombie )
@@ -1620,6 +1670,16 @@ bz_recompute_zombie_move_rate( zombie )
 		return 1.0;
 	}
 
+	if ( bz_is_spawning_dog( zombie ) )
+	{
+		if ( IsDefined( zombie.moveplaybackrate ) && zombie.moveplaybackrate > 0.0 )
+		{
+			return zombie.moveplaybackrate;
+		}
+		return 1.0;
+	}
+
+	is_dog = bz_is_dog_entity( zombie );
 	base_rate = bz_save_zombie_base_move_rate( zombie );
 	now = GetTime();
 
@@ -1646,6 +1706,31 @@ bz_recompute_zombie_move_rate( zombie )
 
 	is_stunned = tesla_stunned || war_club_staggered || second_chance_stunned;
 	zombie.bz_stunned = is_stunned;
+
+	if ( is_dog )
+	{
+		dog_floor = 0.55;
+		target_rate = base_rate;
+		if ( frozen || is_stunned )
+		{
+			target_rate = dog_floor;
+		}
+		else if ( IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until ) )
+		{
+			target_rate = base_rate * maps\_bz_rules::bz_get_acid_slow_scale();
+		}
+		else if ( IsDefined( zombie.bz_flame_dot_active ) && zombie.bz_flame_dot_active )
+		{
+			target_rate = base_rate * 0.8;
+		}
+
+		if ( target_rate < dog_floor )
+		{
+			target_rate = dog_floor;
+		}
+		zombie.moveplaybackrate = target_rate;
+		return target_rate;
+	}
 
 	if ( frozen || is_stunned )
 	{

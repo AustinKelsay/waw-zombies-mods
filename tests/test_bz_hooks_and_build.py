@@ -135,6 +135,7 @@ class FakeEntity(GscStruct):
         self.hint_string: str = ""
         self.cursor_hint: str = ""
         self.deleted: bool = False
+        self.not_solid: bool = False
 
     def give_perk(self, perk: str) -> None:
         self._perks.add(perk.lower())
@@ -676,6 +677,10 @@ class BzGscRuntime(GscRuntime):
                 receiver.contents = int(args[0])
                 return old
             return 1
+        if method == "notsolid":
+            if isinstance(receiver, FakeEntity):
+                receiver.not_solid = True
+            return UNDEFINED
         if method == "playerads":
             if isinstance(receiver, FakeEntity):
                 return float(receiver.__dict__.get("ads_fraction", 0.0))
@@ -1384,6 +1389,9 @@ class TestBzHooksAndComposition(unittest.TestCase):
             "bz_global_damage_ads_wrapper",
             "bz_recompute_player_speed",
             "bz_recompute_player_max_health",
+            "bz_is_dog_entity",
+            "bz_is_spawning_dog",
+            "bz_recompute_zombie_move_rate",
         }
         module = self.gsc.load_module(BZ_HOOKS_MOD)
         for fn_name in sync_funcs:
@@ -1394,6 +1402,99 @@ class TestBzHooksAndComposition(unittest.TestCase):
                 _ast_contains_method_call(fn_def.body, "endon"),
                 f"Forbidden endon() inside synchronous caller {fn_name}()",
             )
+
+    def test_hellhound_detection_and_move_rate_protection(self) -> None:
+        self._enable_all_phase1()
+        self.gsc.sim_time_ms = 5000
+
+        # Undefined and normal zombies are NOT dogs
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", UNDEFINED))
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", self.zombie))
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", self.zombie))
+
+        # Every canonical Hellhound marker is recognized
+        for field_name, field_val in (
+            ("animname", "zombie_dog"),
+            ("targetname", "zombie_dog"),
+            ("species", "dog"),
+            ("is_dog", True),
+        ):
+            dog = FakeEntity(f"dog_{field_name}", ent_num=60, is_player=False)
+            dog.set_field(field_name, field_val)
+            self.assertTrue(
+                self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", dog),
+                f"Expected bz_is_dog_entity=True for {field_name}={field_val!r}",
+            )
+            self.assertFalse(
+                self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", dog),
+                f"Active dog ({field_name}) without spawn flags must not be spawning",
+            )
+
+        # Spawning dog during dog_spawn_fx() (ignoreall=True, not bz_stunned) -> skipped untouched
+        spawning_dog = FakeEntity("spawning_dog", ent_num=61, is_player=False)
+        spawning_dog.set_field("species", "dog")
+        spawning_dog.set_field("animname", "zombie_dog")
+        spawning_dog.set_field("ignoreall", True)
+        spawning_dog.set_field("moveplaybackrate", 1.0)
+        spawning_dog.set_field("bz_cryo_frozen_until", 9000)
+        spawning_dog.set_field("bz_is_frozen", True)
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", spawning_dog))
+
+        rate_spawning = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", spawning_dog)
+        self.assertAlmostEqual(float(rate_spawning), 1.0, places=4)
+        self.assertAlmostEqual(float(spawning_dog.get_field("moveplaybackrate")), 1.0, places=4)
+        self.assertTrue(spawning_dog.get_field("ignoreall"))
+        self.assertIs(spawning_dog.get_field("bz_stunned"), UNDEFINED)
+
+        # Spawning dog with magic_bullet_shield=True -> skipped untouched
+        shield_dog = FakeEntity("shield_dog", ent_num=62, is_player=False)
+        shield_dog.set_field("animname", "zombie_dog")
+        shield_dog.set_field("magic_bullet_shield", True)
+        shield_dog.set_field("ignoreall", True)
+        shield_dog.set_field("moveplaybackrate", 1.0)
+        shield_dog.set_field("bz_tesla_stun_until", 9000)
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", shield_dog))
+        self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", shield_dog)
+        self.assertAlmostEqual(float(shield_dog.get_field("moveplaybackrate")), 1.0, places=4)
+        self.assertTrue(shield_dog.get_field("ignoreall"))
+
+        # Active Hellhound under Cryo freeze / Tesla stun / Second Chance stun:
+        # NEVER drops below 0.55 and NEVER flips ignoreall to True!
+        active_dog = FakeEntity("active_dog", ent_num=63, is_player=False)
+        active_dog.set_field("species", "dog")
+        active_dog.set_field("animname", "zombie_dog")
+        active_dog.set_field("ignoreall", False)
+        active_dog.set_field("moveplaybackrate", 1.0)
+
+        active_dog.set_field("bz_is_frozen", True)
+        active_dog.set_field("bz_cryo_frozen_until", 9000)
+        rate_frozen = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_frozen), 0.55, places=4)
+        self.assertAlmostEqual(float(active_dog.get_field("moveplaybackrate")), 0.55, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
+
+        # Acid slow on active dog applies 0.60 (>= 0.55 floor)
+        active_dog.set_field("bz_is_frozen", False)
+        active_dog.set_field("bz_cryo_frozen_until", 0)
+        active_dog.set_field("bz_acid_slow_until", 9000)
+        rate_acid = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_acid), 0.60, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
+
+        # Even if a dog had a lower base rate (0.8), acid slow (0.48) clamps cleanly to 0.55 floor
+        slow_dog = FakeEntity("slow_dog", ent_num=64, is_player=False)
+        slow_dog.set_field("species", "dog")
+        slow_dog.set_field("ignoreall", False)
+        slow_dog.set_field("moveplaybackrate", 0.8)
+        slow_dog.set_field("bz_acid_slow_until", 9000)
+        rate_clamped = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", slow_dog)
+        self.assertAlmostEqual(float(rate_clamped), 0.55, places=4)
+
+        # When debuffs expire, active dog restores to base rate 1.0 without touching ignoreall
+        active_dog.set_field("bz_acid_slow_until", 0)
+        rate_restored = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_restored), 1.0, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
 
 
 def _ast_contains_method_call(node: Any, method_lower: str) -> bool:

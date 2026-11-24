@@ -775,6 +775,57 @@ class TestBzApexPerks(unittest.TestCase):
         self.assertAlmostEqual(pushed_x, 150.0 + 96.0 * 0.35, places=3)
         self.assertLess(pushed_x, 150.0 + 96.0 * 0.5)
 
+    def test_second_chance_skips_spawning_hellhounds_and_protects_active_hellhounds(self) -> None:
+        self._buy_perks_menu("buy_apex:second_chance")
+
+        dog_spawning = PerksFakeEntity("dog_spawning", ent_num=41, is_player=False)
+        dog_spawning.set_field("species", "dog")
+        dog_spawning.set_field("animname", "zombie_dog")
+        dog_spawning.set_field("ignoreall", True)
+        dog_spawning.set_field("magic_bullet_shield", True)
+        dog_spawning.set_field("moveplaybackrate", 1.0)
+        dog_spawning.set_field("origin", GscArray([130, 100, 0]))
+        dog_spawning.set_field("health", 400)
+
+        dog_active = PerksFakeEntity("dog_active", ent_num=42, is_player=False)
+        dog_active.set_field("species", "dog")
+        dog_active.set_field("animname", "zombie_dog")
+        dog_active.set_field("ignoreall", False)
+        dog_active.set_field("moveplaybackrate", 1.0)
+        dog_active.set_field("origin", GscArray([140, 100, 0]))
+        dog_active.set_field("health", 400)
+
+        z_normal = PerksFakeEntity("z_normal", ent_num=43, is_player=False)
+        z_normal.set_field("moveplaybackrate", 1.0)
+        z_normal.set_field("origin", GscArray([150, 100, 0]))
+        z_normal.set_field("health", 250)
+
+        self.gsc.zombies.extend([dog_spawning, dog_active, z_normal])
+        self.gsc.sim_time_ms = 25000
+
+        dmg = self.gsc.call_on(
+            self.player, BZ_HOOKS_MOD, "bz_player_damage_override",
+            z_normal, z_normal, 150, 0, "MOD_MELEE", "none", GscArray([100, 100, 0]), GscArray([-1, 0, 0]), "none", 0, 0,
+        )
+        self.assertEqual(dmg, 0)
+
+        # Spawning Hellhound skipped completely: no ForceTeleport, no stun, no ignoreall or moveplaybackrate change
+        self.assertEqual(float(dog_spawning.get_field("origin")[0]), 130.0)
+        self.assertIs(dog_spawning.get_field("bz_second_chance_stun_until"), UNDEFINED)
+        self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0, places=4)
+        self.assertTrue(dog_spawning.get_field("ignoreall"))
+
+        # Active Hellhound: NOT ForceTeleported, slowed safely to 0.55 floor (never 0.01), ignoreall stays False
+        self.assertEqual(float(dog_active.get_field("origin")[0]), 140.0)
+        self.assertEqual(dog_active.get_field("bz_second_chance_stun_until"), 28000)
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.55, places=4)
+        self.assertFalse(dog_active.get_field("ignoreall"))
+
+        # Regular zombie still pushed outward and stunned to 0.01 + ignoreall=True
+        self.assertGreater(float(z_normal.get_field("origin")[0]), 150.0)
+        self.assertAlmostEqual(float(z_normal.get_field("moveplaybackrate")), 0.01, places=4)
+        self.assertTrue(z_normal.get_field("ignoreall"))
+
     def test_blast_shield_blocks_all_self_explosive_splash_fire_and_fall_without_wasting_second_chance(self) -> None:
         self._buy_perks_menu("buy_apex:blast_shield")
         self._buy_perks_menu("buy_apex:second_chance")

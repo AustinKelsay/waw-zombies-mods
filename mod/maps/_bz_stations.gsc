@@ -537,6 +537,8 @@ bz_stations_spawn_one( map_name, spec )
 		vis = Spawn( "script_model", pos );
 		vis.angles = spec.angles;
 		vis SetModel( model_name );
+		vis SetContents( 0 );
+		vis NotSolid();
 		vis.bz_station_id = spec.id;
 	}
 

@@ -193,6 +193,32 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(all(e.deleted for e in self.gsc.spawned_entities))
 
+    def test_spawned_station_models_are_non_solid_with_zero_contents_across_all_maps(self) -> None:
+        for map_name in STOCK_MAPS:
+            dvars = FakeDvarStore()
+            gsc = BzGscRuntime(MOD_ROOT, dvars)
+            dvars.set("bz_enabled", "1")
+            dvars.set("bz_perks_enabled", "1")
+            dvars.set("bz_classes_enabled", "1")
+            dvars.set("bz_pap_enabled", "1")
+            gsc.level.set_field("script", map_name)
+
+            gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+            gsc.call(BZ_HOOKS_MOD, "bz_init")
+
+            models = [e for e in gsc.spawned_entities if e.classname == "script_model"]
+            self.assertEqual(len(models), 4, f"Expected 4 station script_models on {map_name}")
+            for mdl in models:
+                self.assertEqual(
+                    mdl.__dict__.get("contents"),
+                    0,
+                    f"Station model {mdl.get_field('model')} on {map_name} must call SetContents(0)",
+                )
+                self.assertTrue(
+                    mdl.not_solid,
+                    f"Station model {mdl.get_field('model')} on {map_name} must call NotSolid()",
+                )
+
     def test_feature_gate_isolation_skips_disabled_stations(self) -> None:
         self.dvars.set("bz_enabled", "1")
         self.dvars.set("bz_perks_enabled", "1")

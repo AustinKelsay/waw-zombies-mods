@@ -1067,6 +1067,10 @@ bz_titan_apply_aggro_bias( titan )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 
 		dist_titan = Distance( z.origin, titan.origin );
 		if ( dist_titan > aggro_radius )
@@ -1249,6 +1253,10 @@ bz_sapper_on_grenade_detonate( player, origin, base_radius, base_damage )
 	{
 		z = zombies[i];
 		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 		{
 			continue;
 		}
@@ -1582,6 +1590,10 @@ bz_sapper_fire_trap_tick( trap )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( trap.origin, z.origin ) <= trap.radius )
 		{
 			z DoDamage( trap.tick_damage, trap.origin, trap.owner );
@@ -1630,6 +1642,10 @@ bz_sapper_betty_trap_check( trap )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( trap.origin, z.origin ) <= trap.trigger_radius )
 		{
 			triggered = true;
@@ -1648,6 +1664,10 @@ bz_sapper_betty_trap_check( trap )
 	{
 		z = zombies[i];
 		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 		{
 			continue;
 		}
@@ -1848,6 +1868,10 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( pos, z.origin ) <= slam_radius )
 		{
 			z DoDamage( slam_dmg, pos, player );
@@ -1977,6 +2001,10 @@ bz_assassin_acquire_ghost_on_zombie( player, zombie )
 	{
 		return;
 	}
+	if ( maps\_bz_hooks::bz_is_dog_entity( zombie ) )
+	{
+		return;
+	}
 	if ( bz_assassin_has_ghosted_zombie( player, zombie ) )
 	{
 		return;
@@ -2062,15 +2090,15 @@ bz_assassin_ghost_tick( player )
 	}
 	hspeed_sq = ( vx * vx ) + ( vy * vy );
 
-	// Active while moving/sprinting (horizontal speed >= 20 u/s)
-	if ( hspeed_sq < 400.0 || !IsDefined( player.origin ) )
+	// Active only while actively moving into contact (horizontal speed >= 30 u/s)
+	if ( hspeed_sq < 900.0 || !IsDefined( player.origin ) )
 	{
 		bz_assassin_restore_all_zombies( player );
 		return 0;
 	}
 
-	ghost_radius = 96;
-	release_radius = 112;
+	ghost_radius = 42;
+	release_radius = 54;
 
 	// First restore any previously ghosted zombies that died or exited range
 	kept = [];
@@ -2091,12 +2119,16 @@ bz_assassin_ghost_tick( player )
 	}
 	player.bz_ghost_zombies = kept;
 
-	// Ghost nearby alive zombies via safe SetContents(0)
+	// Ghost contact-range alive zombies via safe SetContents(0) (skipping Hellhounds)
 	zombies = bz_class_get_zombies_safe();
 	for ( i = 0; i < zombies.size; i++ )
 	{
 		z = zombies[i];
 		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_dog_entity( z ) )
 		{
 			continue;
 		}
