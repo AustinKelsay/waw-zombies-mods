@@ -286,8 +286,8 @@ def patch_levels_menu(source: str) -> str:
             raise ValueError("Could not locate levels_unlock Nacht der Untoten entry in ui/levels.menu")
         indent = match.group("indent")
         gauntlet_entry = (
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 1, "ZOMBIE GAUNTLET", GAUNTLET_SOLO_START_ACTION, '
-            f'"nazi_zombie_prototype", "Endless 4-map escalating Zombies Run starting on Nacht der Untoten.", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 1, "ZOMBIE GAUNTLET", GAUNTLET_SOLO_START_ACTION, '
+            f'"gauntlet_prototype", "nazi_zombie_prototype", "Endless 4-map escalating Zombies Run starting on Nacht der Untoten.", '
             f'15, exec "set ui_load_index 15" ){newline}'
         )
         text = text[: match.start()] + gauntlet_entry + text[match.start() :]

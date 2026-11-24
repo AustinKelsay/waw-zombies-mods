@@ -1201,7 +1201,7 @@ def patch_levels_menu_bz(source: str) -> str:
     # 2. Inject Solo Enhancements buttons for all 4 Stock Maps at slots 6..9 alongside ZOMBIE GAUNTLET
     if "BZ_SOLO_START_ACTION" not in text:
         gauntlet_lvl_re = re.compile(
-            r'^(?P<indent>[ \t]*)ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
+            r'^(?P<indent>[ \t]*)(?:BZ_)?ZOMBIE_CHOICE_BUTTON\(\s*1,\s*"ZOMBIE GAUNTLET"[^\n]*$',
             re.MULTILINE,
         )
         match = gauntlet_lvl_re.search(text)
@@ -1209,17 +1209,17 @@ def patch_levels_menu_bz(source: str) -> str:
             raise ValueError("Could not locate levels_unlock ZOMBIE GAUNTLET entry in ui/levels.menu")
         indent = match.group("indent")
         bz_entries = (
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS: DER RIESE", BZ_SOLO_START_ACTION, '
-            f'"nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 6, "ENHANCEMENTS: DER RIESE", BZ_SOLO_START_ACTION, '
+            f'"bz_factory", "nazi_zombie_factory", "Base Zombies Enhancements on Der Riese (Perks, Classes, PaP & Arsenal).", '
             f'18, exec "set ui_load_index 18" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 7, "ENHANCEMENTS: NACHT", BZ_SOLO_START_PROTOTYPE_ACTION, '
-            f'"nazi_zombie_prototype", "Base Zombies Enhancements on Nacht der Untoten (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 7, "ENHANCEMENTS: NACHT", BZ_SOLO_START_PROTOTYPE_ACTION, '
+            f'"bz_prototype", "nazi_zombie_prototype", "Base Zombies Enhancements on Nacht der Untoten (Perks, Classes, PaP & Arsenal).", '
             f'15, exec "set ui_load_index 15" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 8, "ENHANCEMENTS: VERRUCKT", BZ_SOLO_START_ASYLUM_ACTION, '
-            f'"nazi_zombie_asylum", "Base Zombies Enhancements on Verruckt (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 8, "ENHANCEMENTS: VERRUCKT", BZ_SOLO_START_ASYLUM_ACTION, '
+            f'"bz_asylum", "nazi_zombie_asylum", "Base Zombies Enhancements on Verruckt (Perks, Classes, PaP & Arsenal).", '
             f'16, exec "set ui_load_index 16" ){newline}'
-            f'{indent}ZOMBIE_CHOICE_BUTTON( 9, "ENHANCEMENTS: SHI NO NUMA", BZ_SOLO_START_SUMPF_ACTION, '
-            f'"nazi_zombie_sumpf", "Base Zombies Enhancements on Shi No Numa (Perks, Classes, PaP).", '
+            f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 9, "ENHANCEMENTS: SHI NO NUMA", BZ_SOLO_START_SUMPF_ACTION, '
+            f'"bz_sumpf", "nazi_zombie_sumpf", "Base Zombies Enhancements on Shi No Numa (Perks, Classes, PaP & Arsenal).", '
             f'17, exec "set ui_load_index 17" )'
         )
         text = text[: match.end()] + f"{newline}{bz_entries}" + text[match.end() :]
