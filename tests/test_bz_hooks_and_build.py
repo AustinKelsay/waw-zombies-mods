@@ -1780,6 +1780,89 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         ).decode("latin1")
         self.assertIn("maps\\_bz_hooks::bz_recompute_player_max_health( player );", asylum_patched)
         self.assertIn("maps\\_zombiemode_weapons_bz_asylum::weapon_give(", asylum_patched)
+        # Non-Factory perks scripts lack vending_upgrade() and must patch cleanly without injecting PaP hooks
+        self.assertNotIn("bz_pap_try_native_console_upgrade", asylum_patched)
+        self.assertNotIn("bz_pap_on_native_weapon_taken", asylum_patched)
+
+    def test_inject_zombiemode_perks_hooks_patches_factory_vending_upgrade_and_pickup(self) -> None:
+        factory_perks = (
+            "vending_set_perk( perk )\n"
+            "{\n"
+            "\tif ( perk == \"specialty_armorvest\" )\n"
+            "\t{\n"
+            "\t\tself.maxhealth = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t\tself.health = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "vending_upgrade()\n"
+            "{\n"
+            "\tperk_machine = getent( self.target, \"targetname\" );\n"
+            "\tpacka_rollers = spawn( \"script_origin\", self.origin );\n"
+            "\tflag_wait( \"Pack_A_Punch_on\" );\n"
+            "\tfor( ;; )\n"
+            "\t{\n"
+            "\t\tself waittill( \"trigger\", player );\n"
+            "\t\tcurrent_weapon = player getCurrentWeapon();\n"
+            "\t\tif( !IsDefined( level.zombie_include_weapons[current_weapon] ) || !IsDefined( level.zombie_include_weapons[current_weapon + \"_upgraded\"] ) )\n"
+            "\t\t{\n"
+            "\t\t\tcontinue;\n"
+            "\t\t}\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "wait_for_player_to_take( player, weapon_name, packa_timer )\n"
+            "{\n"
+            "\tplayer GiveWeapon( weapon_name );\n"
+            "\tplayer GiveMaxAmmo( weapon_name );\n"
+            "\tplayer SwitchToWeapon( weapon_name );\n"
+            "}\n"
+        ).encode("latin1")
+
+        patched = self.bm.inject_zombiemode_perks_hooks(
+            factory_perks,
+            rewire_weapons_module="_zombiemode_weapons_bz_factory",
+        ).decode("latin1")
+
+        # 1. Native PaP unlock flag set right after flag_wait( "Pack_A_Punch_on" )
+        self.assertIn('if ( maps\\_bz_hooks::bz_pap_enabled() ) { level.bz_native_pap_unlocked = true; }', patched)
+        self.assertLess(
+            patched.index('flag_wait( "Pack_A_Punch_on" );'),
+            patched.index("level.bz_native_pap_unlocked = true;"),
+        )
+
+        # 2. Native console upgrade hook injected right BEFORE stock zombie_include_weapons check
+        hook_call = (
+            "if ( maps\\_bz_hooks::bz_pap_enabled() && "
+            "maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers ) )"
+        )
+        stock_guard = (
+            'if( !IsDefined( level.zombie_include_weapons[current_weapon] ) || '
+            '!IsDefined( level.zombie_include_weapons[current_weapon + "_upgraded"] ) )'
+        )
+        self.assertIn(hook_call, patched)
+        self.assertIn(stock_guard, patched)
+        self.assertLess(patched.index(hook_call), patched.index(stock_guard))
+
+        # 3. Post-pickup hook injected right AFTER GiveMaxAmmo( weapon_name ) in wait_for_player_to_take()
+        pickup_hook = "if ( maps\\_bz_hooks::bz_pap_enabled() ) { maps\\_bz_pap::bz_pap_on_native_weapon_taken( player, weapon_name ); }"
+        self.assertIn(pickup_hook, patched)
+        self.assertLess(patched.index("player GiveMaxAmmo( weapon_name );"), patched.index(pickup_hook))
+        self.assertLess(patched.index(pickup_hook), patched.index("player SwitchToWeapon( weapon_name );"))
+
+        # 4. Also supports weapon_give( upgrade_name ) variant in wait_for_player_to_take()
+        factory_perks_wg = factory_perks.decode("latin1").replace(
+            "\tplayer GiveWeapon( weapon_name );\n\tplayer GiveMaxAmmo( weapon_name );\n",
+            "\tplayer maps\\_zombiemode_weapons::weapon_give( upgrade_name );\n",
+        ).encode("latin1")
+        patched_wg = self.bm.inject_zombiemode_perks_hooks(
+            factory_perks_wg,
+            rewire_weapons_module="_zombiemode_weapons_bz_factory",
+        ).decode("latin1")
+        self.assertIn(
+            "if ( maps\\_bz_hooks::bz_pap_enabled() ) { maps\\_bz_pap::bz_pap_on_native_weapon_taken( player, upgrade_name ); }",
+            patched_wg,
+        )
 
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")
@@ -1880,6 +1963,26 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", ls_patched)
+
+            # Real stock _zombiemode_perks.gsc: Factory hooks native PaP console; Verruckt & Sumpf skip cleanly
+            fp = self.bm.extract_stock_script(
+                "nazi_zombie_factory", "maps/_zombiemode_perks.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+            )
+            fp_patched = self.bm.inject_zombiemode_perks_hooks(
+                fp, rewire_weapons_module="_zombiemode_weapons_bz_factory"
+            ).decode("latin1")
+            self.assertIn(
+                "maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers )",
+                fp_patched,
+            )
+            self.assertIn("maps\\_bz_pap::bz_pap_on_native_weapon_taken(", fp_patched)
+            for non_factory in ("nazi_zombie_asylum", "nazi_zombie_sumpf"):
+                nfp = self.bm.try_extract_stock_script(
+                    non_factory, "maps/_zombiemode_perks.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+                )
+                if nfp is not None:
+                    nfp_patched = self.bm.inject_zombiemode_perks_hooks(nfp).decode("latin1")
+                    self.assertNotIn("bz_pap_try_native_console_upgrade", nfp_patched)
 
             # Verify stage_mod_files() stages patched _zombiemode_score.gsc and _laststand.gsc into mod.csv
             if (self.bm.DEFAULT_TOOLS_ROOT / "raw" / "ui" / "main.menu").is_file():

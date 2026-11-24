@@ -101,9 +101,16 @@ class PapGscRuntime(BzGscRuntime):
             "ray_gun": 160,
             "ray_gun_upgraded": 200,
             "kar98k": 60,
+            "bz_acid_sprayer": 120,
+            "bz_cryo_cannon": 96,
+            "bz_multi_crossbow": 36,
+            "bz_blade_boomerang": 20,
         }
         self.ai_enemies: list[PapFakeEntity] = []
         self.hud_elems: list[FakeHudElem] = []
+        self.played_sounds: list[tuple[Any, str]] = []
+        self.sound_positions: list[tuple[str, Any]] = []
+        self.played_fx: list[tuple[Any, Any]] = []
 
     def _call_builtin(self, name_lower: str, args: list[Any], line: int) -> tuple[bool, Any]:
         if name_lower == "weaponmaxammo":
@@ -117,9 +124,28 @@ class PapGscRuntime(BzGscRuntime):
             hud = FakeHudElem(owner=args[0])
             self.hud_elems.append(hud)
             return True, hud
+        if name_lower == "playsoundatposition":
+            snd = _waw_to_str(args[0]) if len(args) > 0 else ""
+            pos = args[1] if len(args) > 1 else UNDEFINED
+            self.sound_positions.append((snd, pos))
+            return True, UNDEFINED
+        if name_lower == "playfx":
+            fx = args[0] if len(args) > 0 else UNDEFINED
+            pos = args[1] if len(args) > 1 else UNDEFINED
+            self.played_fx.append((fx, pos))
+            return True, UNDEFINED
+        if name_lower == "getent":
+            val = _waw_to_str(args[0]).lower() if len(args) > 0 else ""
+            key = _waw_to_str(args[1]).lower() if len(args) > 1 else ""
+            matches = self.world_entities.get((key, val), [])
+            return True, (matches[0] if matches else UNDEFINED)
         return super()._call_builtin(name_lower, args, line)
 
     def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
+        if method == "playsound":
+            snd = _waw_to_str(args[0]) if args else ""
+            self.played_sounds.append((receiver, snd))
+            return UNDEFINED
         if isinstance(receiver, FakeHudElem):
             if method == "settext":
                 txt = _waw_to_str(args[0]) if args else ""
@@ -934,6 +960,11 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
             "bz_pap_detonate_cluster",
             "bz_pap_update_hud",
             "bz_pap_destroy_player_hud",
+            "bz_pap_try_native_console_upgrade",
+            "bz_pap_on_native_weapon_taken",
+            "bz_pap_format_native_prompt_text",
+            "bz_pap_update_native_prompt_hud",
+            "bz_pap_hide_native_prompt_hud",
         )
         for fn_name in sync_funcs:
             self.assertIn(fn_name, pap_mod, f"Missing expected function {fn_name}() in _bz_pap.gsc")
@@ -941,6 +972,303 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
                 _ast_contains_method_call(pap_mod[fn_name].body, "endon"),
                 f"Forbidden endon() inside synchronous caller {fn_name}()",
             )
+
+
+class TestBzNativePapConsoleIntegration(unittest.TestCase):
+    """Seam 6 (POL-T4 #40): Der Riese native PaP console Double PaP, scripted bz_* Tier 1, & Co-op prompt HUD."""
+
+    def _make_native_console_entities(
+        self, gsc: PapGscRuntime
+    ) -> tuple[PapFakeEntity, PapFakeEntity, PapFakeEntity]:
+        trig = PapFakeEntity("zombie_vending_upgrade", ent_num=90, is_player=False)
+        trig.set_field("origin", GscArray([-61, 577, 153]))
+        trig.hint_string = "Hold &&1 for Pack-a-Punch [Cost: 5000]"
+        machine = PapFakeEntity("vending_pack_a_punch", ent_num=91, is_player=False)
+        machine.set_field("origin", GscArray([-61, 591.5, 114.5]))
+        rollers = PapFakeEntity("packa_rollers", ent_num=92, is_player=False)
+        rollers.set_field("origin", GscArray([-61, 591.5, 128]))
+        gsc.world_entities[("targetname", "zombie_vending_upgrade")] = [trig]
+
+        fx_table = GscArray()
+        fx_table.set_item("packapunch_fx", "fx:packapunch")
+        gsc.level.set_field("_effect", fx_table)
+
+        inc = GscArray()
+        for w in ("thompson", "thompson_upgraded", "stg44", "stg44_upgraded", "zombie_colt", "zombie_colt_upgraded"):
+            inc.set_item(w, True)
+        gsc.level.set_field("zombie_include_weapons", inc)
+        return trig, machine, rollers
+
+    def test_native_console_case_a_base_stock_falls_through_and_classic_mode_is_untouched(self) -> None:
+        _dvars, gsc, player = _setup_pap_env(
+            map_name="nazi_zombie_factory",
+            native_weapons={"thompson": "thompson_upgraded", "stg44": "stg44_upgraded"},
+        )
+        trig, machine, rollers = self._make_native_console_entities(gsc)
+
+        # Case A: Base stock native-upgradable weapon returns False -> 100% stock PaP path
+        handled = gsc.call(
+            BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "thompson", machine, rollers
+        )
+        self.assertFalse(handled)
+        self.assertEqual(player.get_field("score"), 50000)
+        self.assertEqual(gsc.played_sounds, [])
+        self.assertEqual(gsc.sound_positions, [])
+        self.assertEqual(gsc.played_fx, [])
+
+        # Utility / non-primary item (e.g. perk bottle) returns False without charging or playing deny
+        handled_bottle = gsc.call(
+            BZ_PAP_MOD,
+            "bz_pap_try_native_console_upgrade",
+            trig,
+            player,
+            "zombie_perk_bottle_jugg",
+            machine,
+            rollers,
+        )
+        self.assertFalse(handled_bottle)
+        self.assertEqual(player.get_field("score"), 50000)
+        self.assertEqual(gsc.played_sounds, [])
+
+        # Classic Mode (bz_pap_enabled=0) returns False even for native *_upgraded or bz_* weapons
+        _dvars_off, gsc_off, p_off = _setup_pap_env(
+            map_name="nazi_zombie_factory", bz_enabled=True, pap_enabled=False
+        )
+        trig_off, machine_off, rollers_off = self._make_native_console_entities(gsc_off)
+        p_off.give_weapon("thompson_upgraded", make_current=True, stock=220)
+        self.assertFalse(
+            gsc_off.call(
+                BZ_PAP_MOD,
+                "bz_pap_try_native_console_upgrade",
+                trig_off,
+                p_off,
+                "thompson_upgraded",
+                machine_off,
+                rollers_off,
+            )
+        )
+        self.assertEqual(p_off.get_field("score"), 50000)
+        self.assertEqual(gsc_off.played_sounds, [])
+
+    def test_native_console_case_b_and_d_double_pap_dynamic_cost_audio_fx_debounce_and_deny(self) -> None:
+        _dvars, gsc, player = _setup_pap_env(
+            map_name="nazi_zombie_factory",
+            native_weapons={"thompson": "thompson_upgraded", "stg44": "stg44_upgraded"},
+        )
+        trig, machine, rollers = self._make_native_console_entities(gsc)
+        player.give_weapon("thompson_upgraded", make_current=True, stock=220)
+
+        # Case B: Already native-PaP'd weapon -> Double PaP at dynamic bz_get_pap_upgrade_price("double_pap") (5000)
+        handled = gsc.call(
+            BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "thompson_upgraded", machine, rollers
+        )
+        self.assertTrue(handled)
+        self.assertEqual(player.get_field("score"), 45000)
+        self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, "thompson_upgraded"))
+        self.assertEqual(player.weapon_stock["thompson_upgraded"], 330)
+        self.assertEqual(player.client_dvars.get("ui_bz_pap_double_pap"), "MAXED (II)")
+        self.assertTrue(
+            any(snd == "bottle_dispense3d" for snd, _ in gsc.sound_positions),
+            f"Expected bottle_dispense3d sound, got {gsc.sound_positions}",
+        )
+        self.assertTrue(
+            any(ent is rollers and snd == "packa_weap_ready" for ent, snd in gsc.played_sounds),
+            f"Expected packa_weap_ready on rollers, got {gsc.played_sounds}",
+        )
+        self.assertTrue(
+            any(fx == "fx:packapunch" for fx, _ in gsc.played_fx),
+            f"Expected packapunch_fx, got {gsc.played_fx}",
+        )
+        self.assertTrue(
+            any(
+                e.startswith("BZ_EVENT|PAP_DOUBLE_UPGRADE|")
+                and "weapon=thompson_upgraded" in e
+                and "console=native" in e
+                for e in gsc.emitted_events
+            ),
+            f"Missing console=native PAP_DOUBLE_UPGRADE event: {gsc.emitted_events}",
+        )
+
+        # Debounce: rapid Use repeat within 750ms is silently consumed without deny spam
+        gsc.played_sounds.clear()
+        gsc.sim_time_ms += 200
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "thompson_upgraded", machine, rollers
+            )
+        )
+        self.assertEqual(gsc.played_sounds, [])
+        self.assertEqual(player.get_field("score"), 45000)
+
+        # Case D: After debounce expires, already Double PaP'd weapon plays deny sound & consumes cleanly
+        gsc.sim_time_ms += 800
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "thompson_upgraded", machine, rollers
+            )
+        )
+        self.assertTrue(any(ent is trig and snd == "deny" for ent, snd in gsc.played_sounds))
+        self.assertEqual(player.get_field("score"), 45000)
+
+        # Insufficient points on another player plays deny & deducts 0 without interfering with p1
+        p2 = PapFakeEntity("PoorPlayer", ent_num=1)
+        p2.set_field("score", 2000)
+        p2.give_weapon("stg44_upgraded", make_current=True, stock=240)
+        gsc.players.append(p2)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_connect", p2)
+        gsc.played_sounds.clear()
+
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, p2, "stg44_upgraded", machine, rollers
+            )
+        )
+        self.assertTrue(any(ent is trig and snd == "deny" for ent, snd in gsc.played_sounds))
+        self.assertEqual(p2.get_field("score"), 2000)
+        self.assertFalse(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", p2, "stg44_upgraded"))
+
+    def test_native_console_case_c_bz_weapon_scripted_tier1_to_double_pap_and_native_pickup_sync(self) -> None:
+        _dvars, gsc, player = _setup_pap_env(
+            map_name="nazi_zombie_factory",
+            native_weapons={"thompson": "thompson_upgraded", "stg44": "stg44_upgraded"},
+        )
+        trig, machine, rollers = self._make_native_console_entities(gsc)
+        player.set_field("score", 25000)
+        player.give_weapon("bz_acid_sprayer", make_current=True, stock=40)
+
+        # Case C: Un-upgraded bz_* weapon -> scripted Tier 1 PaP (5000 pts)
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "bz_acid_sprayer", machine, rollers
+            )
+        )
+        self.assertEqual(player.get_field("score"), 20000)
+        self.assertTrue(gsc.call(BZ_PAP_MOD, "bz_pap_is_weapon_papped", player, "bz_acid_sprayer"))
+        self.assertEqual(player.weapon_stock["bz_acid_sprayer"], 120)
+        self.assertTrue(
+            any(
+                e.startswith("BZ_EVENT|PAP_SINGLE_UPGRADE|")
+                and "weapon=bz_acid_sprayer" in e
+                and "mode=scripted" in e
+                and "console=native" in e
+                for e in gsc.emitted_events
+            ),
+            f"Missing console=native PAP_SINGLE_UPGRADE event: {gsc.emitted_events}",
+        )
+
+        # Case B follow-up after debounce: scripted Tier 1 bz_acid_sprayer -> Double PaP (5000 pts)
+        gsc.sim_time_ms += 900
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "bz_acid_sprayer", machine, rollers
+            )
+        )
+        self.assertEqual(player.get_field("score"), 15000)
+        self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, "bz_acid_sprayer"))
+        self.assertEqual(player.weapon_stock["bz_acid_sprayer"], 180)  # 120 * 1.5
+
+        zombie = PapFakeEntity("ZAcid", ent_num=30, is_player=False)
+        zombie.set_field("health", 5000)
+        dmg = gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_actor_damage_dispatch",
+            zombie,
+            player,
+            player,
+            100,
+            0,
+            "MOD_RIFLE_BULLET",
+            "bz_acid_sprayer",
+            UNDEFINED,
+            UNDEFINED,
+            "torso_upper",
+            0,
+        )
+        self.assertEqual(dmg, 350)  # 100 * 2.0 (Tier 1) * 1.75 (Double PaP)
+
+        # Native pickup hook refreshes Double Ammo reserve stock & HUD immediately
+        self.assertTrue(
+            gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_perks", "buy_apex:double_ammo")
+        )
+        player.give_weapon("stg44_upgraded", make_current=True, stock=240)
+        gsc.call(BZ_PAP_MOD, "bz_pap_on_native_weapon_taken", player, "stg44_upgraded")
+        self.assertEqual(player.weapon_stock["stg44_upgraded"], 480)  # 240 * 2.0 Double Ammo
+
+    def test_coop_safe_native_pap_proximity_prompt_hud_and_zero_leak_cleanup(self) -> None:
+        _dvars, gsc, p1 = _setup_pap_env(
+            map_name="nazi_zombie_factory",
+            native_weapons={"thompson": "thompson_upgraded"},
+        )
+        trig, machine, rollers = self._make_native_console_entities(gsc)
+        orig_hint = trig.hint_string
+
+        p2 = PapFakeEntity("PlayerTwo", ent_num=1)
+        p2.set_field("score", 50000)
+        p2.give_weapon("bz_cryo_cannon", make_current=True, stock=96)
+        gsc.players.append(p2)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_connect", p2)
+
+        # Factory spawns the native console prompt watcher child thread
+        p1_threads = {t[1] for t in gsc._threads if t[0] is p1}
+        self.assertIn("bz_pap_watch_native_console_prompt", p1_threads)
+
+        # Both players stand right next to native PaP, but PaP is NOT unlocked yet -> prompt stays hidden
+        p1.set_field("origin", GscArray([-61, 520, 153]))
+        p2.set_field("origin", GscArray([-40, 530, 153]))
+        p1.give_weapon("thompson_upgraded", make_current=True, stock=220)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p1)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(gsc.hud_elems, [])
+
+        # Unlock native PaP via Pack_A_Punch_on flag
+        flags = GscArray()
+        flags.set_item("Pack_A_Punch_on", True)
+        gsc.level.set_field("flag", flags)
+
+        # P1 holding base stock gun -> prompt stays hidden (stock hint untouched)
+        p1.give_weapon("thompson", make_current=True, stock=200)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p1)
+        self.assertIs(p1.get_field("bz_pap_prompt_hud"), UNDEFINED)
+
+        # P1 switches to native thompson_upgraded, P2 holds un-upgraded bz_cryo_cannon
+        p1.give_weapon("thompson_upgraded", make_current=True, stock=220)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p1)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+
+        prompt1 = p1.get_field("bz_pap_prompt_hud")
+        prompt2 = p2.get_field("bz_pap_prompt_hud")
+        self.assertIsInstance(prompt1, FakeHudElem)
+        self.assertIsInstance(prompt2, FakeHudElem)
+        self.assertEqual(prompt1.current_text, "Press [F] for Double Pack-a-Punch [Cost: 5000]")
+        self.assertEqual(prompt2.current_text, "Press [F] for Pack-a-Punch [Cost: 5000]")
+        self.assertEqual(prompt1.get_field("alpha"), 1)
+        self.assertEqual(prompt2.get_field("alpha"), 1)
+        # Global trigger hint string was NEVER mutated for teammates!
+        self.assertEqual(trig.hint_string, orig_hint)
+
+        # P1 Double-PaPs thompson_upgraded -> prompt updates to PAP II maxed message
+        self.assertTrue(
+            gsc.call(
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, p1, "thompson_upgraded", machine, rollers
+            )
+        )
+        self.assertEqual(prompt1.current_text, "Weapon Already Double Pack-a-Punched (PAP II)")
+        self.assertEqual(prompt2.current_text, "Press [F] for Pack-a-Punch [Cost: 5000]")
+
+        # P1 walks away (> 110u) -> P1 prompt hides, P2 prompt stays visible
+        p1.set_field("origin", GscArray([500, 500, 153]))
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p1)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(prompt1.get_field("alpha"), 0)
+        self.assertEqual(prompt2.get_field("alpha"), 1)
+
+        # Disconnect destroys P1's HUDs (badge + prompt) without affecting P2; end_game cleans up P2 cleanly
+        gsc.call(BZ_PAP_MOD, "bz_pap_destroy_player_hud", p1)
+        self.assertTrue(prompt1.destroyed)
+        self.assertFalse(prompt2.destroyed)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
+        self.assertTrue(all(h.destroyed for h in gsc.hud_elems))
+        self.assertTrue(all(h.destroy_count == 1 for h in gsc.hud_elems))
 
 
 if __name__ == "__main__":
