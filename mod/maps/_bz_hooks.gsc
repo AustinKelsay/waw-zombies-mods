@@ -913,6 +913,7 @@ bz_on_end_game()
 		if ( IsDefined( player ) )
 		{
 			player.bz_build_parity_announced = undefined;
+			player SetClientDvar( "bz_host_build_id", "" );
 		}
 	}
 

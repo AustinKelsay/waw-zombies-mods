@@ -148,6 +148,7 @@ class TestBzBuildParityHooks(unittest.TestCase):
         self.runtime.call(BZ_HOOKS_MOD, "bz_on_end_game")
         for player in self.runtime.players:
             self.assertIs(player.get_field("bz_build_parity_announced"), UNDEFINED)
+            self.assertEqual(player.client_dvars.get("bz_host_build_id"), "")
         next_match = BzGscRuntime(MOD_ROOT, self.dvars)
         next_match.players.extend(self.runtime.players)
         next_match.call(BZ_HOOKS_MOD, "bz_init")

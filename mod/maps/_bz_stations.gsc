@@ -607,12 +607,7 @@ bz_station_trigger_think()
 		}
 		player.bz_station_next_use_time = now + 450;
 
-		target_id = self.id;
-		nearest = bz_stations_find_nearest_in_range( player );
-		if ( IsDefined( nearest ) )
-		{
-			target_id = nearest.id;
-		}
+		target_id = bz_stations_resolve_use_target( player, self.id );
 		bz_stations_open_for_player( player, target_id );
 	}
 }
@@ -695,12 +690,16 @@ bz_stations_ensure_prompt_hud( player )
 
 bz_stations_hide_prompt_hud( player )
 {
-	if ( !IsDefined( player ) || !IsDefined( player.bz_station_prompt_hud ) )
+	if ( !IsDefined( player ) )
 	{
 		return;
 	}
-	player.bz_station_prompt_hud.alpha = 0;
+	player.bz_station_prompt_id = "";
 	player.bz_station_prompt_text = "";
+	if ( IsDefined( player.bz_station_prompt_hud ) )
+	{
+		player.bz_station_prompt_hud.alpha = 0;
+	}
 }
 
 bz_stations_watch_prompt_disconnect()
@@ -715,6 +714,7 @@ bz_stations_watch_prompt_disconnect()
 
 	hud = self.bz_station_prompt_hud;
 	self.bz_station_prompt_hud = undefined;
+	self.bz_station_prompt_id = "";
 	self.bz_station_prompt_text = "";
 	// Keep the level's HUD list dense so end-game cleanup visits every handle.
 	kept = [];
@@ -728,6 +728,25 @@ bz_stations_watch_prompt_disconnect()
 	}
 	level.bz_station_prompt_huds = kept;
 	hud Destroy();
+}
+
+bz_stations_is_player_in_station_range( player, st )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.origin ) || !IsDefined( st ) || !IsDefined( st.origin ) )
+	{
+		return false;
+	}
+	if ( !bz_stations_is_station_enabled( st.id ) )
+	{
+		return false;
+	}
+	dz = player.origin[2] - st.origin[2];
+	if ( dz < -32.0 || dz > 72.0 )
+	{
+		return false;
+	}
+	dist = Distance( ( player.origin[0], player.origin[1], 0 ), ( st.origin[0], st.origin[1], 0 ) );
+	return dist <= 64.0;
 }
 
 // Shared station selection for both the proximity prompt HUD and trigger interaction.
@@ -751,12 +770,7 @@ bz_stations_find_nearest_in_range( player )
 	{
 		sid = ids[i];
 		st = level.bz_stations[sid];
-		if ( !IsDefined( st ) || !IsDefined( st.origin ) || !bz_stations_is_station_enabled( sid ) )
-		{
-			continue;
-		}
-		dz = player.origin[2] - st.origin[2];
-		if ( dz < -32.0 || dz > 72.0 )
+		if ( !bz_stations_is_player_in_station_range( player, st ) )
 		{
 			continue;
 		}
@@ -768,6 +782,27 @@ bz_stations_find_nearest_in_range( player )
 		}
 	}
 	return best;
+}
+
+// Prefer the currently displayed station while it remains eligible so pressing Use
+// between HUD ticks cannot open a different overlapping station.
+bz_stations_resolve_use_target( player, fallback_id )
+{
+	if ( IsDefined( player ) && IsDefined( player.bz_station_prompt_id ) && player.bz_station_prompt_id != "" &&
+		IsDefined( level.bz_stations ) )
+	{
+		shown = level.bz_stations[player.bz_station_prompt_id];
+		if ( bz_stations_is_player_in_station_range( player, shown ) )
+		{
+			return shown.id;
+		}
+	}
+	nearest = bz_stations_find_nearest_in_range( player );
+	if ( IsDefined( nearest ) )
+	{
+		return nearest.id;
+	}
+	return fallback_id;
 }
 
 bz_stations_update_prompt_hud( player )
@@ -801,6 +836,7 @@ bz_stations_update_prompt_hud( player )
 	}
 
 	label = bz_stations_format_prompt_text( best.id, best.display_name );
+	player.bz_station_prompt_id = best.id;
 	if ( player.bz_station_prompt_text != label )
 	{
 		hud.color = bz_stations_get_prompt_color( best.id );

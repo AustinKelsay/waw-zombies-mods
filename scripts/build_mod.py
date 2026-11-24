@@ -1369,7 +1369,11 @@ def inject_clientscript_callbacks_patch(
             connect_match = _CSC_LOCAL_CLIENT_CONNECT_RE.search(text)
             if connect_match is not None:
                 param = connect_match.group("param")
-                hook = f"{newline}\tlevel thread bz_check_client_build_parity( {param} );"
+                hook = (
+                    f"{newline}"
+                    f'\tif ( GetDvar( "bz_host_build_id" ) != "" ) {{ SetClientDvar( "bz_host_build_id", "" ); }}{newline}'
+                    f"\tlevel thread bz_check_client_build_parity( {param} );"
+                )
                 text = text[: connect_match.end()] + hook + text[connect_match.end() :]
             helper = (
                 f"{newline}"
@@ -1383,6 +1387,7 @@ def inject_clientscript_callbacks_patch(
                 f"\tclient_id = bz_get_client_build_id();{newline}"
                 f"\tfor ( i = 0; i < 40; i++ ){newline}"
                 f"\t{{{newline}"
+                f"\t\twait( 0.25 );{newline}"
                 f'\t\thost_id = GetDvar( "bz_host_build_id" );{newline}'
                 f'\t\tif ( IsDefined( host_id ) && host_id != "" ){newline}'
                 f"\t\t{{{newline}"
@@ -1399,7 +1404,6 @@ def inject_clientscript_callbacks_patch(
                 f"\t\t\t}}{newline}"
                 f"\t\t\treturn;{newline}"
                 f"\t\t}}{newline}"
-                f"\t\twait( 0.25 );{newline}"
                 f"\t}}{newline}"
                 f"}}{newline}"
             )

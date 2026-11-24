@@ -413,14 +413,44 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         self.assertTrue(all(trig.get_field("radius") == 64 for trig in triggers))
 
     def test_overlapping_verruckt_triggers_open_same_nearest_station_as_hud(self) -> None:
+        class _StopTriggerLoop(Exception):
+            pass
+
+        class _TriggerStationRuntime(StationHudRuntime):
+            def __init__(self, mod_root: Path, dvars: FakeDvarStore) -> None:
+                super().__init__(mod_root, dvars)
+                self.trigger_player: FakeEntity | None = None
+                self.trigger_delivered = False
+
+            def _eval_expr(self, expr: Any, mod_key: str, env: dict[str, Any]) -> Any:
+                from tests.gsc_runtime import VarRef
+                from tests.test_bz_hooks_and_build import MethodCallExpr
+
+                if isinstance(expr, MethodCallExpr) and expr.method_name.lower() == "waittill" and expr.args:
+                    ev_name = self._eval_expr(expr.args[0], mod_key, env)
+                    if ev_name == "trigger":
+                        if self.trigger_delivered:
+                            raise _StopTriggerLoop()
+                        self.trigger_delivered = True
+                        if len(expr.args) > 1 and isinstance(expr.args[1], VarRef):
+                            env[expr.args[1].name.lower()] = self.trigger_player
+                        return UNDEFINED
+                return super()._eval_expr(expr, mod_key, env)
+
+            def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
+                if method == "usebuttonpressed":
+                    return True
+                return super()._exec_method(receiver, method, args, line)
+
         dvars = FakeDvarStore()
         for gate in ("bz_enabled", "bz_perks_enabled", "bz_classes_enabled", "bz_pap_enabled", "bz_elements_enabled"):
             dvars.set(gate, "1")
-        gsc = StationHudRuntime(MOD_ROOT, dvars)
+        gsc = _TriggerStationRuntime(MOD_ROOT, dvars)
         gsc.level.set_field("script", "nazi_zombie_asylum")
         gsc.call(BZ_HOOKS_MOD, "bz_init")
         player = FakeEntity("VerrucktPlayer", ent_num=0)
         gsc.players.append(player)
+        gsc.trigger_player = player
         gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
 
         # (949, 335, 96) lies inside BOTH Perks (920, 370; ~45u) and Arsenal (985, 295; ~54u).
@@ -429,15 +459,27 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         hud = player.get_field("bz_station_prompt_hud")
         self.assertIn("[PERKS]", hud.get_field("text"))
 
-        nearest = gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", player)
-        self.assertEqual(nearest.get_field("id"), "perks")
+        # Move to (955, 330, 96) BEFORE the next HUD refresh (Perks ~53u, Arsenal ~46u — both eligible).
+        # Exercise Arsenal's actual bz_station_trigger_think(): it must open the displayed Perks station.
+        player.set_field("origin", GscArray([955, 330, 96]))
+        arsenal_station = gsc.level.get_field("bz_stations")["arsenal"]
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(arsenal_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "perks")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_perks")
 
-        # Moving closer to Arsenal (965, 315, 96) switches both HUD and shared selection to Arsenal.
-        player.set_field("origin", GscArray([965, 315, 96]))
+        # Close menu, advance past Use cooldown, refresh HUD at (955, 330, 96) -> [ARSENAL].
+        # Now Perks's trigger firing Use must open the displayed Arsenal station.
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_perks", "close")
+        player.set_field("bz_station_next_use_time", 0)
         gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
         self.assertIn("[ARSENAL]", hud.get_field("text"))
-        nearest2 = gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", player)
-        self.assertEqual(nearest2.get_field("id"), "arsenal")
+        perks_station = gsc.level.get_field("bz_stations")["perks"]
+        gsc.trigger_delivered = False
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "arsenal")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_arsenal")
 
     def test_prompt_hides_when_dead_in_last_stand_or_in_station_menu(self) -> None:
         origin = (-140, 460, 24)
