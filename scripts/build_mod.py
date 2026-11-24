@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 MOD_NAME = "waw_gauntlet"
-BZ_BUILD_VERSION = "0.5.0"
+BZ_BUILD_VERSION = "0.6.0"
 BZ_BUILD_COMMIT_RE = re.compile(r"[0-9a-zA-Z_-]+")
 STOCK_MAPS = (
     "nazi_zombie_prototype",
@@ -1797,7 +1797,25 @@ def _patch_coop_lobby_menu_bz(source: str, filename: str) -> str:
 
 
 def patch_xboxlive_lobby_menu_bz(source: str) -> str:
-    return _patch_coop_lobby_menu_bz(source, "ui/xboxlive_lobby.menu")
+    text = _patch_coop_lobby_menu_bz(source, "ui/xboxlive_lobby.menu")
+    # The find-game popup has a separate playlist count.
+    lobby = re.search(
+        r'(?ms)^[ \t]*name[ \t]+"?menu_xboxlive_lobby"?[ \t]*\r?$.*?(?=^[ \t]*menuDef\b|\Z)',
+        text,
+    )
+    if lobby is None:
+        return text
+    count_item = re.compile(
+        r'(?m)\bitemDef\s*\{[^{}]*?^[ \t]*dvar[ \t]+"?playlist_totalonline"?[ \t]*\r?$[^{}]*\}',
+    ).search(text, lobby.start(), lobby.end())
+    if count_item is None:
+        return text
+    item = re.sub(
+        r"(?m)^([ \t]*visible[ \t]+)1(?=[ \t]*\r?$)",
+        r"\1when( dvarInt( bz_enabled ) != 1 );",
+        count_item.group(),
+    )
+    return text[:count_item.start()] + item + text[count_item.end():]
 
 
 def patch_systemlink_lobby_menu_bz(source: str) -> str:
@@ -1887,6 +1905,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
 
     # Both the linker and IWD packager use this staged script.
     build_commit = resolve_git_short_sha(REPO_ROOT)
+    build_id = f"{BZ_BUILD_VERSION}-{build_commit}"
     (stage_dir / "maps" / "_bz_version.gsc").write_text(
         render_bz_version_gsc(BZ_BUILD_VERSION, build_commit),
         encoding="ascii",
@@ -2069,12 +2088,24 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
     apply_bz_menu_patches(stage_dir=stage_dir)
 
+    lobby_include = stage_dir / "ui" / "bz_menus.inc"
+    stamped_lobby, count = re.subn(
+        r'"BUILD: [0-9a-zA-Z_.-]+"',
+        f'"BUILD: {build_id}"',
+        lobby_include.read_text(encoding="ascii"),
+    )
+    if count != 1:
+        raise ValueError(f"Expected one build label in {lobby_include}")
+    brace_errors = verify_hud_menus.validate_menu_braces(stamped_lobby, filename=lobby_include.name)
+    if brace_errors:
+        raise ValueError(f"Parity-stamped include {lobby_include.name} failed brace validation: {brace_errors}")
+    lobby_include.write_text(stamped_lobby, encoding="ascii")
+
     # Mirror Base Zombies station popups under ui/scriptmenus/ with build-stamped local
     # mod.ff parity indicators so WaW 1.7 PrecacheMenu()/openMenu() resolve them cleanly
     # and show retail-visible host/client mismatch alerts without modifying tracked menus.
     scriptmenus_dir = stage_dir / "ui" / "scriptmenus"
     scriptmenus_dir.mkdir(parents=True, exist_ok=True)
-    build_id = f"{BZ_BUILD_VERSION}-{build_commit}"
     for menu_src in sorted((stage_dir / "ui").glob("bz_station_*.menu")):
         stamped = stamp_bz_station_menu_build_parity(menu_src.read_text(encoding="latin1"), build_id)
         brace_errors = verify_hud_menus.validate_menu_braces(stamped, filename=menu_src.name)

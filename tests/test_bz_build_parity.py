@@ -13,6 +13,7 @@ from tests.gsc_runtime import FakeDvarStore, GscRuntime, UNDEFINED
 from tests.test_bz_hooks_and_build import BZ_HOOKS_MOD, MOD_ROOT, BzGscRuntime, FakeEntity
 
 import build_mod
+import verify_hud_menus
 
 
 VERSION_MODULE = "maps/_bz_version"
@@ -22,7 +23,7 @@ VERSION_ENTRY = f"rawfile,{VERSION_PATH.as_posix()}"
 
 class TestBzBuildStamp(unittest.TestCase):
     def test_rendered_version_getters_execute_as_ascii_gsc(self) -> None:
-        source = build_mod.render_bz_version_gsc("0.5.0", "abc1234")
+        source = build_mod.render_bz_version_gsc("0.6.0", "abc1234")
         self.assertTrue(source.isascii())
         self.assertNotRegex(source, r"(?i)\b(?:foreach|endon|wait|notifyoncommand|setorigin)\b")
         with TemporaryDirectory() as tmp:
@@ -31,14 +32,14 @@ class TestBzBuildStamp(unittest.TestCase):
             module_path.parent.mkdir()
             module_path.write_text(source, encoding="ascii")
             runtime = GscRuntime(mod_root)
-            self.assertEqual(runtime.call(VERSION_MODULE, "bz_get_build_version"), "0.5.0")
+            self.assertEqual(runtime.call(VERSION_MODULE, "bz_get_build_version"), "0.6.0")
             self.assertEqual(runtime.call(VERSION_MODULE, "bz_get_build_commit"), "abc1234")
-            self.assertEqual(runtime.call(VERSION_MODULE, "bz_get_build_id"), "0.5.0-abc1234")
+            self.assertEqual(runtime.call(VERSION_MODULE, "bz_get_build_id"), "0.6.0-abc1234")
         fallback = GscRuntime(MOD_ROOT)
         self.assertTrue((MOD_ROOT / VERSION_PATH).read_bytes().isascii())
-        self.assertEqual(fallback.call(VERSION_MODULE, "bz_get_build_version"), "0.5.0")
+        self.assertEqual(fallback.call(VERSION_MODULE, "bz_get_build_version"), "0.6.0")
         self.assertEqual(fallback.call(VERSION_MODULE, "bz_get_build_commit"), "dev")
-        self.assertEqual(fallback.call(VERSION_MODULE, "bz_get_build_id"), "0.5.0-dev")
+        self.assertEqual(fallback.call(VERSION_MODULE, "bz_get_build_id"), "0.6.0-dev")
 
     def test_short_sha_uses_repository_and_falls_back_on_bad_git_output(self) -> None:
         git_outputs = ((b"a1B2_c-3\n", "a1B2_c-3"), (b"", "dev"), (b"abc;def", "dev"), (b"\xff", "dev"))
@@ -61,6 +62,9 @@ class TestBzBuildStamp(unittest.TestCase):
     def test_staging_and_iwd_use_stamp_without_editing_tracked_fallback(self) -> None:
         tracked_version = MOD_ROOT / VERSION_PATH
         original = tracked_version.read_bytes()
+        lobby_path = Path("ui/bz_menus.inc")
+        original_lobby = (MOD_ROOT / lobby_path).read_bytes()
+        self.assertIn(b'"BUILD: 0.6.0-dev"', original_lobby)
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             # Isolate Steam extraction and menu patching from the real staging and packaging.
@@ -82,7 +86,12 @@ class TestBzBuildStamp(unittest.TestCase):
             staged_version = (staged / VERSION_PATH).read_bytes()
             self.assertNotEqual(staged_version, original)
             self.assertEqual(tracked_version.read_bytes(), original)
-            self.assertEqual(GscRuntime(staged).call(VERSION_MODULE, "bz_get_build_id"), "0.5.0-abc1234")
+            self.assertEqual(GscRuntime(staged).call(VERSION_MODULE, "bz_get_build_id"), "0.6.0-abc1234")
+            staged_lobby = (staged / lobby_path).read_text(encoding="ascii")
+            self.assertIn('"BUILD: 0.6.0-abc1234"', staged_lobby)
+            self.assertNotIn('"BUILD: 0.6.0-dev"', staged_lobby)
+            self.assertEqual(verify_hud_menus.validate_menu_braces(staged_lobby, filename=lobby_path.name), [])
+            self.assertEqual((MOD_ROOT / lobby_path).read_bytes(), original_lobby)
             self.assertEqual((staged / "mod.csv").read_text().splitlines().count(VERSION_ENTRY), 1)
             with ZipFile(iwd) as archive:
                 self.assertEqual(archive.read(VERSION_PATH.as_posix()), staged_version)
@@ -125,9 +134,9 @@ class TestBzBuildParityHooks(unittest.TestCase):
         with patch.object(self.dvars, "set", wraps=self.dvars.set) as write_dvar:
             self.runtime.call(BZ_HOOKS_MOD, "bz_init")
             self.runtime.call(BZ_HOOKS_MOD, "bz_init")
-        self.assertEqual(self.dvars.get("bz_build_id"), "0.5.0-dev")
+        self.assertEqual(self.dvars.get("bz_build_id"), "0.6.0-dev")
         build_writes = [write for write in write_dvar.call_args_list if write.args[0] == "bz_build_id"]
-        self.assertEqual(build_writes, [call("bz_build_id", "0.5.0-dev")])
+        self.assertEqual(build_writes, [call("bz_build_id", "0.6.0-dev")])
 
         for player in (self.host, self.host, self.client, self.client):
             self.runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
@@ -135,15 +144,15 @@ class TestBzBuildParityHooks(unittest.TestCase):
         self.assertEqual(
             [line for line in self.runtime.emitted_events if line.startswith("BZ_EVENT|BUILD_PARITY|")],
             [
-                "BZ_EVENT|BUILD_PARITY|version=0.5.0;commit=dev;build_id=0.5.0-dev;player=Host;map=nazi_zombie_factory",
-                "BZ_EVENT|BUILD_PARITY|version=0.5.0;commit=dev;build_id=0.5.0-dev;player=Client;map=nazi_zombie_factory",
+                "BZ_EVENT|BUILD_PARITY|version=0.6.0;commit=dev;build_id=0.6.0-dev;player=Host;map=nazi_zombie_factory",
+                "BZ_EVENT|BUILD_PARITY|version=0.6.0;commit=dev;build_id=0.6.0-dev;player=Client;map=nazi_zombie_factory",
             ],
         )
-        banner = "Base Zombies v0.5.0 (dev) - Co-op: all players must share mod.ff + waw_gauntlet.iwd"
+        banner = "Base Zombies v0.6.0 (dev) - Co-op: all players must share mod.ff + waw_gauntlet.iwd"
         self.assertEqual(self.runtime.player_prints, [(self.host, banner), (self.client, banner)])
         for player in (self.host, self.client):
-            self.assertEqual(player.client_dvars.get("bz_build_id"), "0.5.0-dev")
-            self.assertEqual(player.client_dvars.get("bz_host_build_id"), "0.5.0-dev")
+            self.assertEqual(player.client_dvars.get("bz_build_id"), "0.6.0-dev")
+            self.assertEqual(player.client_dvars.get("bz_host_build_id"), "0.6.0-dev")
 
         self.runtime.call(BZ_HOOKS_MOD, "bz_on_end_game")
         for player in self.runtime.players:
@@ -161,6 +170,6 @@ class TestBzBuildParityHooks(unittest.TestCase):
         self.runtime.call(BZ_HOOKS_MOD, "bz_init")
         self.runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", self.client)
         self.assertIn(
-            "BZ_EVENT|BUILD_PARITY|version=0.5.0;commit=dev;build_id=0.5.0-dev;player=Caf_____;map=nazi_zombie_factory",
+            "BZ_EVENT|BUILD_PARITY|version=0.6.0;commit=dev;build_id=0.6.0-dev;player=Caf_____;map=nazi_zombie_factory",
             self.runtime.emitted_events,
         )

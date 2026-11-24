@@ -6,6 +6,7 @@ import hashlib
 import re
 import sys
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -18,11 +19,19 @@ from tests.gsc_runtime import FakeDvarStore  # noqa: E402
 from tests.test_bz_hooks_and_build import BZ_HOOKS_MOD, BzGscRuntime, FakeEntity  # noqa: E402
 
 BZ_SELFTEST_MOD = r"maps\_bz_selftest"
+FACTORY_VISUAL_PHASES = (
+    "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
+    *(f"{weapon}_{state}" for weapon in ("acid", "cryo", "crossbow", "boomerang")
+      for state in ("idle", "active", "post")),
+    "native_pap_prompt", "native_pap_ii_badge",
+    "war_club_active", "portal_active", "portal_post",
+    "menu_perks", "menu_class", "menu_arsenal", "menu_pap",
+)
 
 COOP_LOG = """Loading fastfile 'mod'
-dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.5.0-dev;player=Host;map=nazi_zombie_factory
+dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.6.0-dev;player=Host;map=nazi_zombie_factory
 dvar set bz_event BZ_EVENT|PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native
-dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.5.0-dev;dog_rate=0.55
+dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.6.0-dev;dog_rate=0.55
 """
 
 
@@ -35,17 +44,17 @@ class TestCoopAnalyzer(unittest.TestCase):
         cases = (
             (COOP_LOG.replace("BUILD_PARITY", "IGNORED"), "BUILD_PARITY"),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.5.0-dev;client=0.5.0-old\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.6.0-dev;client=0.6.0-old\n",
                 "BUILD_PARITY_MISMATCH",
             ),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.5.0;player=Guest;map=nazi_zombie_factory\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.6.0;player=Guest;map=nazi_zombie_factory\n",
                 "missing build_id",
             ),
-            (COOP_LOG.replace("checks=10;build_id=0.5.0-dev", "checks=10;build_id=0.5.0-different"), "Conflicting build_id"),
+            (COOP_LOG.replace("checks=10;build_id=0.6.0-dev", "checks=10;build_id=0.6.0-different"), "Conflicting build_id"),
             (
                 COOP_LOG
-                + "BZ_EVENT|BUILD_PARITY|build_id=0.5.0-other;player=Client;map=nazi_zombie_factory\n",
+                + "BZ_EVENT|BUILD_PARITY|build_id=0.6.0-other;player=Client;map=nazi_zombie_factory\n",
                 "Conflicting BUILD_PARITY",
             ),
             (COOP_LOG.replace("console=native", "console=station"), "console=native"),
@@ -127,25 +136,23 @@ class TestVisualTourAnalyzer(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.out_dir = Path(directory.name)
 
-    def make_tour(self, slug: str, phases: list[str], frozen: bool = False):
+    def make_tour(self, slug: str, phases: Sequence[str], frozen_phases: tuple[str, ...] = ()):
         log = ["Loading fastfile 'mod'"]
         frames = []
         for index, phase in enumerate(phases):
             game_time = 2000 + index * 1000
             log.append(f"dvar set bz_event BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={game_time}")
             path = self.out_dir / f"{phase}.png"
-            img = b"fixed screenshot" if frozen else phase.encode("ascii")
+            img = b"fixed screenshot" if phase in frozen_phases else phase.encode("ascii")
             path.write_bytes(img)
             frames.append(verifier.CapturedFrame(phase, path, hashlib.sha256(img).hexdigest(), game_time))
         log.append(f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_{slug};phases={len(phases)}")
         return "\n".join(log), frames
 
-    def test_accepts_all_seventeen_factory_capture_phases(self) -> None:
-        phases = ["factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt"]
-        phases += [f"{weapon}_{state}" for weapon in ("acid", "cryo", "crossbow", "boomerang")
-                   for state in ("idle", "active", "post")]
-        phases += ["native_pap_prompt", "native_pap_ii_badge"]
-        log, frames = self.make_tour("factory", phases)
+    def test_accepts_all_twenty_four_factory_capture_phases(self) -> None:
+        self.assertEqual(verifier.expected_visual_phases("factory"), FACTORY_VISUAL_PHASES)
+        self.assertEqual(sum(len(verifier.expected_visual_phases(slug)) for slug in verifier.MAP_SLUGS), 36)
+        log, frames = self.make_tour("factory", FACTORY_VISUAL_PHASES)
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertEqual(errors, [])
 
@@ -169,9 +176,22 @@ class TestVisualTourAnalyzer(unittest.TestCase):
             "asylum_arsenal_prompt",
             "asylum_pap_prompt",
         ]
-        log, frames = self.make_tour("asylum", phases, frozen=True)
+        log, frames = self.make_tour("asylum", phases, frozen_phases=tuple(phases))
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertTrue(any("frozen" in error for error in errors), errors)
+
+    def test_rejects_frozen_portal_frames_or_station_menus_in_an_otherwise_moving_tour(self) -> None:
+        for frozen_phases, expected in (
+            (("portal_active", "portal_post"), "portal_active, portal_post"),
+            (
+                ("menu_perks", "menu_class", "menu_arsenal", "menu_pap"),
+                "menu_perks, menu_class, menu_arsenal, menu_pap",
+            ),
+        ):
+            with self.subTest(frozen_phases=frozen_phases):
+                log, frames = self.make_tour("factory", FACTORY_VISUAL_PHASES, frozen_phases)
+                _, errors = verifier.analyze_visual_tour_result(log, frames)
+                self.assertTrue(any("frozen" in error and expected in error for error in errors), errors)
 
     def test_rejects_missing_phase_empty_png_and_missing_done(self) -> None:
         phases = [

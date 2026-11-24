@@ -727,7 +727,7 @@ bz_run_p2_selftest()
 		// 7. PaP War Club frontal AOE knockback smash on live zombie
 		live_z.health = 50000;
 		live_z ForceTeleport( bz_elem_new_snap_to_floor( cryo_target ), orig_z_ang );
-		smash_res = maps\_bz_special_weapons::bz_special_war_club_smash( p, undefined, live_z.origin, true, 1200 );
+		smash_res = bz_test_pap_war_club_smash( p, live_z.origin );
 		war_club_smash_ok = IsDefined( smash_res ) &&
 			smash_res.pap &&
 			smash_res.cleave_hits >= 1 &&
@@ -824,7 +824,7 @@ bz_run_p2_selftest()
 
 	// 12. Portal Grenade: Coop-safe USE+MELEE watcher registered, SpawnFx portal spawns, warps player, excludes live zombie
 	watcher_ok = IsDefined( p.bz_special_watchers_started ) && p.bz_special_watchers_started;
-	portal = maps\_bz_special_weapons::bz_special_try_activate_portal( p );
+	portal = bz_special_try_activate_portal( p );
 	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent );
 	if ( portal_fx_ok )
 	{
@@ -1343,6 +1343,67 @@ bz_run_visual_tour()
 		bz_test_visual_phase( "native_pap_ii_badge" );
 		wait( 0.6 );
 		phase_count = phase_count + 2;
+
+		p.score = 50000;
+		bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:war_club" );
+		bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:pap_war_club" );
+		if ( !bz_state_has_pap_war_club( p ) )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_pap_war_club" );
+			return;
+		}
+		p SetOrigin( ( -40, -140, 10 ) );
+		p SetPlayerAngles( ( 12, 90, 0 ) );
+		bz_test_pap_war_club_smash( p, ( -40, 0, 10 ) );
+		wait( 0.25 );
+		bz_test_visual_phase( "war_club_active" );
+		wait( 0.6 );
+
+		bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:portal_grenade" );
+		portal = bz_special_try_activate_portal( p );
+		if ( !IsDefined( portal ) || !IsDefined( portal.bz_fx_ent ) )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_portal_fx" );
+			return;
+		}
+		wait( 0.45 );
+		bz_test_visual_phase( "portal_active" );
+		wait( 0.6 );
+		wait( 7.0 );
+		// The portal's cleanup thread ticks independently of the capture waits.
+		for ( tries = 0; tries < 10 && IsDefined( portal ) && portal.bz_active; tries++ )
+		{
+			wait( 0.1 );
+		}
+		if ( IsDefined( portal ) && portal.bz_active )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=portal_still_active" );
+			return;
+		}
+		bz_test_visual_phase( "portal_post" );
+		wait( 0.6 );
+		phase_count = phase_count + 3;
+
+		// Der Riese uses native PaP, but the standalone PaP popup still needs coverage.
+		ids[3] = "pap";
+		for ( i = 0; i < ids.size; i++ )
+		{
+			id = ids[i];
+			if ( !maps\_bz_stations::bz_stations_open_for_player( p, id ) )
+			{
+				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=station_menu_disabled;station=" + id );
+				return;
+			}
+			wait( 0.5 );
+			bz_test_visual_phase( "menu_" + id );
+			wait( 0.5 );
+			p closeMenu();
+			p.bz_station_open = false;
+			p.bz_active_station_id = "";
+			p.bz_active_station_menu = "";
+			wait( 0.3 );
+			phase_count++;
+		}
 	}
 
 	bz_log_emit( "VISUAL_TOUR_DONE", "map=" + map_name + ";phases=" + phase_count );
@@ -1541,6 +1602,16 @@ bz_pap_on_native_weapon_taken( player, weapon_name )
 bz_pap_update_native_prompt_hud( player )
 {
 	maps\_bz_pap::bz_pap_update_native_prompt_hud( player );
+}
+
+bz_special_try_activate_portal( player )
+{
+	return maps\_bz_special_weapons::bz_special_try_activate_portal( player );
+}
+
+bz_test_pap_war_club_smash( player, hit_origin )
+{
+	return maps\_bz_special_weapons::bz_special_war_club_smash( player, undefined, hit_origin, true, 1200 );
 }
 
 bz_state_get_melee_slot( player )

@@ -150,6 +150,8 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
 
 MAP_SLUGS = ("factory", "prototype", "asylum", "sumpf")
 WEAPON_SLUGS = ("acid", "cryo", "crossbow", "boomerang")
+PORTAL_PHASES = ("portal_active", "portal_post")
+STATION_MENU_PHASES = ("menu_perks", "menu_class", "menu_arsenal", "menu_pap")
 
 
 def expected_visual_phases(slug: str) -> tuple[str, ...]:
@@ -164,6 +166,7 @@ def expected_visual_phases(slug: str) -> tuple[str, ...]:
         "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
         *(f"{weapon}_{state}" for weapon in WEAPON_SLUGS for state in ("idle", "active", "post")),
         "native_pap_prompt", "native_pap_ii_badge",
+        "war_club_active", *PORTAL_PHASES, *STATION_MENU_PHASES,
     )
 
 
@@ -228,6 +231,10 @@ def analyze_visual_tour_result(
             group = [hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
             if all(group) and len(set(group)) == 1:
                 errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
+        for phases in (PORTAL_PHASES, STATION_MENU_PHASES):
+            group = [hashes.get(phase) for phase in phases]
+            if all(group) and len(set(group)) == 1:
+                errors.append(f"Visual tour appears frozen: {', '.join(phases)} match")
     return events, errors
 
 

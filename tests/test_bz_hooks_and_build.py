@@ -2238,6 +2238,41 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 
+    def test_xboxlive_lobby_hides_online_count_when_enhancements_are_enabled(self) -> None:
+        from tests.test_gauntlet_hud_menus import SYNTHETIC_STOCK_XBOXLIVE_LOBBY_MENU
+
+        lobby_count = (
+            '\t\titemDef\n\t\t{\n'
+            '\t\t\trect 12 38 210 36 CHOICE_HORIZONTAL_ALIGN VERTICAL_ALIGN_TOP\n'
+            '\t\t\torigin ORIGIN_DESCRIPTION\n'
+            '\t\t\tdvar playlist_totalonline\n'
+            '\t\t\tvisible 1\n'
+            '\t\t}\n'
+        )
+        find_game_count = (
+            '\t\titemDef\n\t\t{\n'
+            '\t\t\trect 4 10 230 14\n'
+            '\t\t\tdvar playlist_totalonline\n'
+            '\t\t\tvisible 1\n'
+            '\t\t}\n'
+        )
+        stock = SYNTHETIC_STOCK_XBOXLIVE_LOBBY_MENU.replace(
+            '\t\t#include "ui/safearea.menu"', lobby_count + '\t\t#include "ui/safearea.menu"'
+        )
+        stock = stock.replace(
+            '\tmenuDef\n\t{\n\t\tname\tleavelobbywarning',
+            '\tmenuDef\n\t{\n\t\tname\tpopup_findgame\n' + find_game_count + '\t}\n'
+            '\tmenuDef\n\t{\n\t\tname\tleavelobbywarning',
+        )
+        staged = self.vhm.patch_xboxlive_lobby_menu(stock)
+        patched = self.bm.patch_xboxlive_lobby_menu_bz(staged)
+
+        self.assertIn(lobby_count.replace("visible 1", "visible when( dvarInt( bz_enabled ) != 1 );"), patched)
+        self.assertIn(find_game_count, patched)
+        self.assertEqual(self.vhm.validate_menu_braces(patched, filename="xboxlive_lobby.menu"), [])
+        self.assertEqual(self.bm.patch_xboxlive_lobby_menu_bz(patched), patched)
+        self.assertIn(find_game_count, self.bm.patch_xboxlive_lobby_menu_bz(staged.replace(lobby_count, "")))
+
     def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
         # Leave room for stock and Gauntlet scripts in WaW 1.7's 1,024-entry table.
         sources = {}
@@ -2294,7 +2329,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             raw_csc.parent.mkdir(parents=True)
             raw_csc.write_bytes(stock_1arg)
             (stage / "maps").mkdir(parents=True)
-            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.5.0-dev\"; }\n", encoding="ascii")
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.6.0-dev\"; }\n", encoding="ascii")
 
             out_csc = build_mod.stage_bz_clientscript_callbacks(
                 tools, stage, steam_game=root / "steam"
@@ -2320,17 +2355,17 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Retail-visible client-package parity stamp across all 4 station menus
         for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
             raw_menu = menu_path.read_text(encoding="latin1")
-            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.5.0-abc1234")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.6.0-abc1234")
             self.assertEqual(
                 verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
                 [],
                 f"Brace imbalance in stamped {menu_path.name}",
             )
-            self.assertIn('"BUILD: 0.5.0-abc1234"', stamped)
-            self.assertIn('dvarString( "bz_host_build_id" ) != "0.5.0-abc1234"', stamped)
-            self.assertIn('BUILD MISMATCH! LOCAL 0.5.0-abc1234 != HOST ', stamped)
+            self.assertIn('"BUILD: 0.6.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.6.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.6.0-abc1234 != HOST ', stamped)
             # Idempotent
-            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.5.0-abc1234"), stamped)
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.6.0-abc1234"), stamped)
             # Tracked menu remains unstamped
             self.assertNotIn("bz_parity_mismatch", raw_menu)
 

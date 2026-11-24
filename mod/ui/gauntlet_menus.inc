@@ -173,10 +173,10 @@
 	{ \
 		name			gauntlet_lobby_fresh_enhanced_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
 		text			"ENHANCED GAUNTLET - C1 S1/4: Nacht (Perks + Classes + PaP)" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.27 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		BZ_COLOR_ACCENT \
@@ -188,10 +188,10 @@
 	{ \
 		name			gauntlet_lobby_queued_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
 		exp				text( dvarString( "gauntlet_lobby_status" ) ); \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.28 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		GAUNTLET_COLOR_GOLD \

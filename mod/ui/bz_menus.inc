@@ -54,8 +54,7 @@
 #define BZ_COOP_SETUP_TOGGLE( itemIndex ) \
 	CHOICE_DVARFLOATLIST_VIS( itemIndex, "ENHANCEMENTS", bz_enabled, { "Off (Classic)" 0 "Base Zombies" 1 }, BZ_COOP_TOGGLE_ACTION, 1 )
 
-// Co-op Lobby readout panel when single-map Base Zombies Enhancements is active
-// (Gauntlet lobby panel renders combined status when gauntlet_enabled == 1).
+// Single-map Enhancements status and the local build ID for both Co-op modes.
 #define BZ_COOP_LOBBY_STATUS_PANEL( px, py, pw, ph, halign, valign ) \
 	itemDef \
 	{ \
@@ -73,15 +72,29 @@
 	{ \
 		name			bz_lobby_status_text \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
 		text			"BASE ZOMBIES ENHANCEMENTS - Perks + Classes + PaP + Arsenal" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.27 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		BZ_COLOR_ACCENT \
 		visible			when( dvarInt( bz_enabled ) == 1 && dvarInt( gauntlet_enabled ) == 0 ); \
 		autowrapped \
+		decoration \
+	} \
+	itemDef \
+	{ \
+		name			bz_lobby_build_text \
+		type			ITEM_TYPE_TEXT \
+		rect			(px + 8) (py + 26) (pw - 16) 12 halign valign \
+		text			"BUILD: 0.6.0-dev" \
+		textfont		UI_FONT_NORMAL \
+		textscale		0.22 \
+		textstyle		ITEM_TEXTSTYLE_SHADOWED \
+		textalign		ITEM_ALIGN_TOP_LEFT \
+		forecolor		BZ_COLOR_SUBTEXT \
+		visible			when( dvarInt( bz_enabled ) == 1 ); \
 		decoration \
 	}
 
