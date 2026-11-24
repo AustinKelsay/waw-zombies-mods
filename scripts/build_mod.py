@@ -96,8 +96,16 @@ CHEST_SCORE_DEDUCT_RE = re.compile(
     r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*(?P<cost>self\.zombie_cost|cost)[ \t]*\)"
 )
 JUGG_HEALTH_BLOCK_RE = re.compile(
-    r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\];(?P<trailing>[ \t]*)\r?'
+    r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*(?:level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\]|160);(?P<trailing>[ \t]*)\r?'
     r'(?:\r?\n[ \t]*(?P=ent)\.health[ \t]*=[^\n;]*;[ \t]*\r?)?',
+    re.MULTILINE,
+)
+WEAPONS_FALLBACK_STRIP_RE = re.compile(
+    r"if\([ \t]*IsDefined\([ \t]*primaryWeapons[ \t]*\)[ \t]*&&[ \t]*!isDefined\([ \t]*current_weapon[ \t]*\)[ \t]*\)",
+    re.IGNORECASE,
+)
+WEAPONS_FALLBACK_TAKE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+TakeWeapon\([ \t]*primaryWeapons\[i\][ \t]*\);(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE,
 )
 PERK_RESET_HEALTH_RE = re.compile(
@@ -595,6 +603,32 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
             "in _zombiemode_weapons.gsc"
         )
 
+    # Stock WaW 1.7 treasure_chest_give_weapon() (all 4 maps) and weapon_give()
+    # (Nacht/Verruckt/Shi No Numa) have a fallback loop:
+    #   if( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) )
+    #       for(...) if( primaryWeapons[i] != "zombie_colt" ) self TakeWeapon( primaryWeapons[i] );
+    # When Mule Kick raises the weapon cap to 3 or 4 and the player holds 2+ non-Colt guns,
+    # primaryWeapons.size >= max_weapons is false, leaving current_weapon == undefined and
+    # causing that fallback loop to WIPE every non-Colt gun in the player's inventory!
+    # Gate the fallback on actually being at/over the dynamic weapon cap, and break after
+    # taking one weapon when bz_enabled() so holding a Bouncing Betty at full slots never
+    # wipes the entire loadout either.
+    text = WEAPONS_FALLBACK_STRIP_RE.sub(
+        "if( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) && ( !maps\\_bz_hooks::bz_enabled() || primaryWeapons.size >= maps\\_bz_hooks::bz_get_max_primary_weapons( self ) ) )",
+        text,
+    )
+
+    def _inject_fallback_take_break(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ break; }}{ending}"
+        )
+
+    text = WEAPONS_FALLBACK_TAKE_RE.sub(_inject_fallback_take_break, text)
+
     # Route Mystery Box cost checks and deductions strictly inside treasure_chest_think()
     # through bz_box_cost_modify (noop when bz_enabled=0). Supports both Nacht's direct
     # `self.zombie_cost` and Verruckt/Shi No Numa/Der Riese's local `cost` variable without
@@ -647,7 +681,11 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
     return text.encode("latin1")
 
 
-def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
+def inject_zombiemode_perks_hooks(
+    script_bytes: bytes,
+    *,
+    rewire_weapons_module: str | None = None,
+) -> bytes:
     """Patch stock _zombiemode_perks.gsc with dynamic weapon cap and unified maxhealth recompute."""
     text = script_bytes.decode("latin1")
     newline = "\r\n" if "\r\n" in text else "\n"
@@ -695,6 +733,10 @@ def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
         raise ValueError(
             "Expected at least 1 weapon-cap or maxhealth hook site in _zombiemode_perks.gsc"
         )
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+    )
     return text.encode("latin1")
 
 
@@ -1355,7 +1397,10 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         )
         if perks_stock is not None:
             perks_mod = zombiemode_perks_module_for_map(map_name)
-            perks_patched = inject_zombiemode_perks_hooks(perks_stock)
+            perks_patched = inject_zombiemode_perks_hooks(
+                perks_stock,
+                rewire_weapons_module=weapons_mod,
+            )
             perks_dst = stage_dir / "maps" / f"{perks_mod}.gsc"
             perks_dst.parent.mkdir(parents=True, exist_ok=True)
             perks_dst.write_bytes(perks_patched)

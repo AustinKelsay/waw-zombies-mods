@@ -1617,6 +1617,35 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Wall-buy cabinet in weapon_spawn_think() must remain untouched!
         self.assertIn("player maps\\_zombiemode_score::minus_to_player_score( self.zombie_cost );", dlc_patched)
 
+        # Mule Kick regression: stock !isDefined( current_weapon ) fallback loop in
+        # treasure_chest_give_weapon() / weapon_give() must NEVER strip non-Colt weapons
+        # when primaryWeapons.size < bz_get_max_primary_weapons( self ).
+        mule_box_src = (
+            "treasure_chest_give_weapon( weapon_string )\n"
+            "{\n"
+            "\tprimaryWeapons = self GetWeaponsListPrimaries();\n"
+            "\tcurrent_weapon = undefined;\n"
+            "\tif( primaryWeapons.size >= 2 )\n"
+            "\t{\n"
+            "\t\tcurrent_weapon = self getCurrentWeapon();\n"
+            "\t\tself TakeWeapon( current_weapon );\n"
+            "\t}\n"
+            "\tif( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) )\n"
+            "\t{\n"
+            "\t\tfor( i = 0; i < primaryWeapons.size; i++ )\n"
+            "\t\t{\n"
+            "\t\t\tself TakeWeapon( primaryWeapons[i] );\n"
+            "\t\t}\n"
+            "\t}\n"
+            "}\n"
+        ).encode("latin1")
+        mule_patched = self.bm.inject_zombiemode_weapons_hooks(mule_box_src).decode("latin1")
+        self.assertIn(
+            "if( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) && ( !maps\\_bz_hooks::bz_enabled() || primaryWeapons.size >= maps\\_bz_hooks::bz_get_max_primary_weapons( self ) ) )",
+            mule_patched,
+        )
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { break; }", mule_patched)
+
         with self.assertRaises(ValueError):
             self.bm.inject_zombiemode_weapons_hooks(b"init()\n{\n}\n")
 
@@ -1631,6 +1660,25 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             patched.index('self.health = level.zombie_vars["zombie_perk_juggernaut_health"];'),
             patched.index("maps\\_bz_hooks::bz_recompute_player_max_health( self );"),
         )
+
+        # Verruckt & Shi No Numa assign literal `player.maxhealth = 160;` and Der Riese PaP calls weapon_give
+        asylum_perks = (
+            "vending_trigger_think()\n"
+            "{\n"
+            "\tif(perk == \"specialty_armorvest\")\n"
+            "\t{\n"
+            "\t\tplayer.maxhealth = 160;\n"
+            "\t\tplayer.health = 160;\n"
+            "\t}\n"
+            "\tplayer maps\\_zombiemode_weapons::weapon_give( \"thompson_upgraded\" );\n"
+            "}\n"
+        ).encode("latin1")
+        asylum_patched = self.bm.inject_zombiemode_perks_hooks(
+            asylum_perks,
+            rewire_weapons_module="_zombiemode_weapons_bz_asylum",
+        ).decode("latin1")
+        self.assertIn("maps\\_bz_hooks::bz_recompute_player_max_health( player );", asylum_patched)
+        self.assertIn("maps\\_zombiemode_weapons_bz_asylum::weapon_give(", asylum_patched)
 
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")
