@@ -110,6 +110,14 @@ def _check_fatal_patterns(log_text: str, errors: list[str]) -> None:
         if missing_bz_menu.search(line):
             errors.append(f"Missing Base Zombies station menufile: {line.strip()}")
             break
+    missing_compat_xmodel = re.compile(
+        r'Could not load xmodel\s+"(?:viewmodel_mp_ptrs41|weapon_mp_ptrs41|viewmodel_usa_flamethrower|weapon_usa_flamethrower)"',
+        re.IGNORECASE,
+    )
+    for line in log_text.splitlines():
+        if missing_compat_xmodel.search(line):
+            errors.append(f"Missing Der Riese weapon xmodel: {line.strip()}")
+            break
 
 
 def analyze_bz_p1_log(

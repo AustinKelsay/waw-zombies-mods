@@ -151,7 +151,7 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 240, -220, 64 ),
+			( 120, -220, 32 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -525,7 +525,7 @@ bz_stations_spawn_one( map_name, spec )
 	anchor.bz_menu_name = spec.menu_name;
 	anchor.bz_display_name = spec.display_name;
 
-	trig = Spawn( "trigger_radius", pos, 0, 56, 72 );
+	trig = Spawn( "trigger_radius", pos, 0, 64, 72 );
 	trig SetCursorHint( "HINT_NOICON" );
 	trig SetHintString( spec.hint_string );
 	trig.bz_station_id = spec.id;
@@ -598,10 +598,6 @@ bz_station_trigger_think()
 		{
 			continue;
 		}
-		if ( IsDefined( player.bz_station_open ) && player.bz_station_open )
-		{
-			continue;
-		}
 		if ( !player UseButtonPressed() )
 		{
 			continue;
@@ -612,9 +608,137 @@ bz_station_trigger_think()
 		{
 			continue;
 		}
-		player.bz_station_next_use_time = now + 400;
+		player.bz_station_next_use_time = now + 450;
 
 		bz_stations_open_for_player( player, self.id );
+	}
+}
+
+bz_stations_ensure_prompt_hud( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return undefined;
+	}
+	if ( IsDefined( player.bz_station_prompt_hud ) )
+	{
+		return player.bz_station_prompt_hud;
+	}
+
+	hud = NewClientHudElem( player );
+	hud.alignX = "center";
+	hud.alignY = "bottom";
+	hud.horzAlign = "center";
+	hud.vertAlign = "bottom";
+	hud.x = 0;
+	hud.y = -112;
+	hud.fontScale = 1.45;
+	hud.color = ( 0.72, 0.94, 1.0 );
+	hud.alpha = 0;
+	hud.sort = 10;
+	hud.hidewheninmenu = true;
+	hud.archived = false;
+	player.bz_station_prompt_hud = hud;
+	player.bz_station_prompt_text = "";
+	return hud;
+}
+
+bz_stations_hide_prompt_hud( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.bz_station_prompt_hud ) )
+	{
+		return;
+	}
+	player.bz_station_prompt_hud.alpha = 0;
+	player.bz_station_prompt_text = "";
+}
+
+bz_stations_destroy_prompt_hud( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( IsDefined( player.bz_station_prompt_hud ) )
+	{
+		player.bz_station_prompt_hud Destroy();
+		player.bz_station_prompt_hud = undefined;
+	}
+	player.bz_station_prompt_text = "";
+}
+
+// Per-player proximity prompt loop: WaW 1.7 ignores SetHintString on script-spawned
+// trigger_radius entities, so this renders a crisp HUD prompt near any active station.
+bz_stations_watch_player_prompt()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.15 );
+		if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( self ) || !IsDefined( level.bz_stations ) )
+		{
+			bz_stations_hide_prompt_hud( self );
+			continue;
+		}
+		if ( IsDefined( self.origin ) )
+		{
+			best = undefined;
+			best_dist = 78.0;
+			ids = [];
+			ids[0] = "perks";
+			ids[1] = "class";
+			ids[2] = "arsenal";
+			ids[3] = "pap";
+			for ( i = 0; i < ids.size; i++ )
+			{
+				sid = ids[i];
+				if ( !IsDefined( level.bz_stations[sid] ) || !bz_stations_is_station_enabled( sid ) )
+				{
+					continue;
+				}
+				st = level.bz_stations[sid];
+				if ( !IsDefined( st.origin ) )
+				{
+					continue;
+				}
+				dz = self.origin[2] - st.origin[2];
+				if ( dz < 0 )
+				{
+					dz = 0 - dz;
+				}
+				if ( dz > 72 )
+				{
+					continue;
+				}
+				d = Distance( self.origin, st.origin );
+				if ( d <= best_dist )
+				{
+					best_dist = d;
+					best = st;
+				}
+			}
+
+			if ( IsDefined( best ) )
+			{
+				hud = bz_stations_ensure_prompt_hud( self );
+				if ( IsDefined( hud ) )
+				{
+					label = "Press [F] to open " + best.display_name;
+					if ( !IsDefined( self.bz_station_prompt_text ) || self.bz_station_prompt_text != label )
+					{
+						hud SetText( label );
+						self.bz_station_prompt_text = label;
+					}
+					hud.alpha = 1;
+				}
+			}
+			else
+			{
+				bz_stations_hide_prompt_hud( self );
+			}
+		}
 	}
 }
 
@@ -642,12 +766,16 @@ bz_stations_cleanup()
 		for ( i = 0; i < players.size; i++ )
 		{
 			p = players[i];
-			if ( IsDefined( p ) && IsDefined( p.bz_station_open ) && p.bz_station_open )
+			if ( IsDefined( p ) )
 			{
-				p.bz_station_open = false;
-				p.bz_active_station_id = "";
-				p.bz_active_station_menu = "";
-				p closeMenu();
+				bz_stations_destroy_prompt_hud( p );
+				if ( IsDefined( p.bz_station_open ) && p.bz_station_open )
+				{
+					p.bz_station_open = false;
+					p.bz_active_station_id = "";
+					p.bz_active_station_menu = "";
+					p closeMenu();
+				}
 			}
 		}
 	}
@@ -1135,6 +1263,11 @@ bz_stations_on_player_spawned( player )
 	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_stations_sync_player_ui( player, "Select an item to purchase." );
+	if ( !IsDefined( player.bz_station_prompt_watching ) || !player.bz_station_prompt_watching )
+	{
+		player.bz_station_prompt_watching = true;
+		player thread bz_stations_watch_player_prompt();
+	}
 }
 
 bz_stations_on_player_downed( player )
@@ -1143,6 +1276,7 @@ bz_stations_on_player_downed( player )
 	{
 		return;
 	}
+	bz_stations_hide_prompt_hud( player );
 	if ( IsDefined( player.bz_station_open ) && player.bz_station_open )
 	{
 		player.bz_station_open = false;
@@ -1311,6 +1445,28 @@ bz_stations_on_menu_response( player, menu, response )
 	}
 
 	norm_menu = maps\_bz_rules::bz_normalize_id( menu );
+	if ( !bz_stations_is_station_menu( norm_menu ) )
+	{
+		// WaW 1.7 may deliver a scriptmenu path (ui/scriptmenus/bz_station_*.menu) or "-1"
+		// when opened via openMenu(); match against known station menu names or active menu.
+		menus = bz_stations_get_menu_names();
+		for ( mi = 0; mi < menus.size; mi++ )
+		{
+			if ( IsSubStr( norm_menu, menus[mi] ) )
+			{
+				norm_menu = menus[mi];
+				break;
+			}
+		}
+	}
+	if ( !bz_stations_is_station_menu( norm_menu ) &&
+		( norm_menu == "" || norm_menu == "-1" ) &&
+		IsDefined( player.bz_station_open ) && player.bz_station_open &&
+		IsDefined( player.bz_active_station_menu ) &&
+		bz_stations_is_station_menu( player.bz_active_station_menu ) )
+	{
+		norm_menu = maps\_bz_rules::bz_normalize_id( player.bz_active_station_menu );
+	}
 	if ( !bz_stations_is_station_menu( norm_menu ) )
 	{
 		return false;
