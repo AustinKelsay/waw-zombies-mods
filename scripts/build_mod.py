@@ -200,90 +200,115 @@ VERIFIED_ALL_4_MAP_FX: frozenset[str] = frozenset(
 BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
     (
         "bz_acid_sprayer",
-        ("ray_gun",),
+        ("m2_flamethrower_zombie", "ray_gun"),
         {
+            "displayName": "Acid Sprayer",
             "inventoryType": "primary",
+            "weaponType": "bullet",
+            "weaponClass": "rifle",
+            "fireType": "Single Shot",
             "ammoName": "bz_acid",
             "clipName": "bz_acid",
-            "displayName": "Acid Sprayer",
-            "altWeapon": "",
-            "damage": "1",
-            "minDamage": "1",
-            "explosionInnerDamage": "0",
-            "explosionOuterDamage": "0",
-            "explosionRadius": "0",
             "clipSize": "20",
             "maxAmmo": "120",
             "startAmmo": "120",
             "dropAmmoMin": "20",
             "dropAmmoMax": "60",
-            "projTrailEffect": "misc/fx_trail_raygun_geotrail",
-            "projExplosionEffect": "misc/fx_exp_raygun_impact",
-        },
-    ),
-    (
-        "bz_cryo_cannon",
-        ("ray_gun",),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_cryo",
-            "clipName": "bz_cryo",
-            "displayName": "Cryo Cannon",
-            "altWeapon": "",
+            "fireTime": "0.45",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "adsUpAnim": "",
+            "adsDownAnim": "",
+            "adsFireAnim": "",
+            "adsLastShotAnim": "",
+            "adsRechamberAnim": "",
+            "fireSound": "weap_raygun_fire",
+            "fireSoundPlayer": "weap_raygun_fire_plr",
+        },
+    ),
+    (
+        "bz_cryo_cannon",
+        ("tesla_gun", "ray_gun"),
+        {
+            "displayName": "Cryo Cannon",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "ammoName": "bz_cryo",
+            "clipName": "bz_cryo",
             "clipSize": "16",
             "maxAmmo": "96",
             "startAmmo": "96",
             "dropAmmoMin": "16",
             "dropAmmoMax": "48",
-            "projTrailEffect": "",
-            "projExplosionEffect": "env/electrical/fx_elec_short_oneshot",
-        },
-    ),
-    (
-        "bz_multi_crossbow",
-        ("m1garand_gl", "zombie_m1garand", "kar98k"),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_xbow",
-            "clipName": "bz_xbow",
-            "displayName": "Multi-Crossbow",
-            "altWeapon": "",
+            "fireTime": "0.55",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+        },
+    ),
+    (
+        "bz_multi_crossbow",
+        ("m7_launcher_zombie", "fg42_scoped", "m1garand_gl", "zombie_m1garand", "kar98k"),
+        {
+            "displayName": "Multi-Crossbow",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "fireType": "Single Shot",
+            "ammoName": "bz_xbow",
+            "clipName": "bz_xbow",
             "clipSize": "6",
             "maxAmmo": "36",
             "startAmmo": "36",
             "dropAmmoMin": "6",
             "dropAmmoMax": "18",
-        },
-    ),
-    (
-        "bz_blade_boomerang",
-        ("zombie_colt", "colt"),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_blade",
-            "clipName": "bz_blade",
-            "displayName": "Blade Boomerang",
-            "altWeapon": "",
+            "fireTime": "0.60",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+        },
+    ),
+    (
+        "bz_blade_boomerang",
+        ("zombie_bowie_flourish", "zombie_colt", "colt"),
+        {
+            "displayName": "Blade Boomerang",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "weaponClass": "pistol",
+            "fireType": "Single Shot",
+            "ammoName": "bz_blade",
+            "clipName": "bz_blade",
             "clipSize": "1",
             "maxAmmo": "20",
             "startAmmo": "20",
             "dropAmmoMin": "1",
             "dropAmmoMax": "10",
+            "fireTime": "0.65",
+            "reloadTime": "0.45",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "altWeapon": "",
+            "worldModel": "weapon_usa_kbar_knife",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "fireSound": "melee_swing_plr",
+            "fireSoundPlayer": "melee_swing_plr",
+            "fireAnim": "viewmodel_knife_slash",
         },
     ),
 )
@@ -1067,15 +1092,31 @@ def serialize_weapon_file(pairs: list[tuple[str, str]]) -> str:
     return "\\".join(parts)
 
 
+def build_xanim_case_map(xanim_dir: Path) -> dict[str, str]:
+    """Build a lowercase -> exact on-disk filename map from raw/xanim/ for Linux case-safe linking."""
+    if not xanim_dir.is_dir():
+        return {}
+    case_map: dict[str, str] = {}
+    for entry in sorted(xanim_dir.iterdir()):
+        if entry.is_file():
+            case_map[entry.name.lower()] = entry.name
+    return case_map
+
+
 def clone_zero_fx_weapon_file(
     stock_text: str,
     overrides: dict[str, str],
     allowed_fx_set: set[str] | frozenset[str] | None = None,
+    xanim_case_map: dict[str, str] | None = None,
 ) -> str:
     """Deterministically clone a WaW stock weapon definition with 0 added FX slots.
 
     Any `*Effect` or `*Fx` field (case-insensitive) whose value is non-empty and not
     present in `allowed_fx_set` (defaults to VERIFIED_ALL_4_MAP_FX) is cleared to `""`.
+    When `xanim_case_map` (lowercase -> exact on-disk filename from `raw/xanim/`) is
+    provided, every non-empty `*Anim` value is resolved case-insensitively to its exact
+    on-disk casing, overridden `*Anim` values missing from disk fall back to the
+    template's existing anim, and missing optional `ads*Anim` fields are cleared to `""`.
     """
     pairs = parse_weapon_file(stock_text)
     allowed = {
@@ -1083,7 +1124,15 @@ def clone_zero_fx_weapon_file(
         for fx in (VERIFIED_ALL_4_MAP_FX if allowed_fx_set is None else allowed_fx_set)
         if fx and fx.strip()
     }
+    anim_map: dict[str, str] | None = None
+    if xanim_case_map is not None:
+        anim_map = {
+            k.strip().lower(): v.strip()
+            for k, v in xanim_case_map.items()
+            if k and k.strip() and v and v.strip()
+        }
 
+    original_values: dict[str, str] = {key: val for key, val in pairs}
     applied_keys: set[str] = set()
     updated: list[tuple[str, str]] = []
     for key, val in pairs:
@@ -1105,6 +1154,26 @@ def clone_zero_fx_weapon_file(
             norm_val = val.strip().replace("\\", "/").lower()
             if norm_val and norm_val not in allowed:
                 val = ""
+        elif anim_map is not None and key_lower.endswith("anim"):
+            stripped = val.strip()
+            if stripped:
+                resolved = anim_map.get(stripped.lower())
+                if resolved is not None:
+                    val = resolved
+                elif key in overrides:
+                    orig_val = original_values.get(key, "").strip()
+                    if orig_val:
+                        orig_resolved = anim_map.get(orig_val.lower())
+                        if orig_resolved is not None:
+                            val = orig_resolved
+                        elif key_lower.startswith("ads"):
+                            val = ""
+                        else:
+                            val = orig_val
+                    else:
+                        val = ""
+                elif key_lower.startswith("ads"):
+                    val = ""
         sanitized.append((key, val))
 
     return serialize_weapon_file(sanitized)
@@ -1123,6 +1192,9 @@ def stage_bz_element_weapons(
     raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
     if not raw_weapons_dir.is_dir():
         return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
 
     out_dir = stage_dir / "weapons" / "sp"
     staged_relpaths: list[str] = []
@@ -1143,6 +1215,7 @@ def stage_bz_element_weapons(
             stock_text,
             overrides=overrides,
             allowed_fx_set=allowed_fx_set,
+            xanim_case_map=xanim_case_map,
         )
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / weap_name
