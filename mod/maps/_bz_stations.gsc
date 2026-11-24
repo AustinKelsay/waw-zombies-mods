@@ -284,7 +284,7 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 1075, -235, 96 ),
+			( 1060, -85, 96 ),
 			( 0, 180, 0 ),
 			false,
 			false

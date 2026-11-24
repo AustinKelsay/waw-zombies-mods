@@ -863,6 +863,7 @@ bz_run_p2_selftest()
 	if ( stock_powerup_ok )
 	{
 		max_drop = Spawn( "script_origin", p.origin );
+		max_drop.hint = "";
 		level thread [[ level.bz_test_full_ammo_powerup ]]( max_drop );
 		wait( 0.2 );
 		if ( IsDefined( max_drop ) )
@@ -1492,7 +1493,16 @@ bz_run_gauntlet_seed()
 
 	if ( map_name == "nazi_zombie_factory" )
 	{
-		native_trig = bz_test_unlock_native_pap();
+		native_trig = undefined;
+		for ( u_tries = 0; u_tries < 40; u_tries++ )
+		{
+			native_trig = bz_test_unlock_native_pap();
+			if ( IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired )
+			{
+				break;
+			}
+			wait( 0.1 );
+		}
 		wait( 0.15 );
 		if ( !IsDefined( native_trig ) )
 		{
@@ -1503,14 +1513,24 @@ bz_run_gauntlet_seed()
 		orig_angles = p.angles;
 		orig_score = p.score;
 		orig_weapon = bz_get_weapon_safe( p );
+		had_colt = p HasWeapon( "zombie_colt" );
 		p.score = 50000;
 		p SetOrigin( ( -61, 495, 118 ) );
 		p SetPlayerAngles( ( 5, 90, 0 ) );
-		bz_test_equip_native_pap_colt( p );
-		for ( p_tries = 0; p_tries < 40 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != "zombie_colt_upgraded" ); p_tries++ )
+		if ( had_colt )
 		{
+			p TakeWeapon( "zombie_colt" );
+		}
+		bz_test_equip_native_pap_colt( p );
+		for ( p_tries = 0; p_tries < 60 && ( p IsSwitchingWeapons() || bz_get_weapon_safe( p ) != "zombie_colt_upgraded" ); p_tries++ )
+		{
+			if ( p_tries == 10 && !p IsSwitchingWeapons() && bz_get_weapon_safe( p ) != "zombie_colt_upgraded" )
+			{
+				p SwitchToWeapon( "zombie_colt_upgraded" );
+			}
 			wait( 0.05 );
 		}
+		probe_cur = bz_get_weapon_safe( p );
 		p.bz_pap_console_next_ms = 0;
 		native_trig notify( "trigger", p );
 		for ( d_tries = 0; d_tries < 20 && !bz_is_double_pap_safe( p, "zombie_colt_upgraded" ); d_tries++ )
@@ -1519,6 +1539,10 @@ bz_run_gauntlet_seed()
 		}
 		native_ok = bz_is_double_pap_safe( p, "zombie_colt_upgraded" );
 		p TakeWeapon( "zombie_colt_upgraded" );
+		if ( had_colt && !p HasWeapon( "zombie_colt" ) )
+		{
+			p GiveWeapon( "zombie_colt" );
+		}
 		if ( orig_weapon != "" && p HasWeapon( orig_weapon ) )
 		{
 			p SwitchToWeapon( orig_weapon );
@@ -1538,7 +1562,8 @@ bz_run_gauntlet_seed()
 		bz_pap_update_native_prompt_hud( p );
 		if ( !native_ok )
 		{
-			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap" );
+			unlock_ok = IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired;
+			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap;unlock=" + bz_bool_int( unlock_ok ) + ";cur=" + probe_cur );
 		}
 		return;
 	}
