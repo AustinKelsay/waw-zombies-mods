@@ -1,7 +1,7 @@
 // The build stamps the commit in the staged copy of this module.
 bz_get_build_version()
 {
-	return "0.6.0";
+	return "0.7.0";
 }
 
 bz_get_build_commit()

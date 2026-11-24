@@ -28,10 +28,16 @@ FACTORY_VISUAL_PHASES = (
     "menu_perks", "menu_class", "menu_arsenal", "menu_pap",
 )
 
+ASYLUM_VISUAL_PHASES = (
+    "asylum_perks_prompt", "asylum_class_prompt", "asylum_arsenal_prompt", "asylum_pap_prompt",
+    "asylum_south_perks_prompt", "asylum_south_class_prompt",
+    "asylum_south_arsenal_prompt", "asylum_south_pap_prompt",
+)
+
 COOP_LOG = """Loading fastfile 'mod'
-dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.6.0-dev;player=Host;map=nazi_zombie_factory
+dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.7.0-dev;player=Host;map=nazi_zombie_factory
 dvar set bz_event BZ_EVENT|PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native
-dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.6.0-dev;dog_rate=0.55
+dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.7.0-dev;dog_rate=0.55
 """
 
 
@@ -44,17 +50,17 @@ class TestCoopAnalyzer(unittest.TestCase):
         cases = (
             (COOP_LOG.replace("BUILD_PARITY", "IGNORED"), "BUILD_PARITY"),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.6.0-dev;client=0.6.0-old\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.7.0-dev;client=0.7.0-old\n",
                 "BUILD_PARITY_MISMATCH",
             ),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.6.0;player=Guest;map=nazi_zombie_factory\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.7.0;player=Guest;map=nazi_zombie_factory\n",
                 "missing build_id",
             ),
-            (COOP_LOG.replace("checks=10;build_id=0.6.0-dev", "checks=10;build_id=0.6.0-different"), "Conflicting build_id"),
+            (COOP_LOG.replace("checks=10;build_id=0.7.0-dev", "checks=10;build_id=0.7.0-different"), "Conflicting build_id"),
             (
                 COOP_LOG
-                + "BZ_EVENT|BUILD_PARITY|build_id=0.6.0-other;player=Client;map=nazi_zombie_factory\n",
+                + "BZ_EVENT|BUILD_PARITY|build_id=0.7.0-other;player=Client;map=nazi_zombie_factory\n",
                 "Conflicting BUILD_PARITY",
             ),
             (COOP_LOG.replace("console=native", "console=station"), "console=native"),
@@ -67,46 +73,100 @@ class TestCoopAnalyzer(unittest.TestCase):
                 self.assertTrue(any(expected in error for error in errors), errors)
 
 
-GAUNTLET_LOG = """Loading fastfile 'mod'
-GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;run_id=run_10
-BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2
-BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
-GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;next_map=nazi_zombie_asylum
-GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2
-GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;run_id=run_10
-BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
-"""
+GAUNTLET_STAGES = (
+    ("prototype", 1, 1), ("asylum", 1, 2), ("sumpf", 1, 3), ("factory", 1, 4), ("prototype", 2, 1),
+)
+SEEDED_LOADOUT = "weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1"
+
+
+def make_gauntlet_log() -> str:
+    lines = ["Loading fastfile 'mod'"]
+    for index, (slug, cycle, stage) in enumerate(GAUNTLET_STAGES):
+        map_name = f"nazi_zombie_{slug}"
+        if slug == "factory":
+            for station in ("perks", "class", "arsenal"):
+                lines.append(f"BZ_EVENT|STATION_SPAWN|map={map_name};station={station}")
+        stage_fields = f"cycle={cycle};stage={stage};map={map_name}"
+        lines.append(f"GAUNTLET_EVENT|STAGE_INIT|{stage_fields};run_id=run_10")
+        if index == 0:
+            lines.append(f"BZ_EVENT|GAUNTLET_BZ_SEEDED|map={map_name};class=titan;weapons=2")
+        else:
+            lines.append(
+                f"BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map={map_name};class=titan;"
+                f"t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;{SEEDED_LOADOUT}"
+            )
+        if index < 4:
+            next_slug, next_cycle, next_stage = GAUNTLET_STAGES[index + 1]
+            next_fields = f"next_map=nazi_zombie_{next_slug};next_cycle={next_cycle};next_stage={next_stage}"
+            lines.extend((
+                f"BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map={map_name};"
+                f"perm=titan|wc,pwc|war_club;perks=su,mk|-|-;{SEEDED_LOADOUT}",
+                f"GAUNTLET_EVENT|STAGE_CLEAR|{stage_fields};{next_fields}",
+                f"GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;{next_fields}",
+            ))
+    lines.extend((
+        "GAUNTLET_EVENT|RUN_SUMMARY|cycle=2;stage=1;map=nazi_zombie_prototype",
+        "BZ_EVENT|GAUNTLET_BZ_WIPED|map=nazi_zombie_prototype;perm_empty=1;perks_empty=1;weapons_empty=1",
+    ))
+    return "\n".join(lines)
+
+
+GAUNTLET_LOG = make_gauntlet_log()
 
 
 class TestEnhancedGauntletAnalyzer(unittest.TestCase):
-    def test_accepts_seed_snapshot_transition_and_restore(self) -> None:
+    def test_accepts_all_four_handoffs_and_wipe(self) -> None:
         _, errors = verifier.analyze_enhanced_gauntlet_log(GAUNTLET_LOG)
         self.assertEqual(errors, [])
 
-    def test_rejects_empty_snapshot_missing_restore_and_wrong_transition(self) -> None:
+    def test_rejects_broken_run_evidence(self) -> None:
+        reseed = next(line for line in GAUNTLET_LOG.splitlines() if "GAUNTLET_BZ_SEEDED" in line)
         cases = (
-            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=none"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|-|knife"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|wc|war_club"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:20,cr:0;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:2,cr:1;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace(";bz_weapons=2;bz_dpap=1\nGAUNTLET_EVENT|STAGE_CLEAR", "\nGAUNTLET_EVENT|STAGE_CLEAR"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0", "melee_slot=war_club;weapons=ac:0,cr:2"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=0"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=0"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("GAUNTLET_BZ_RESTORED|player=host", "GAUNTLET_BZ_RESTORED|player=guest"),
-             "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("t1=2", "t1=0"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("pap_war_club=1", "pap_war_club=0"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("melee_slot=war_club", "melee_slot=knife"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("GAUNTLET_BZ_RESTORED", "IGNORED"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum",
-                                  "STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf"), "STAGE_TRANSITION"),
+            ("GAUNTLET_BZ_SEEDED", "IGNORED", "GAUNTLET_BZ_SEEDED"),
+            ("perm=titan|wc,pwc|war_club", "perm=none", "GAUNTLET_BZ_SAVED"),
+            ("perm=titan|wc,pwc|war_club", "perm=titan|wc|war_club", "GAUNTLET_BZ_SAVED"),
+            ("perks=su,mk|-|-", "perks=su|-|-", "GAUNTLET_BZ_SAVED"),
+            ("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:20,cr:0;bz_weapons=2", "GAUNTLET_BZ_SAVED"),
+            ("melee_slot=war_club;weapons=ac:2,cr:0", "melee_slot=war_club;weapons=ac:2,cr:1", "GAUNTLET_BZ_RESTORED"),
+            ("melee_slot=war_club;" + SEEDED_LOADOUT, "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=0;bz_dpap=1", "GAUNTLET_BZ_RESTORED"),
+            ("melee_slot=war_club;" + SEEDED_LOADOUT, "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=0", "GAUNTLET_BZ_RESTORED"),
+            ("t1=2", "t1=0", "GAUNTLET_BZ_RESTORED"),
+            ("pap_war_club=1", "pap_war_club=0", "GAUNTLET_BZ_RESTORED"),
+            ("melee_slot=war_club", "melee_slot=knife", "GAUNTLET_BZ_RESTORED"),
+            ("STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum",
+             "STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf", "STAGE_TRANSITION"),
+            ("STAGE_INIT|cycle=2;stage=1", "STAGE_INIT|cycle=1;stage=1", "STAGE_INIT"),
+            ("STAGE_INIT|cycle=1;stage=2", "STAGE_INIT|cycle=1;stage=3", "STAGE_INIT"),
+            ("STATION_SPAWN|map=nazi_zombie_factory;station=arsenal",
+             "STATION_SPAWN|map=nazi_zombie_factory;station=pap", "STATION_SPAWN"),
+            ("RUN_SUMMARY", "IGNORED", "RUN_SUMMARY"),
+            ("RUN_SUMMARY|cycle=2", "RUN_SUMMARY|cycle=1", "RUN_SUMMARY"),
+            ("GAUNTLET_BZ_WIPED", "IGNORED", "GAUNTLET_BZ_WIPED"),
+            ("perm_empty=1", "perm_empty=0", "GAUNTLET_BZ_WIPED"),
+            ("perks_empty=1", "perks_empty=0", "GAUNTLET_BZ_WIPED"),
+            ("weapons_empty=1", "weapons_empty=0", "GAUNTLET_BZ_WIPED"),
+            ("BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_prototype",
+             reseed + "\nBZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_prototype",
+             "GAUNTLET_BZ_SEEDED"),
         )
-        for log, expected in cases:
-            with self.subTest(expected=expected):
-                _, errors = verifier.analyze_enhanced_gauntlet_log(log)
+        for original, replacement, expected in cases:
+            with self.subTest(original=original, replacement=replacement):
+                _, errors = verifier.analyze_enhanced_gauntlet_log(GAUNTLET_LOG.replace(original, replacement))
                 self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_requires_each_save_and_restore_in_its_stage_for_the_same_player(self) -> None:
+        for line in GAUNTLET_LOG.splitlines():
+            if "GAUNTLET_BZ_SAVED" not in line and "GAUNTLET_BZ_RESTORED" not in line:
+                continue
+            event_type = line.split("|")[1]
+            for replacement in ("", line.replace("player=host", "player=guest")):
+                with self.subTest(line=line, replacement=replacement):
+                    _, errors = verifier.analyze_enhanced_gauntlet_log(GAUNTLET_LOG.replace(line, replacement))
+                    self.assertTrue(any("GAUNTLET_BZ_SAVED" in e or "GAUNTLET_BZ_RESTORED" in e for e in errors))
+            with self.subTest(moved=event_type, line=line):
+                moved = GAUNTLET_LOG.replace(line + "\n", "") + "\n" + line
+                _, errors = verifier.analyze_enhanced_gauntlet_log(moved)
+                self.assertTrue(any(event_type in error for error in errors), errors)
 
     def test_restore_telemetry_reports_applied_state_when_destination_gates_disabled(self) -> None:
         dvars = FakeDvarStore()
@@ -153,13 +213,13 @@ class TestVisualTourAnalyzer(unittest.TestCase):
 
     def test_accepts_all_twenty_four_factory_capture_phases(self) -> None:
         self.assertEqual(verifier.expected_visual_phases("factory"), FACTORY_VISUAL_PHASES)
-        self.assertEqual(sum(len(verifier.expected_visual_phases(slug)) for slug in verifier.MAP_SLUGS), 36)
+        self.assertEqual(sum(len(verifier.expected_visual_phases(slug)) for slug in verifier.MAP_SLUGS), 40)
         log, frames = self.make_tour("factory", FACTORY_VISUAL_PHASES)
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertEqual(errors, [])
 
     def test_accepts_four_station_phases_on_other_stock_maps(self) -> None:
-        for slug in ("prototype", "asylum", "sumpf"):
+        for slug in ("prototype", "sumpf"):
             with self.subTest(map=slug):
                 phases = [
                     f"{slug}_perks_prompt",
@@ -171,16 +231,29 @@ class TestVisualTourAnalyzer(unittest.TestCase):
                 _, errors = verifier.analyze_visual_tour_result(log, frames)
                 self.assertEqual(errors, [])
 
-    def test_rejects_frozen_tour(self) -> None:
-        phases = [
-            "asylum_perks_prompt",
-            "asylum_class_prompt",
-            "asylum_arsenal_prompt",
-            "asylum_pap_prompt",
-        ]
-        log, frames = self.make_tour("asylum", phases, frozen_phases=tuple(phases))
+    def test_accepts_eight_station_phases_across_both_verruckt_wings(self) -> None:
+        self.assertEqual(verifier.expected_visual_phases("asylum"), ASYLUM_VISUAL_PHASES)
+        log, frames = self.make_tour("asylum", ASYLUM_VISUAL_PHASES)
         _, errors = verifier.analyze_visual_tour_result(log, frames)
-        self.assertTrue(any("frozen" in error for error in errors), errors)
+        self.assertEqual(errors, [])
+
+    def test_rejects_four_frame_verruckt_tour_without_south_wing(self) -> None:
+        log, frames = self.make_tour("asylum", ASYLUM_VISUAL_PHASES[:4])
+        _, errors = verifier.analyze_visual_tour_result(log, frames)
+        self.assertTrue(any("Expected 8 phases" in error for error in errors), errors)
+        self.assertTrue(any("asylum_south_pap_prompt" in error for error in errors), errors)
+
+    def test_rejects_frozen_verruckt_frames(self) -> None:
+        for frozen_phases, expected in (
+            (ASYLUM_VISUAL_PHASES, "all captured frames"),
+            (ASYLUM_VISUAL_PHASES[:4], "north wing"),
+            (ASYLUM_VISUAL_PHASES[4:], "south wing"),
+            (("asylum_class_prompt", "asylum_south_class_prompt"), "asylum_south_class_prompt"),
+        ):
+            with self.subTest(frozen_phases=frozen_phases):
+                log, frames = self.make_tour("asylum", ASYLUM_VISUAL_PHASES, frozen_phases)
+                _, errors = verifier.analyze_visual_tour_result(log, frames)
+                self.assertTrue(any("frozen" in error and expected in error for error in errors), errors)
 
     def test_rejects_frozen_portal_frames_or_station_menus_in_an_otherwise_moving_tour(self) -> None:
         for frozen_phases, expected in (
@@ -374,6 +447,7 @@ class TestLiveHookGates(unittest.TestCase):
         runtime.players.append(host)
         runtime.call(BZ_HOOKS_MOD, "bz_init")
         runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", host)
+        dvars.set("gauntlet_cycle", "1")
         runtime.call(BZ_SELFTEST_MOD, "bz_run_gauntlet_seed")
 
         bridge = r"maps\_bz_gauntlet_bridge"
@@ -385,6 +459,31 @@ class TestLiveHookGates(unittest.TestCase):
         self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_is_weapon_double_pap", host, "bz_acid_sprayer"))
         self.assertIn("BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2",
                       runtime.emitted_events)
+
+    def test_wrapped_nacht_wipes_after_normal_restore_without_reseeding(self) -> None:
+        dvars = FakeDvarStore()
+        for name in ("bz_enabled", "bz_test_gauntlet_seed", "gauntlet_enabled",
+                     "bz_perks_enabled", "bz_classes_enabled", "bz_pap_enabled", "bz_elements_enabled"):
+            dvars.set(name, "1")
+        dvars.set("gauntlet_cycle", "2")
+        runtime = BzGscRuntime(REPO_ROOT / "mod", dvars)
+        runtime.level.set_field("script", "nazi_zombie_prototype")
+        host = FakeEntity("Host", ent_num=0)
+        runtime.players.append(host)
+        runtime.call(BZ_HOOKS_MOD, "bz_init")
+        runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", host)
+        host.set_field("gauntlet_points_applied", True)
+        host.set_field("score", 1234)
+
+        runtime.call(BZ_SELFTEST_MOD, "bz_run_gauntlet_seed")
+        self.assertFalse(any(name == "bz_run_gauntlet_wipe" for _, name, _ in runtime._threads))
+        self.assertFalse(any("GAUNTLET_BZ_SEEDED" in event for event in runtime.emitted_events))
+
+        host.set_field("gauntlet_bz_restored", True)
+        runtime.call(BZ_SELFTEST_MOD, "bz_run_gauntlet_seed")
+        self.assertIn((host, "bz_run_gauntlet_wipe", []), runtime._threads)
+        self.assertEqual(host.get_field("score"), 1234)
+        self.assertFalse(any("GAUNTLET_BZ_SEEDED" in event for event in runtime.emitted_events))
 
     def test_stock_spawn_dependency_is_gated_and_factory_only(self) -> None:
         source = b'main()\n{\n\tmaps\\_zombiemode::main("spawners");\n}\n'

@@ -2349,7 +2349,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             raw_csc.parent.mkdir(parents=True)
             raw_csc.write_bytes(stock_1arg)
             (stage / "maps").mkdir(parents=True)
-            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.6.0-dev\"; }\n", encoding="ascii")
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.7.0-dev\"; }\n", encoding="ascii")
 
             out_csc = build_mod.stage_bz_clientscript_callbacks(
                 tools, stage, steam_game=root / "steam"
@@ -2375,17 +2375,17 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Retail-visible client-package parity stamp across all 4 station menus
         for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
             raw_menu = menu_path.read_text(encoding="latin1")
-            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.6.0-abc1234")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.7.0-abc1234")
             self.assertEqual(
                 verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
                 [],
                 f"Brace imbalance in stamped {menu_path.name}",
             )
-            self.assertIn('"BUILD: 0.6.0-abc1234"', stamped)
-            self.assertIn('dvarString( "bz_host_build_id" ) != "0.6.0-abc1234"', stamped)
-            self.assertIn('BUILD MISMATCH! LOCAL 0.6.0-abc1234 != HOST ', stamped)
+            self.assertIn('"BUILD: 0.7.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.7.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.7.0-abc1234 != HOST ', stamped)
             # Idempotent
-            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.6.0-abc1234"), stamped)
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.7.0-abc1234"), stamped)
             # Tracked menu remains unstamped
             self.assertNotIn("bz_parity_mismatch", raw_menu)
 

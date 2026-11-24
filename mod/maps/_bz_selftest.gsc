@@ -825,7 +825,9 @@ bz_run_p2_selftest()
 
 	// 12. Portal Grenade: Coop-safe USE+MELEE watcher registered, SpawnFx portal spawns, warps player, excludes live zombie
 	watcher_ok = IsDefined( p.bz_special_watchers_started ) && p.bz_special_watchers_started;
+	portal_charges_before = maps\_bz_state::bz_state_get_portal_charges( p );
 	portal = bz_special_try_activate_portal( p );
+	portal_charges_after = maps\_bz_state::bz_state_get_portal_charges( p );
 	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent );
 	if ( portal_fx_ok )
 	{
@@ -853,6 +855,14 @@ bz_run_p2_selftest()
 		bz_special_close_portal( portal );
 	}
 	bz_selftest_check( st, watcher_ok && portal_fx_ok && portal_warped && portal_excluded_z, "portal_grenade_warp_and_exclude_z" );
+
+	max_charges = maps\_bz_rules::bz_get_portal_max_charges();
+	portal_refilled = maps\_bz_special_weapons::bz_special_on_max_ammo( p );
+	bz_selftest_check( st, portal_charges_before == max_charges && portal_charges_after == max_charges - 1 &&
+		portal_refilled && maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges, "portal_grenade_max_ammo_refill" );
+
+	// Apply ammo upgrades after the combat checks so their expected damage stays fixed.
+	bz_selftest_check( st, bz_test_arsenal_acid_ammo_refill( p ), "arsenal_acid_ammo_refill" );
 
 	// 13. Clean up all test entities & HUDs via end_game hook
 	bz_on_end_game();
@@ -1199,17 +1209,30 @@ bz_run_visual_tour()
 		ids[3] = "pap";
 	}
 
-	phase_count = 0;
-	for ( i = 0; i < ids.size; i++ )
+	station_count = ids.size;
+	if ( slug == "asylum" )
 	{
-		id = ids[i];
-		if ( !IsDefined( level.bz_stations ) || !IsDefined( level.bz_stations[id] ) )
+		station_count = station_count * 2;
+	}
+
+	phase_count = 0;
+	for ( i = 0; i < station_count; i++ )
+	{
+		id = ids[i % ids.size];
+		prefix = slug;
+		// Verruckt spawns the four north stations first, then the matching south stations.
+		if ( slug == "asylum" && i >= ids.size )
 		{
-			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + id );
+			prefix = "asylum_south";
+		}
+		if ( !IsDefined( level.bz_station_list ) || i >= level.bz_station_list.size ||
+			level.bz_station_list[i].id != id )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + prefix + "_" + id );
 			return;
 		}
 
-		station = level.bz_stations[id];
+		station = level.bz_station_list[i];
 		if ( slug == "factory" )
 		{
 			bz_test_visual_pose( p, poses[i], station );
@@ -1228,10 +1251,10 @@ bz_run_visual_tour()
 		if ( !IsDefined( p.bz_station_prompt_hud ) || p.bz_station_prompt_hud.alpha != 1 ||
 			p.bz_station_prompt_text != prompt )
 		{
-			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + id );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + prefix + "_" + id );
 			return;
 		}
-		bz_test_visual_phase( slug + "_" + id + "_prompt" );
+		bz_test_visual_phase( prefix + "_" + id + "_prompt" );
 		phase_count++;
 		wait( 0.6 );
 	}
@@ -1423,16 +1446,25 @@ bz_run_gauntlet_seed()
 	for ( tries = 0; tries < 80; tries++ )
 	{
 		p = bz_test_get_spawned_host();
+		cycle = GetDvarInt( "gauntlet_cycle" );
 		if ( IsDefined( p ) && IsDefined( p.gauntlet_points_applied ) && p.gauntlet_points_applied )
 		{
-			break;
+			if ( cycle >= 2 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
+			{
+				p thread bz_run_gauntlet_wipe();
+				return;
+			}
+			if ( cycle == 1 )
+			{
+				break;
+			}
 		}
 		p = undefined;
 		wait( 0.25 );
 	}
 	if ( !IsDefined( p ) )
 	{
-		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_points" );
+		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_state" );
 		return;
 	}
 
@@ -1447,20 +1479,7 @@ bz_run_gauntlet_seed()
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:pap_war_club" );
 
 	acid = "bz_acid_sprayer";
-	if ( p HasWeapon( acid ) )
-	{
-		single_pap = bz_stations_try_buy_single_pap( p, acid );
-		if ( single_pap.ok )
-		{
-			bz_on_item_purchased( p, "pap", "single_pap", single_pap, acid );
-		}
-		pap_prereq = bz_stations_is_weapon_pap( p, acid );
-		double_pap = maps\_bz_state::bz_try_buy_pap_upgrade( p, "double_pap", acid, pap_prereq );
-		if ( double_pap.ok )
-		{
-			bz_on_item_purchased( p, "pap", "double_pap", double_pap, acid );
-		}
-	}
+	bz_test_double_pap_element( p, acid );
 	if ( !bz_has_perk_safe( p, "staminup" ) ||
 		!bz_has_perk_safe( p, "mule_kick" ) ||
 		bz_get_class_safe( p ) != "titan" ||
@@ -1474,6 +1493,65 @@ bz_run_gauntlet_seed()
 	}
 
 	bz_log_emit( "GAUNTLET_BZ_SEEDED", "map=nazi_zombie_prototype;class=titan;weapons=2" );
+}
+
+bz_run_gauntlet_wipe()
+{
+	self endon( "disconnect" );
+	wait( 0.5 );
+
+	// The wipe handler notifies end_game and waits on the Run Summary overlay.
+	// Run it separately so this test can read the cleared state before exitLevel.
+	level.intermission = true;
+	level thread maps\_gauntlet_mode::on_end_game();
+	wait( 0.05 );
+	fields = [];
+	fields[0] = bz_log_kv( "map", "nazi_zombie_prototype" );
+	fields[1] = bz_log_kv( "perm_empty", bz_bool_int( GetDvar( "gauntlet_bz_perm" ) == "" ) );
+	fields[2] = bz_log_kv( "perks_empty", bz_bool_int( GetDvar( "gauntlet_bz_perks" ) == "" ) );
+	fields[3] = bz_log_kv( "weapons_empty", bz_bool_int( GetDvar( "gauntlet_bz_weapons" ) == "" ) );
+	bz_log_emit( "GAUNTLET_BZ_WIPED", bz_log_join( fields ) );
+}
+
+bz_test_arsenal_acid_ammo_refill( p )
+{
+	acid = "bz_acid_sprayer";
+	if ( !p HasWeapon( acid ) )
+	{
+		return false;
+	}
+
+	bz_test_double_pap_element( p, acid );
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:double_ammo" );
+	p SetWeaponAmmoStock( acid, 0 );
+	p SetWeaponAmmoClip( acid, 0 );
+	score_before = p.score;
+	handled = bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+
+	// Acid Sprayer reserves are 120 base, 180 with Double PaP, and 360 with both upgrades.
+	return handled && bz_is_double_pap_safe( p, acid ) && bz_has_apex_safe( p, "double_ammo" ) &&
+		p.score == score_before - 2500 && p GetWeaponAmmoStock( acid ) == 360 &&
+		p GetWeaponAmmoClip( acid ) == WeaponClipSize( acid );
+}
+
+bz_test_double_pap_element( p, weapon )
+{
+	if ( !p HasWeapon( weapon ) )
+	{
+		return;
+	}
+
+	single_pap = bz_stations_try_buy_single_pap( p, weapon );
+	if ( single_pap.ok )
+	{
+		bz_on_item_purchased( p, "pap", "single_pap", single_pap, weapon );
+	}
+	pap_prereq = bz_stations_is_weapon_pap( p, weapon );
+	double_pap = maps\_bz_state::bz_try_buy_pap_upgrade( p, "double_pap", weapon, pap_prereq );
+	if ( double_pap.ok )
+	{
+		bz_on_item_purchased( p, "pap", "double_pap", double_pap, weapon );
+	}
 }
 
 // ---------------------------------------------------------------------------

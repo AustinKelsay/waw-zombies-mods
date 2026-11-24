@@ -13,7 +13,7 @@ Verifies real Steam/Proton CoD:WaW 1.7 execution across two live runs:
      ELEM_FLAME_DOT, ELEM_ACID_PUDDLE, ELEM_CRYO_FREEZE, ELEM_CRYO_SHATTER,
      SPECIAL_WAR_CLUB_SMASH, SPECIAL_CROSSBOW_FIRE, SPECIAL_CROSSBOW_DETONATE,
      SPECIAL_BOOMERANG_THROW, SPECIAL_PORTAL_OPEN, SPECIAL_PORTAL_TELEPORT),
-     and BZ_P2_SELFTEST_PASS.
+     Arsenal ammo and Max Ammo portal refill telemetry, and BZ_P2_SELFTEST_PASS.
   2. Run B (Classic Mode Untouched):
      +set fs_game mods/waw_gauntlet +set bz_enabled 0 +set bz_elements_enabled 0
      +set gauntlet_enabled 0 +devmap nazi_zombie_factory
@@ -112,6 +112,21 @@ def analyze_bz_p2_log(
         if req_type not in event_types:
             errors.append(f"Missing required Phase 2 telemetry event: BZ_EVENT|{req_type}|...")
 
+    refill_evidence = (
+        ("STATION_PURCHASE",
+         {"menu": "bz_station_arsenal", "category": "element_ammo", "item": "acid_sprayer",
+          "status": "ok", "cost": "2500"},
+         "Missing successful 2500-point Acid Sprayer ammo purchase from the Arsenal"),
+        ("SPECIAL_PORTAL_REFILL", {"reason": "max_ammo", "charges": "2"},
+         "Missing SPECIAL_PORTAL_REFILL restoring both charges via Max Ammo"),
+    )
+    for event_type, fields, message in refill_evidence:
+        if not any(
+            e.event_type == event_type and all(e.fields.get(key) == value for key, value in fields.items())
+            for e in events
+        ):
+            errors.append(message)
+
     # Confirm real patched tesla_pvp_thread preserved 440 maxhealth on Titan + Jugg II
     tesla_pvp_events = [
         e
@@ -155,9 +170,9 @@ def analyze_bz_p2_log(
                     f"BZ_P2_SELFTEST_PASS {key}={actual!r}, expected {exp!r} ({pev.raw})"
                 )
         checks_raw = pev.fields.get("checks", "0")
-        if not checks_raw.isdigit() or int(checks_raw) < 13:
+        if not checks_raw.isdigit() or int(checks_raw) < 20:
             errors.append(
-                f"BZ_P2_SELFTEST_PASS checks={checks_raw!r}, expected >= 13 ({pev.raw})"
+                f"BZ_P2_SELFTEST_PASS checks={checks_raw!r}, expected >= 20 ({pev.raw})"
             )
 
     return events, errors

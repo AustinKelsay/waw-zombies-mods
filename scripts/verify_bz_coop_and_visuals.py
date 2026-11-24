@@ -19,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import zlib
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -91,85 +92,151 @@ def _has_seeded_perm_and_perks(perm: str, perks: str) -> bool:
     return cls == "titan" and {"wc", "pwc"} <= flags and melee_slot == "war_club" and {"su", "mk"} <= t1
 
 
+GAUNTLET_STAGES = (
+    ("nazi_zombie_prototype", "1", "1"),
+    ("nazi_zombie_asylum", "1", "2"),
+    ("nazi_zombie_sumpf", "1", "3"),
+    ("nazi_zombie_factory", "1", "4"),
+    ("nazi_zombie_prototype", "2", "1"),
+)
+
+
+def _has_seeded_weapons(fields: dict[str, str]) -> bool:
+    return {"ac:2", "cr:0"} <= set(fields.get("weapons", "").split(",")) and all(
+        fields.get(key, "").isdecimal() and int(fields[key]) >= minimum
+        for key, minimum in (("bz_weapons", 2), ("bz_dpap", 1))
+    )
+
+
+def _has_restored_seed(event: bz.BzEvent) -> bool:
+    fields = event.fields
+    return (
+        fields.get("class") == "titan"
+        and fields.get("war_club") == fields.get("pap_war_club") == "1"
+        and fields.get("melee_slot") == "war_club"
+        and fields.get("t1", "").isdecimal()
+        and int(fields["t1"]) >= 2
+        and _has_seeded_weapons(fields)
+    )
+
+
 def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check the first enhanced Stage handoff for class, perks, gear, and Elemental Weapons."""
-    events = bz.parse_bz_events(log_text)
-    gauntlet = parse_gauntlet_events(log_text)
+    """Verify the same host's loadout across four Stage handoffs and the ensuing wipe."""
+    events: list[bz.BzEvent] = []
+    timeline: list[bz.BzEvent | GauntletEvent] = []
+    for line in log_text.splitlines():
+        if "BZ_EVENT|" in line:
+            parsed = bz.parse_bz_events(line)
+            events.extend(parsed)
+            timeline.extend(parsed)
+        elif "GAUNTLET_EVENT|" in line:
+            timeline.extend(parse_gauntlet_events(line))
+
     errors = engine_errors(log_text)
-    source = "nazi_zombie_prototype"
-    destination = "nazi_zombie_asylum"
+    errors.extend(e.raw for e in events if e.event_type == "GAUNTLET_BZ_SEED_FAIL")
 
     def matches(event: bz.BzEvent | GauntletEvent, event_type: str, **fields: str) -> bool:
         return event.event_type == event_type and all(
             event.fields.get(key) == value for key, value in fields.items()
         )
 
-    errors.extend(e.raw for e in events if e.event_type == "GAUNTLET_BZ_SEED_FAIL")
+    flow = [
+        (index, event) for index, event in enumerate(timeline)
+        if isinstance(event, GauntletEvent) and event.event_type in
+        ("STAGE_INIT", "STAGE_CLEAR", "STAGE_TRANSITION", "RUN_SUMMARY")
+    ]
+    expected_flow = []
+    for (map_name, cycle, stage), (next_map, next_cycle, next_stage) in zip(
+        GAUNTLET_STAGES, GAUNTLET_STAGES[1:],
+    ):
+        stage_fields = {"map": map_name, "cycle": cycle, "stage": stage}
+        next_fields = {"next_map": next_map, "next_cycle": next_cycle, "next_stage": next_stage}
+        expected_flow.extend((
+            ("STAGE_INIT", stage_fields),
+            ("STAGE_CLEAR", {**stage_fields, **next_fields}),
+            ("STAGE_TRANSITION", {"mode": "solo", **next_fields}),
+        ))
+    nacht = GAUNTLET_STAGES[0][0]
+    wrapped_stage = {"map": nacht, "cycle": "2", "stage": "1"}
+    expected_flow.extend((("STAGE_INIT", wrapped_stage), ("RUN_SUMMARY", wrapped_stage)))
+    for index, (event_type, fields) in enumerate(expected_flow):
+        if index >= len(flow) or not matches(flow[index][1], event_type, **fields):
+            actual = flow[index][1].raw if index < len(flow) else "end of log"
+            errors.append(f"Expected {event_type} with {fields}, got {actual}")
+            return events, errors
+    if len(flow) != len(expected_flow):
+        errors.append(f"Unexpected Gauntlet event after RUN_SUMMARY: {flow[len(expected_flow)][1].raw}")
+
+    run_ids = {event.fields.get("run_id") for _, event in flow if event.event_type == "STAGE_INIT"}
+    if len(run_ids) != 1 or not all(run_ids):
+        errors.append("STAGE_INIT events must share a single nonempty run_id")
+
+    first_init, first_clear = flow[0][0], flow[1][0]
+    seeds = [(index, e) for index, e in enumerate(timeline) if e.event_type == "GAUNTLET_BZ_SEEDED"]
+    if (
+        len(seeds) != 1
+        or not first_init < seeds[0][0] < first_clear
+        or not matches(seeds[0][1], "GAUNTLET_BZ_SEEDED", map=nacht, **{"class": "titan", "weapons": "2"})
+    ):
+        errors.append(f"Expected one GAUNTLET_BZ_SEEDED during Cycle 1 Stage 1 on {nacht}")
+        return events, errors
+
+    players: set[str] = set()
+    for index, (map_name, cycle, stage) in enumerate(GAUNTLET_STAGES):
+        start, end = flow[index * 3][0], flow[index * 3 + 1][0]
+        restored_players: set[str] = set()
+        saved_players: set[str] = set()
+        for position in range(start + 1, end):
+            event = timeline[position]
+            if not isinstance(event, bz.BzEvent) or event.fields.get("map") != map_name:
+                continue
+            player = event.fields.get("player", "")
+            if not player:
+                continue
+            if event.event_type == "GAUNTLET_BZ_RESTORED" and player in players and _has_restored_seed(event):
+                restored_players.add(player)
+            if (
+                event.event_type == "GAUNTLET_BZ_SAVED"
+                and (player in restored_players or index == 0 and position > seeds[0][0])
+                and _has_seeded_perm_and_perks(event.fields.get("perm", ""), event.fields.get("perks", ""))
+                and _has_seeded_weapons(event.fields)
+            ):
+                saved_players.add(player)
+        stage_label = f"{map_name} (Cycle {cycle} Stage {stage})"
+        if index > 0 and not restored_players:
+            errors.append(f"Missing GAUNTLET_BZ_RESTORED with the same player's seeded loadout on {stage_label}")
+            break
+        if index < len(GAUNTLET_STAGES) - 1 and not saved_players:
+            errors.append(f"Missing GAUNTLET_BZ_SAVED with the same player's seeded loadout on {stage_label}")
+            break
+        players = saved_players
+
+    factory_stations = Counter(
+        e.fields.get("station") for e in events if matches(e, "STATION_SPAWN", map="nazi_zombie_factory")
+    )
+    if factory_stations != Counter(("perks", "class", "arsenal")):
+        errors.append("Expected exactly one STATION_SPAWN each for Der Riese perks, class, and arsenal")
+
+    summary_position = flow[len(expected_flow) - 1][0]
     if not any(
-        matches(e, "GAUNTLET_BZ_SEEDED", map=source, **{"class": "titan", "weapons": "2"}) for e in events
+        matches(e, "GAUNTLET_BZ_WIPED", map=nacht, perm_empty="1", perks_empty="1", weapons_empty="1")
+        for e in timeline[summary_position + 1:]
     ):
-        errors.append(f"Missing GAUNTLET_BZ_SEEDED on {source}")
-    saved_players = {
-        e.fields["player"]
-        for e in events
-        if matches(e, "GAUNTLET_BZ_SAVED", map=source)
-        and e.fields.get("player")
-        and _has_seeded_perm_and_perks(e.fields.get("perm", ""), e.fields.get("perks", ""))
-        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
-        and all(
-            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
-            for key, minimum in (("bz_weapons", 2), ("bz_dpap", 1))
-        )
-    }
-    if not saved_players:
-        errors.append(
-            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), "
-            "perks (su,mk), weapons ac:2 and cr:0, bz_weapons>=2, and bz_dpap>=1"
-        )
-    for event_type, fields in (
-        ("STAGE_CLEAR", {"map": source, "next_map": destination}),
-        ("STAGE_TRANSITION", {"next_map": destination}),
-        ("STAGE_INIT", {"map": destination, "stage": "2"}),
-    ):
-        if not any(matches(e, event_type, **fields) for e in gauntlet):
-            errors.append(f"Missing {event_type} for {destination}")
-    if not any(
-        matches(
-            e,
-            "GAUNTLET_BZ_RESTORED",
-            map=destination,
-            **{"class": "titan", "war_club": "1", "pap_war_club": "1", "melee_slot": "war_club"},
-        )
-        and e.fields.get("player") in saved_players
-        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
-        and all(
-            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
-            for key, minimum in (("t1", 2), ("bz_weapons", 2), ("bz_dpap", 1))
-        )
-        for e in events
-    ):
-        errors.append(
-            f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, "
-            "war_club=1, pap_war_club=1, melee_slot=war_club, weapons ac:2 and cr:0, "
-            "bz_weapons>=2, bz_dpap>=1"
-        )
+        errors.append(f"Missing GAUNTLET_BZ_WIPED on {nacht} after RUN_SUMMARY with all three dvars empty")
     return events, errors
 
 
 MAP_SLUGS = ("factory", "prototype", "asylum", "sumpf")
 WEAPON_SLUGS = ("acid", "cryo", "crossbow", "boomerang")
 PORTAL_PHASES = ("portal_active", "portal_post")
+STATION_IDS = ("perks", "class", "arsenal", "pap")
 STATION_MENU_PHASES = ("menu_perks", "menu_class", "menu_arsenal", "menu_pap")
 
 
 def expected_visual_phases(slug: str) -> tuple[str, ...]:
     if slug != "factory":
-        return (
-            f"{slug}_perks_prompt",
-            f"{slug}_class_prompt",
-            f"{slug}_arsenal_prompt",
-            f"{slug}_pap_prompt",
-        )
+        prefixes = ("asylum", "asylum_south") if slug == "asylum" else (slug,)
+        return tuple(f"{prefix}_{station}_prompt" for prefix in prefixes for station in STATION_IDS)
     return (
         "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
         *(f"{weapon}_{state}" for weapon in WEAPON_SLUGS for state in ("idle", "active", "post")),
@@ -278,6 +345,16 @@ def analyze_visual_tour_result(
 
     if len(content_hashes) > 1 and len(set(content_hashes.values())) == 1:
         errors.append("Visual tour appears frozen: all captured frames have identical image content")
+    elif slug == "asylum":
+        north = expected[:len(STATION_IDS)]
+        south = expected[len(STATION_IDS):]
+        for wing, phases in (("north", north), ("south", south)):
+            group = [content_hashes.get(phase) for phase in phases]
+            if all(group) and len(set(group)) == 1:
+                errors.append(f"Visual tour appears frozen in the {wing} wing of Verruckt")
+        for north_phase, south_phase in zip(north, south):
+            if north_phase in content_hashes and content_hashes[north_phase] == content_hashes.get(south_phase):
+                errors.append(f"Visual tour appears frozen: {north_phase} and {south_phase} match")
     elif slug == "factory":
         for weapon in WEAPON_SLUGS:
             group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
@@ -435,7 +512,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--maps", nargs="+", choices=MAP_SLUGS, default=MAP_SLUGS,
                         help="Stock Maps for visual-tour (Co-op runs on factory; Gauntlet starts on prototype).")
     parser.add_argument("--skip-build", action="store_true")
-    parser.add_argument("--timeout", type=float, default=120.0, help="Per-scenario timeout in seconds.")
+    parser.add_argument(
+        "--timeout", type=float, help="Per-scenario timeout in seconds (default: 240 for Gauntlet, 120 elsewhere).",
+    )
     parser.add_argument("--tools-root", type=Path, default=build_mod.DEFAULT_TOOLS_ROOT)
     parser.add_argument("--steam-root", type=Path, default=build_mod.DEFAULT_STEAM_ROOT)
     parser.add_argument("--dev-root", type=Path, default=build_mod.DEFAULT_DEV_ROOT)
@@ -504,6 +583,7 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_test_autoclear", "1"),
                 ("gauntlet_test_target_round", "1"),
                 ("gauntlet_test_banner_delay", "1.0"),
+                ("gauntlet_test_summary_delay", "0.5"),
             ])
 
         result = bz.run_bz_scenario(
@@ -511,7 +591,9 @@ def main(argv: list[str] | None = None) -> int:
             map_name=f"nazi_zombie_{slug}", dvars=dvars, stop_predicate=completion_events,
             analyzer=analyzer, display_num=display_num, xdg_config_home=xdg_tmp.name,
             proton=args.proton, steam_root=args.steam_root, steam_game=args.steam_game,
-            playtest_prefix=args.playtest_prefix, timeout_s=args.timeout, settle_s=0.8,
+            playtest_prefix=args.playtest_prefix,
+            timeout_s=args.timeout if args.timeout is not None else (240.0 if gauntlet else 120.0),
+            settle_s=0.8,
             log_dir=out_dir, observe_log=capture,
             launch_cmd="+map" if gauntlet else "+devmap",
         )
@@ -526,8 +608,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def gauntlet_finished(log_text: str) -> bool:
         return any(
-            e.event_type == "GAUNTLET_BZ_SEED_FAIL"
-            or (e.event_type == "GAUNTLET_BZ_RESTORED" and e.fields.get("map") == "nazi_zombie_asylum")
+            e.event_type in ("GAUNTLET_BZ_SEED_FAIL", "GAUNTLET_BZ_WIPED")
             for e in bz.parse_bz_events(log_text)
         )
 

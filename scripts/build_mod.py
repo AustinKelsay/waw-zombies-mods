@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 MOD_NAME = "waw_gauntlet"
-BZ_BUILD_VERSION = "0.6.0"
+BZ_BUILD_VERSION = "0.7.0"
 BZ_BUILD_COMMIT_RE = re.compile(r"[0-9a-zA-Z_-]+")
 STOCK_MAPS = (
     "nazi_zombie_prototype",

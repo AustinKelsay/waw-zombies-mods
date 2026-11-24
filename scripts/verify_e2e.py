@@ -244,7 +244,7 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         category="engine",
         args=(BZ_COOP_VISUALS_SCRIPT, "--skip-build", "--mode", "enhanced-gauntlet"),
         script_relpath=BZ_COOP_VISUALS_SCRIPT,
-        description="Verify Base Zombies state carries from Nacht der Untoten to Verrückt in Gauntlet.",
+        description="Verify Base Zombies state through four Gauntlet handoffs and Cycle 2 Stage 1 wipe cleanup.",
     ),
     StageSpec(
         stage_id="bz-visual-tour",
