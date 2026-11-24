@@ -263,6 +263,12 @@ bz_precache_element_weapons()
 	}
 }
 
+// Default Mystery Box weight for Phase 2 cloned primaries (mirrors stock default_weighting_func).
+bz_default_box_weight()
+{
+	return 1;
+}
+
 // Registers the 4 zero-FX cloned Phase 2 primaries in level.zombie_weapons with is_in_box = true
 // so the Mystery Box pool includes them whenever bz_elements_enabled == 1. Idempotent.
 bz_register_box_weapons()
@@ -281,6 +287,10 @@ bz_register_box_weapons()
 	{
 		level.zombie_weapons = [];
 	}
+	if ( !IsDefined( level.weapon_weighting_funcs ) )
+	{
+		level.weapon_weighting_funcs = [];
+	}
 
 	ids = maps\_bz_rules::bz_get_element_weapon_ids();
 	weap_csv = "";
@@ -295,14 +305,19 @@ bz_register_box_weapons()
 		}
 		entry = SpawnStruct();
 		entry.weapon_name = weap;
+		entry.weapon_classname = "weapon_" + weap;
 		entry.hint = "Press &&1 for " + disp;
 		entry.cost = 950;
+		entry.ammo_cost = 480;
+		entry.sound = "";
+		entry.variation_count = 0;
 		entry.vox = "";
 		entry.is_in_box = true;
 		// Leave entry.upgrade_name undefined so stock Der Riese can_upgrade_weapon()
 		// never mistakes "" for a valid native upgrade asset and eats the weapon.
 		entry.is_upgraded = false;
 		level.zombie_weapons[weap] = entry;
+		level.weapon_weighting_funcs[weap] = ::bz_default_box_weight;
 
 		if ( IsDefined( level.zombie_include_weapons ) )
 		{
@@ -1940,7 +1955,10 @@ bz_run_test_p2_selftest()
 		if ( IsDefined( level.zombie_weapons ) && IsDefined( level.zombie_weapons[w] ) )
 		{
 			entry = level.zombie_weapons[w];
-			if ( IsDefined( entry.is_in_box ) && entry.is_in_box && !IsDefined( entry.upgrade_name ) )
+			weight_ok = IsDefined( level.weapon_weighting_funcs ) &&
+				IsDefined( level.weapon_weighting_funcs[w] ) &&
+				( [[ level.weapon_weighting_funcs[w] ]]() >= 1 );
+			if ( IsDefined( entry.is_in_box ) && entry.is_in_box && !IsDefined( entry.upgrade_name ) && weight_ok )
 			{
 				box_count = box_count + 1;
 			}
