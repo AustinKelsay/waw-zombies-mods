@@ -1850,19 +1850,58 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertLess(patched.index("player GiveMaxAmmo( weapon_name );"), patched.index(pickup_hook))
         self.assertLess(patched.index(pickup_hook), patched.index("player SwitchToWeapon( weapon_name );"))
 
-        # 4. Also supports weapon_give( upgrade_name ) variant in wait_for_player_to_take()
-        factory_perks_wg = factory_perks.decode("latin1").replace(
-            "\tplayer GiveWeapon( weapon_name );\n\tplayer GiveMaxAmmo( weapon_name );\n",
-            "\tplayer maps\\_zombiemode_weapons::weapon_give( upgrade_name );\n",
+        # 4. Also supports dual-branch wait_for_player_to_take() (weapon_give at cap + GiveMaxAmmo below cap)
+        #    AND level waittill("Pack_A_Punch_on") + stock busy state hooks!
+        factory_perks_dual = (
+            "vending_set_perk( perk )\n"
+            "{\n"
+            "\tif ( primaryWeapons.size >= 2 )\n"
+            "\t{\n"
+            "\t\tself.maxhealth = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "vending_upgrade()\n"
+            "{\n"
+            "\tlevel waittill( \"Pack_A_Punch_on\" );\n"
+            "\tfor( ;; )\n"
+            "\t{\n"
+            "\t\tself waittill( \"trigger\", player );\n"
+            "\t\tcurrent_weapon = player getCurrentWeapon();\n"
+            "\t\tif( !IsDefined( level.zombie_include_weapons[current_weapon] ) || !IsDefined( level.zombie_include_weapons[current_weapon + \"_upgraded\"] ) )\n"
+            "\t\t{\n"
+            "\t\t\tcontinue;\n"
+            "\t\t}\n"
+            "\t\tself disable_trigger();\n"
+            "\t\tself setvisibletoall();\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "wait_for_player_to_take( player, weapon, packa_timer )\n"
+            "{\n"
+            "\tif ( primaries.size >= 2 )\n"
+            "\t{\n"
+            "\t\tplayer maps\\_zombiemode_weapons::weapon_give( weapon+\"_upgraded\" );\n"
+            "\t}\n"
+            "\telse\n"
+            "\t{\n"
+            "\t\tplayer GiveWeapon( weapon+\"_upgraded\" );\n"
+            "\t\tplayer GiveMaxAmmo( weapon+\"_upgraded\" );\n"
+            "\t}\n"
+            "\tplayer SwitchToWeapon( weapon+\"_upgraded\" );\n"
+            "}\n"
         ).encode("latin1")
-        patched_wg = self.bm.inject_zombiemode_perks_hooks(
-            factory_perks_wg,
+        patched_dual = self.bm.inject_zombiemode_perks_hooks(
+            factory_perks_dual,
             rewire_weapons_module="_zombiemode_weapons_bz_factory",
         ).decode("latin1")
-        self.assertIn(
-            "if ( maps\\_bz_hooks::bz_pap_enabled() ) { maps\\_bz_pap::bz_pap_on_native_weapon_taken( player, upgrade_name ); }",
-            patched_wg,
-        )
+        self.assertIn("level.bz_native_pap_unlocked = true;", patched_dual)
+        self.assertIn("self.bz_pap_stock_busy = true;", patched_dual)
+        self.assertIn("self.bz_pap_stock_busy = false;", patched_dual)
+        take_section = patched_dual.split("wait_for_player_to_take", 1)[1]
+        if_part, else_part = take_section.split("else", 1)
+        self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", if_part)
+        self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", else_part)
 
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")

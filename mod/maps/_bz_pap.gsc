@@ -779,6 +779,10 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 			{
 				continue;
 			}
+			if ( maps\_bz_hooks::bz_is_spawning_dog( enemy ) )
+			{
+				continue;
+			}
 			dist = Distance( enemy.origin, center );
 			if ( dist <= radius )
 			{
@@ -1095,6 +1099,58 @@ bz_pap_format_native_prompt_text( player, weapon_name )
 	return "";
 }
 
+bz_pap_player_is_downed( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.is_in_laststand ) && player.is_in_laststand )
+	{
+		return true;
+	}
+	if ( IsDefined( player.in_last_stand ) && player.in_last_stand )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_pap_is_native_console_busy()
+{
+	trig = level.bz_native_pap_trigger;
+	if ( !IsDefined( trig ) )
+	{
+		trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+		if ( IsDefined( trigs ) && trigs.size > 0 && IsDefined( trigs[0] ) )
+		{
+			level.bz_native_pap_trigger = trigs[0];
+			trig = trigs[0];
+		}
+	}
+	if ( !IsDefined( trig ) )
+	{
+		return false;
+	}
+	if ( IsDefined( trig.bz_pap_stock_busy ) && trig.bz_pap_stock_busy )
+	{
+		return true;
+	}
+	if ( IsDefined( trig.bz_pap_busy ) && trig.bz_pap_busy )
+	{
+		return true;
+	}
+	if ( IsDefined( trig.pack_player ) )
+	{
+		return true;
+	}
+	return false;
+}
+
 bz_pap_hide_native_prompt_hud( player )
 {
 	if ( !IsDefined( player ) || !IsDefined( player.bz_pap_prompt_hud ) )
@@ -1117,7 +1173,7 @@ bz_pap_update_native_prompt_hud( player )
 		bz_pap_hide_native_prompt_hud( player );
 		return;
 	}
-	if ( !IsAlive( player ) || !IsDefined( player.origin ) || !bz_pap_is_native_console_unlocked() )
+	if ( !IsAlive( player ) || bz_pap_player_is_downed( player ) || !IsDefined( player.origin ) || !bz_pap_is_native_console_unlocked() || bz_pap_is_native_console_busy() )
 	{
 		bz_pap_hide_native_prompt_hud( player );
 		return;

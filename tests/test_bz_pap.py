@@ -1262,6 +1262,50 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
         self.assertEqual(prompt1.get_field("alpha"), 0)
         self.assertEqual(prompt2.get_field("alpha"), 1)
 
+        # Last stand hides P2's prompt immediately; reviving restores it
+        p2.set_field("revivetrigger", PapFakeEntity("revive", ent_num=93, is_player=False))
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(prompt2.get_field("alpha"), 0)
+        p2.set_field("revivetrigger", UNDEFINED)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(prompt2.get_field("alpha"), 1)
+
+        # Stock Tier 1 intake/pickup busy state hides prompt for all players; clearing restores it
+        trig.set_field("bz_pap_stock_busy", True)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(prompt2.get_field("alpha"), 0)
+        trig.set_field("bz_pap_stock_busy", False)
+        gsc.call(BZ_PAP_MOD, "bz_pap_update_native_prompt_hud", p2)
+        self.assertEqual(prompt2.get_field("alpha"), 1)
+
+        # PaP Cluster radial blast skips shielded spawning Hellhounds AND protects through 100ms pre-Show() grace window
+        dog_spawning = PapFakeEntity("SpawningDog", ent_num=96, is_player=False)
+        dog_spawning.set_field("health", 100000000)
+        dog_spawning.set_field("origin", GscArray([80, 0, 0]))
+        dog_spawning.set_field("animname", "zombie_dog")
+        dog_spawning.set_field("ignoreall", True)
+        dog_spawning.set_field("magic_bullet_shield", True)
+        gsc.ai_enemies.append(dog_spawning)
+        gsc.sim_time_ms = 5000
+        self.assertEqual(
+            gsc.call(BZ_PAP_MOD, "bz_pap_apply_radial_blast", p2, GscArray([0, 0, 0]), 120, 100, 0, True),
+            0,
+        )
+        # Simulate dog_spawn_fx() clearing ignoreall + shield, waiting 100ms before Show()
+        dog_spawning.set_field("ignoreall", False)
+        dog_spawning.set_field("magic_bullet_shield", False)
+        gsc.sim_time_ms = 5100
+        self.assertEqual(
+            gsc.call(BZ_PAP_MOD, "bz_pap_apply_radial_blast", p2, GscArray([0, 0, 0]), 120, 100, 0, True),
+            0,
+        )
+        # After 250ms grace window expires (dog is shown & active), blast hits normally
+        gsc.sim_time_ms = 5300
+        self.assertEqual(
+            gsc.call(BZ_PAP_MOD, "bz_pap_apply_radial_blast", p2, GscArray([0, 0, 0]), 120, 100, 0, True),
+            1,
+        )
+
         # Disconnect destroys P1's HUDs (badge + prompt) without affecting P2; end_game cleans up P2 cleanly
         gsc.call(BZ_PAP_MOD, "bz_pap_destroy_player_hud", p1)
         self.assertTrue(prompt1.destroyed)

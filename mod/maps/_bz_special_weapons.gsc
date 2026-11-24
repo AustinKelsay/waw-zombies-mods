@@ -327,7 +327,7 @@ bz_special_war_club_stagger_timer( stagger_sec, expected_until )
 
 bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 {
-	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( zombie.origin ) || bz_special_is_hidden_spawning_dog( zombie ) )
+	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( zombie.origin ) || maps\_bz_hooks::bz_is_dog_entity( zombie ) )
 	{
 		return false;
 	}

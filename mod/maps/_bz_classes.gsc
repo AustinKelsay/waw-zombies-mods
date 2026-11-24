@@ -2090,17 +2090,17 @@ bz_assassin_ghost_tick( player )
 	}
 	hspeed_sq = ( vx * vx ) + ( vy * vy );
 
-	// Active only while actively moving into contact (horizontal speed >= 30 u/s)
-	if ( hspeed_sq < 900.0 || !IsDefined( player.origin ) )
+	// Active only while moving purposefully into contact (horizontal speed >= 40 u/s)
+	if ( hspeed_sq < 1600.0 || !IsDefined( player.origin ) )
 	{
 		bz_assassin_restore_all_zombies( player );
 		return 0;
 	}
 
 	ghost_radius = 42;
-	release_radius = 54;
+	release_radius = 42;
 
-	// First restore any previously ghosted zombies that died or exited range
+	// First restore any previously ghosted zombies that died or exited contact radius (> 42u)
 	kept = [];
 	for ( i = 0; i < player.bz_ghost_zombies.size; i++ )
 	{
@@ -2119,7 +2119,7 @@ bz_assassin_ghost_tick( player )
 	}
 	player.bz_ghost_zombies = kept;
 
-	// Ghost contact-range alive zombies via safe SetContents(0) (skipping Hellhounds)
+	// Ghost contact-range alive zombies only when moving toward them (skipping Hellhounds)
 	zombies = bz_class_get_zombies_safe();
 	for ( i = 0; i < zombies.size; i++ )
 	{
@@ -2132,9 +2132,16 @@ bz_assassin_ghost_tick( player )
 		{
 			continue;
 		}
-		if ( Distance( player.origin, z.origin ) <= ghost_radius )
+		dist = Distance( player.origin, z.origin );
+		if ( dist <= ghost_radius )
 		{
-			bz_assassin_acquire_ghost_on_zombie( player, z );
+			dx = z.origin[0] - player.origin[0];
+			dy = z.origin[1] - player.origin[1];
+			toward_dot = ( vx * dx ) + ( vy * dy );
+			if ( toward_dot > 0.0 || dist <= 16.0 )
+			{
+				bz_assassin_acquire_ghost_on_zombie( player, z );
+			}
 		}
 	}
 

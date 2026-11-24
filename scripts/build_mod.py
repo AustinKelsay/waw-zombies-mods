@@ -117,11 +117,19 @@ VENDING_UPGRADE_DEF_RE = re.compile(
     re.MULTILINE,
 )
 PAP_FLAG_WAIT_RE = re.compile(
-    r'^(?P<indent>[ \t]*)flag_wait[ \t]*\([ \t]*"Pack_A_Punch_on"[ \t]*\);(?P<trailing>[ \t]*)\r?$',
+    r'^(?P<indent>[ \t]*)(?:flag_wait|level[ \t]+waittill)[ \t]*\([ \t]*"Pack_A_Punch_on"[ \t]*\);(?P<trailing>[ \t]*)\r?$',
     re.MULTILINE | re.IGNORECASE,
 )
 PAP_UPGRADE_GUARD_RE = re.compile(
     r'^(?P<indent>[ \t]*)if[ \t]*\([ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\][ \t]*\)[ \t]*\|\|[ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\+[ \t]*"_upgraded"[ \t]*\][ \t]*\)[ \t]*\)(?P<trailing>[ \t]*)\r?$',
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_STOCK_BUSY_START_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+(?:disable_trigger\([ \t]*\)|SetHintString[ \t]*\([ \t]*&\"ZOMBIE_GET_UPGRADED\"[ \t]*\));(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_STOCK_BUSY_END_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+(?:setvisibletoall\([ \t]*\)|enable_trigger\([ \t]*\));(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE | re.IGNORECASE,
 )
 WAIT_FOR_PLAYER_TAKE_DEF_RE = re.compile(
@@ -319,6 +327,8 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "displayName": "Blade Boomerang",
             "inventoryType": "primary",
             "weaponType": "bullet",
+            "weaponClass": "pistol",
+            "shotCount": "1",
             "fireType": "Single Shot",
             "ammoName": "bz_blade",
             "clipName": "bz_blade",
@@ -828,10 +838,34 @@ def inject_zombiemode_perks_hooks(
                 "Could not locate zombie_include_weapons upgrade guard inside vending_upgrade() "
                 "in _zombiemode_perks.gsc"
             )
+
+        def _inject_busy_start(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ self.bz_pap_stock_busy = true; }}{ending}"
+            )
+
+        def _inject_busy_end(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ self.bz_pap_stock_busy = false; }}{ending}"
+            )
+
+        vu_body = PAP_STOCK_BUSY_START_RE.sub(_inject_busy_start, vu_body)
+        vu_body = PAP_STOCK_BUSY_END_RE.sub(_inject_busy_end, vu_body)
         text = text[: vu_match.start()] + vu_body + text[vu_end:]
 
-        # Hook wait_for_player_to_take() right after GiveMaxAmmo / GiveWeapon / weapon_give
-        # so picking up a native *_upgraded weapon refreshes reserve ammo & HUD immediately.
+        # Hook wait_for_player_to_take() across ALL pickup branches (weapon_give at cap AND
+        # GiveMaxAmmo/GiveWeapon below cap) so picking up a native *_upgraded weapon refreshes
+        # reserve ammo & HUD regardless of current primary weapon count.
         take_match = WAIT_FOR_PLAYER_TAKE_DEF_RE.search(text)
         if take_match is not None:
             next_take_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=take_match.end())
@@ -850,15 +884,12 @@ def inject_zombiemode_perks_hooks(
                     f"{{ maps\\_bz_pap::bz_pap_on_native_weapon_taken( {ent}, {weap} ); }}{ending}"
                 )
 
-            take_hits = 0
-            for take_re in (
-                PAP_TAKE_GIVE_MAX_AMMO_RE,
-                PAP_TAKE_GIVE_WEAPON_RE,
-                PAP_TAKE_WEAPON_GIVE_RE,
-            ):
-                take_body, take_hits = take_re.subn(_inject_after_take, take_body)
-                if take_hits > 0:
-                    break
+            take_body, wg_hits = PAP_TAKE_WEAPON_GIVE_RE.subn(_inject_after_take, take_body)
+            take_body, gma_hits = PAP_TAKE_GIVE_MAX_AMMO_RE.subn(_inject_after_take, take_body)
+            gw_hits = 0
+            if gma_hits == 0:
+                take_body, gw_hits = PAP_TAKE_GIVE_WEAPON_RE.subn(_inject_after_take, take_body)
+            take_hits = wg_hits + gma_hits + gw_hits
             if take_hits == 0:
                 raise ValueError(
                     "Could not locate GiveMaxAmmo/GiveWeapon/weapon_give inside "

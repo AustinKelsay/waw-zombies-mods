@@ -1483,13 +1483,14 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         self.assertFalse(pushed)
         self.assertEqual(dog_spawning.origin_history, [])
 
-        # PaP War Club smash skips hidden spawning dog, hits & knocks back active dog
+        # PaP War Club smash skips hidden spawning dog; damages active dog with 0.55 stagger floor and ZERO ForceTeleport
         gsc.call(BZ_SPECIAL_MOD, "bz_special_war_club_smash", p1, UNDEFINED, GscArray([80.0, 0.0, 0.0]), True, 500)
         self.assertEqual(dog_spawning.damage_events, [])
         self.assertEqual(dog_spawning.origin_history, [])
         self.assertIs(dog_spawning.get_field("bz_war_club_staggered"), UNDEFINED)
         self.assertEqual(len(dog_active.damage_events), 1)
-        self.assertGreater(len(dog_active.origin_history), 0)
+        self.assertEqual(dog_active.origin_history, [])
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.55)
 
         # Multi-Crossbow detonation skips hidden spawning dog
         bolt = SpecialFakeEntity("DogBolt", ent_num=97, is_player=False)

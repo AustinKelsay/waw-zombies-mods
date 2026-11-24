@@ -533,6 +533,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             self.assertEqual(xbow["fireTime"], "0.60")
 
             blade = staged_pairs["bz_blade_boomerang"]
+            self.assertEqual(blade["weaponClass"], "pistol")
+            self.assertEqual(blade["shotCount"], "1")
             self.assertEqual(blade["fireType"], "Single Shot")
             self.assertEqual(blade["reloadTime"], "0.45")
             self.assertEqual(blade["reloadEmptyTime"], "0.45")

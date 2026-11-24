@@ -1626,11 +1626,21 @@ bz_is_spawning_dog( ent )
 	{
 		return false;
 	}
-	if ( IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
+	if ( IsDefined( ent.bz_spawning_dog ) && ent.bz_spawning_dog )
 	{
 		return true;
 	}
+	if ( IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
+	{
+		ent.bz_dog_spawn_grace_until = GetTime() + 250;
+		return true;
+	}
 	if ( IsDefined( ent.magic_bullet_shield ) && ent.magic_bullet_shield )
+	{
+		ent.bz_dog_spawn_grace_until = GetTime() + 250;
+		return true;
+	}
+	if ( IsDefined( ent.bz_dog_spawn_grace_until ) && GetTime() < Int( ent.bz_dog_spawn_grace_until ) )
 	{
 		return true;
 	}
@@ -2031,46 +2041,94 @@ bz_run_test_selftest()
 	live_score_delta = Int( p.score ) - score_before_live;
 	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
 
-	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP (via native console on Der Riese) + PaP Bowie + PaP Cluster
-	native_trig = undefined;
+	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP (via real native vending_upgrade trigger on Der Riese) + PaP Bowie + PaP Cluster
+	cur_w = "";
 	if ( map_name == "nazi_zombie_factory" )
 	{
+		native_trig = undefined;
 		pap_trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
 		if ( IsDefined( pap_trigs ) && pap_trigs.size > 0 )
 		{
 			native_trig = pap_trigs[0];
 		}
+
+		// Unlock real stock vending_upgrade() thread and verify build-injected unlock flag fires
+		if ( !IsDefined( level.flag ) )
+		{
+			level.flag = [];
+		}
+		level.flag["Pack_A_Punch_on"] = true;
+		level notify( "Pack_A_Punch_on" );
+		wait( 0.15 );
+		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlocked ) && level.bz_native_pap_unlocked, "pap_native_unlock_hook" );
+
 		base_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
 		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )
 		{
 			base_fallthrough = !maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
 			bz_selftest_check( st, base_fallthrough, "pap_native_base_fallthrough" );
 		}
-	}
 
-	bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
-	cur_w = "";
-	w_wait = 0.0;
-	while ( w_wait < 2.0 )
-	{
-		cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
-		if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
+		// Equip a real native upgraded weapon & run pickup sync, then exercise the LIVE vending_upgrade() trigger for Double PaP
+		upg_w = "";
+		if ( base_w != "" && IsDefined( level.zombie_weapons ) && IsDefined( level.zombie_weapons[base_w] ) && IsDefined( level.zombie_weapons[base_w].upgrade_name ) )
 		{
-			break;
+			upg_w = level.zombie_weapons[base_w].upgrade_name;
 		}
-		wait( 0.1 );
-		w_wait = w_wait + 0.1;
-	}
-	bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
+		if ( upg_w == "" )
+		{
+			upg_w = "zombie_colt_upgraded";
+		}
+		p GiveWeapon( upg_w );
+		p GiveMaxAmmo( upg_w );
+		maps\_bz_pap::bz_pap_on_native_weapon_taken( p, upg_w );
+		p SwitchToWeapon( upg_w );
+		w_wait = 0.0;
+		while ( w_wait < 2.0 )
+		{
+			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			if ( cur_w == upg_w && !p IsSwitchingWeapons() )
+			{
+				break;
+			}
+			wait( 0.05 );
+			w_wait = w_wait + 0.05;
+		}
+		bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
 
-	if ( map_name == "nazi_zombie_factory" )
-	{
 		p.bz_pap_console_next_ms = 0;
-		native_dpap_ok = maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, cur_w, undefined, undefined );
-		bz_selftest_check( st, native_dpap_ok && maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double_native_console" );
+		dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
+		score_before_dpap = Int( p.score );
+		if ( IsDefined( native_trig ) )
+		{
+			native_trig notify( "trigger", p );
+		}
+		dpap_wait = 0.0;
+		while ( dpap_wait < 1.0 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) )
+		{
+			wait( 0.05 );
+			dpap_wait = dpap_wait + 0.05;
+		}
+		native_dpap_ok = maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) &&
+			Int( p.score ) == ( score_before_dpap - dpap_cost );
+		bz_selftest_check( st, native_dpap_ok, "pap_double_native_console" );
 	}
 	else
 	{
+		bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
+		w_wait = 0.0;
+		while ( w_wait < 2.0 )
+		{
+			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
+			{
+				break;
+			}
+			wait( 0.1 );
+			w_wait = w_wait + 0.1;
+		}
+		bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
+
 		bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
 		bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
 	}

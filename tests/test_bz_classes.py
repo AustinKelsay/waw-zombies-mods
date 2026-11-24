@@ -1046,7 +1046,7 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:assassin")
         self.p2.set_origin(50, 0, 64)
         self.p1.set_velocity(200, 0, 0)
-        self.p2.set_velocity(200, 0, 0)
+        self.p2.set_velocity(-200, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p2)
         self.assertEqual(z_close.contents, 0)
@@ -1063,7 +1063,7 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:assassin")
         self.p1.set_origin(0, 0, 64)
 
-        z_contact = ClassFakeEntity("ZContact", ent_num=60, is_player=False, origin=(42, 0, 64))
+        z_contact = ClassFakeEntity("ZContact", ent_num=60, is_player=False, origin=(40, 0, 64))
         z_contact.set_field("health", 1000)
         z_mid_48 = ClassFakeEntity("ZMid48", ent_num=61, is_player=False, origin=(48, 0, 64))
         z_mid_48.set_field("health", 1000)
@@ -1080,14 +1080,19 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         orig_contents = z_contact.contents
         self.gsc.zombies.extend([z_contact, z_mid_48, z_mid_64, z_mid_96, dog_contact])
 
-        # 1. Slow ADS strafe (25 u/s < 30 u/s) must NOT trigger ghosting even at contact range
-        self.p1.set_velocity(25, 0, 0)
+        # 1. Slow ADS strafe (35 u/s < 40 u/s) must NOT trigger ghosting even at contact range
+        self.p1.set_velocity(35, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
         self.assertEqual(z_contact.contents, orig_contents)
         self.assertEqual(dog_contact.contents, orig_contents)
 
-        # 2. Active movement (>= 30 u/s): ONLY zombie <= 42u is ghosted; 48u/64u/96u & Hellhound stay solid!
-        self.p1.set_velocity(35, 0, 0)
+        # 1b. Moving AWAY from zombie at >= 40 u/s must NOT acquire ghosting
+        self.p1.set_velocity(-120, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+
+        # 2. Moving TOWARD zombie (>= 40 u/s): ONLY zombie <= 42u is ghosted; 48u/64u/96u & Hellhound stay solid!
+        self.p1.set_velocity(120, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
         self.assertEqual(z_contact.contents, 0)
         self.assertEqual(z_mid_48.contents, orig_contents)
@@ -1099,12 +1104,9 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_acquire_ghost_on_zombie", self.p1, dog_contact)
         self.assertEqual(dog_contact.contents, orig_contents)
 
-        # 3. Hysteresis: at 50u (<= 54u release radius) stays ghosted; at 56u (> 54u) restores immediately!
-        z_contact.set_origin(50, 0, 64)
-        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
-        self.assertEqual(z_contact.contents, 0)
-
-        z_contact.set_origin(56, 0, 64)
+        # 3. Immediate release outside 42u contact radius (e.g. backing away to 50u restores bullet collision!)
+        self.p1.set_origin(-10, 0, 64)
+        self.p1.set_velocity(-200, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
         self.assertEqual(z_contact.contents, orig_contents)
 
