@@ -825,6 +825,31 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
         )
 
     text = WALL_AMMO_GIVEN_RE.sub(_inject_wall_ammo, text)
+
+    # Normalize Elemental weapon reserves after Mystery Box GiveMaxAmmo() calls
+    # (Elemental weaponfiles use maxAmmo = 3x base so Double PaP + Double Ammo fits;
+    # base box pulls must normalize to 1x/1.5x/2x/3x behind the elements gate).
+    box_give_match = re.search(r"^treasure_chest_give_weapon\([^)]*\)[ \t]*\r?\n\{", text, re.MULTILINE)
+    if box_give_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=box_give_match.end())
+        box_give_end = next_fn.start() if next_fn is not None else len(text)
+        box_give_body = text[box_give_match.start() : box_give_end]
+
+        def _inject_box_element_ammo(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            ent = match.group("ent")
+            weap = match.group("weap").strip()
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_elements_enabled() ) "
+                f"{{ maps\\_bz_stations::bz_stations_normalize_box_element_ammo( {ent}, {weap} ); }}{ending}"
+            )
+
+        box_give_body = PAP_TAKE_GIVE_MAX_AMMO_RE.sub(_inject_box_element_ammo, box_give_body)
+        text = text[: box_give_match.start()] + box_give_body + text[box_give_end:]
+
     return text.encode("latin1")
 
 

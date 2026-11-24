@@ -2411,6 +2411,25 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn(f"level.bz_powerup_drop_fn = maps\\{mod_name}::powerup_drop;", patched_map)
             self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { level.bz_powerups_hooked = true; }", patched_map)
 
+    def test_mystery_box_give_weapon_normalizes_elemental_ammo_behind_gate(self) -> None:
+        stock_src = (
+            b"treasure_chest_give_weapon( weapon_string )\n{\n"
+            b"\tif ( self HasWeapon( weapon_string ) )\n\t{\n"
+            b"\t\tself GiveMaxAmmo( weapon_string );\n"
+            b"\t\tself SwitchToWeapon( weapon_string );\n"
+            b"\t\treturn;\n\t}\n"
+            b"\tif ( primaryWeapons.size >= 2 )\n\t{\n\t\tself TakeWeapon( current_weapon );\n\t}\n"
+            b"\tself GiveWeapon( weapon_string, 0 );\n"
+            b"\tself GiveMaxAmmo( weapon_string );\n"
+            b"\tself SwitchToWeapon( weapon_string );\n}\n"
+        )
+        patched = self.bm.inject_zombiemode_weapons_hooks(stock_src).decode("latin1")
+        hook = (
+            "if ( maps\\_bz_hooks::bz_elements_enabled() ) "
+            "{ maps\\_bz_stations::bz_stations_normalize_box_element_ammo( self, weapon_string ); }"
+        )
+        self.assertEqual(patched.count(hook), 2)
+
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory
         from unittest.mock import patch

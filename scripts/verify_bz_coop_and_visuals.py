@@ -199,7 +199,7 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
             if event.event_type == "GAUNTLET_BZ_RESTORED" and player in players and _has_restored_seed(event):
                 restored_players.add(player)
                 restored_pos[player] = position
-                restored_labels[player] = event.fields.get("label") or player
+                restored_labels[player] = event.fields.get("label", "")
             if event.event_type == "GAUNTLET_BZ_SAVED" and (
                 player in restored_players or (index == 0 and position > seeds[0][0])
             ):

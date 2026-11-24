@@ -847,7 +847,11 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		return 0;
 	}
 
-	max_stock = Int( WeaponMaxAmmo( weap ) );
+	max_stock = maps\_bz_rules::bz_get_element_base_reserve( weap );
+	if ( !IsDefined( max_stock ) || Int( max_stock ) <= 0 )
+	{
+		max_stock = Int( WeaponMaxAmmo( weap ) );
+	}
 	if ( max_stock <= 0 )
 	{
 		return 0;

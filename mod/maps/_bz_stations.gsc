@@ -1664,6 +1664,19 @@ bz_stations_refill_element_ammo( player, weap_name )
 	player.bz_pap_target_stock[weap_name] = target_stock;
 }
 
+bz_stations_normalize_box_element_ammo( player, weap_name )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsDefined( weap_name ) )
+	{
+		return;
+	}
+	rules = bz_stations_get_rules_api();
+	if ( [[ rules.bz_get_element_base_reserve ]]( weap_name ) > 0 )
+	{
+		bz_stations_refill_element_ammo( player, weap_name );
+	}
+}
+
 bz_stations_try_buy_element_ammo( player, item_id, weap_name )
 {
 	score = bz_state_get_score_safe( player );

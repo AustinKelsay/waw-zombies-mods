@@ -211,6 +211,12 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
         _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(before_restore))
         self.assertTrue(any("PAP_DOUBLE_UPGRADE" in err for err in errors), errors)
 
+        for label_replacement in ("", ";label="):
+            missing_label = list(lines)
+            missing_label[restore_idx] = missing_label[restore_idx].replace(";label=host", label_replacement)
+            _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(missing_label))
+            self.assertTrue(any("PAP_DOUBLE_UPGRADE" in err for err in errors), errors)
+
     def test_restore_telemetry_reports_applied_state_when_destination_gates_disabled(self) -> None:
         dvars = FakeDvarStore()
         dvars.set("bz_enabled", "1")
