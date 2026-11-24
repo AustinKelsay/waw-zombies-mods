@@ -525,9 +525,17 @@ def inject_map_hooks(
     line_ending = "\r" if match.group(0).endswith("\r") else ""
     zm_mod = zombiemode_module_for_map(map_name)
     rewired_line = f"{indent}maps\\{zm_mod}::main({args});{trailing}"
+    coop_dog_hook = ""
+    if map_name == "nazi_zombie_factory" and rewire_dogs_module:
+        # Keep the factory-only stock script dependency out of the shared BZ hooks.
+        coop_dog_hook = (
+            f'{indent}if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_coop_selftest" ) == 1 ) '
+            f"{{ level.bz_test_coop_spawn_dog = maps\\{rewire_dogs_module}::special_dog_spawn; }}{newline}"
+        )
     replacement = (
         f"{indent}{PRE_HOOK_CALL}{newline}"
         f"{indent}{BZ_PRE_HOOK_CALL}{newline}"
+        f"{coop_dog_hook}"
         f"{rewired_line}{newline}"
         f"{indent}{POST_HOOK_CALL}{newline}"
         f"{indent}{BZ_POST_HOOK_CALL}{line_ending}"

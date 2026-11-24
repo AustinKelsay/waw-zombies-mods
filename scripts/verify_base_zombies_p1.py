@@ -239,6 +239,8 @@ def run_bz_scenario(
     playtest_prefix: Path,
     timeout_s: float,
     settle_s: float = 2.0,
+    log_dir: Path = DEFAULT_LOG_DIR,
+    observe_log: Callable[[str], None] | None = None,
 ) -> BzScenarioResult:
     """Launch CoDWaW.exe via Proton + Xvfb, collect console.log, tear down wineserver cleanly."""
     appdata = (
@@ -322,6 +324,8 @@ def run_bz_scenario(
                 if len(log_text) != last_log_len:
                     last_log_len = len(log_text)
                     last_log_growth_at = now
+                    if observe_log is not None:
+                        observe_log(log_text)
 
                 if any(pat.search(log_text) for _, pat in smoke_verify.FATAL_LOG_PATTERNS):
                     break
@@ -363,7 +367,7 @@ def run_bz_scenario(
                     timed_out = True
                     break
 
-                time.sleep(0.4)
+                time.sleep(0.05 if observe_log is not None else 0.4)
         finally:
             if proc.poll() is None:
                 try:
@@ -389,8 +393,8 @@ def run_bz_scenario(
             break
 
     duration_s = time.monotonic() - t0
-    DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    saved_log = DEFAULT_LOG_DIR / log_filename
+    log_dir.mkdir(parents=True, exist_ok=True)
+    saved_log = log_dir / log_filename
     saved_log.write_text(log_text, encoding="utf-8", errors="replace")
 
     events, errors = analyzer(log_text)

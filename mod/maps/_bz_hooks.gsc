@@ -448,6 +448,19 @@ bz_init()
 	{
 		level thread bz_run_test_p2_selftest();
 	}
+	if ( bz_enabled() && GetDvarInt( "bz_test_coop_selftest" ) == 1 )
+	{
+		level thread bz_run_coop_selftest();
+	}
+	if ( bz_enabled() && GetDvarInt( "bz_test_visual_tour" ) == 1 )
+	{
+		level thread bz_run_visual_tour();
+	}
+	if ( bz_enabled() && GetDvarInt( "bz_test_gauntlet_seed" ) == 1 &&
+		GetDvarInt( "gauntlet_enabled" ) == 1 && bz_get_map_name() == "nazi_zombie_prototype" )
+	{
+		level thread bz_run_gauntlet_seed();
+	}
 }
 
 bz_watch_connecting_players()
@@ -2686,4 +2699,503 @@ bz_run_test_p2_selftest()
 		ffields[3] = maps\_bz_log::kv( "reasons", st.fail_list );
 		maps\_bz_log::emit( "BZ_P2_SELFTEST_FAIL", maps\_bz_log::join_fields( ffields ) );
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Gated Co-op, Visual Tour, and Enhanced Gauntlet Live Verification
+// ---------------------------------------------------------------------------
+
+bz_test_get_spawned_host()
+{
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		p = players[i];
+		if ( IsDefined( p ) && p GetEntityNumber() == 0 && IsAlive( p ) &&
+			IsDefined( p.bz_build_parity_announced ) && p.bz_build_parity_announced )
+		{
+			return p;
+		}
+	}
+	return undefined;
+}
+
+bz_test_unlock_native_pap()
+{
+	if ( !IsDefined( level.flag ) )
+	{
+		level.flag = [];
+	}
+	level.flag["Pack_A_Punch_on"] = true;
+	level notify( "Pack_A_Punch_on" );
+	trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+	if ( trigs.size > 0 )
+	{
+		return trigs[0];
+	}
+	return undefined;
+}
+
+bz_test_equip_native_pap_colt( p )
+{
+	weap = "zombie_colt_upgraded";
+	p GiveWeapon( weap );
+	p GiveMaxAmmo( weap );
+	maps\_bz_pap::bz_pap_on_native_weapon_taken( p, weap );
+	p SwitchToWeapon( weap );
+}
+
+bz_test_same_value( before, after )
+{
+	if ( !IsDefined( before ) || !IsDefined( after ) )
+	{
+		return !IsDefined( before ) && !IsDefined( after );
+	}
+	return before == after;
+}
+
+bz_test_check_native_prompt( st, p, native_trig )
+{
+	stock_busy = native_trig.bz_pap_stock_busy;
+	bz_busy = native_trig.bz_pap_busy;
+	pack_player = native_trig.pack_player;
+	origin = native_trig.origin;
+
+	maps\_bz_pap::bz_pap_update_native_prompt_hud( p );
+	bz_selftest_check( st, IsDefined( p.bz_pap_prompt_hud ) && p.bz_pap_prompt_hud.alpha == 1, "native_prompt_visible" );
+	stock_unchanged = bz_test_same_value( stock_busy, native_trig.bz_pap_stock_busy );
+
+	native_trig.bz_pap_stock_busy = true;
+	maps\_bz_pap::bz_pap_update_native_prompt_hud( p );
+	bz_selftest_check( st, IsDefined( p.bz_pap_prompt_hud ) && p.bz_pap_prompt_hud.alpha == 0, "native_prompt_hides_while_busy" );
+	stock_unchanged = stock_unchanged && bz_test_same_value( true, native_trig.bz_pap_stock_busy );
+
+	native_trig.bz_pap_stock_busy = false;
+	maps\_bz_pap::bz_pap_update_native_prompt_hud( p );
+	bz_selftest_check( st, IsDefined( p.bz_pap_prompt_hud ) && p.bz_pap_prompt_hud.alpha == 1, "native_prompt_restored" );
+	stock_unchanged = stock_unchanged && bz_test_same_value( false, native_trig.bz_pap_stock_busy );
+
+	bz_selftest_check( st, stock_unchanged && Distance( origin, native_trig.origin ) == 0 &&
+		bz_test_same_value( bz_busy, native_trig.bz_pap_busy ) &&
+		bz_test_same_value( pack_player, native_trig.pack_player ), "shared_native_trigger_unchanged" );
+	native_trig.bz_pap_stock_busy = stock_busy;
+}
+
+bz_test_find_active_dog()
+{
+	dogs = GetAiSpeciesArray( "axis", "dog" );
+	for ( i = 0; i < dogs.size; i++ )
+	{
+		dog = dogs[i];
+		if ( IsDefined( dog ) && IsAlive( dog ) && !bz_is_spawning_dog( dog ) )
+		{
+			return dog;
+		}
+	}
+	dogs = GetEntArray( "zombie_dog", "targetname" );
+	for ( i = 0; i < dogs.size; i++ )
+	{
+		dog = dogs[i];
+		if ( IsDefined( dog ) && IsAlive( dog ) && !bz_is_spawning_dog( dog ) )
+		{
+			return dog;
+		}
+	}
+	return undefined;
+}
+
+bz_test_check_dog_protection( st, p, dog )
+{
+	if ( !bz_selftest_check( st, bz_is_dog_entity( dog ), "hellhound_identified" ) )
+	{
+		return 0;
+	}
+	rate_before = dog.moveplaybackrate;
+	base_rate_before = dog.bz_base_moveplaybackrate;
+	ignore_before = dog.ignoreall;
+	frozen_before = dog.bz_is_frozen;
+	frozen_until_before = dog.bz_cryo_frozen_until;
+	stunned_before = dog.bz_stunned;
+
+	dog.bz_is_frozen = true;
+	dog.bz_cryo_frozen_until = GetTime() + 1000;
+	rate = bz_recompute_zombie_move_rate( dog );
+	bz_selftest_check( st, rate >= 0.55 && dog.moveplaybackrate >= 0.55, "hellhound_cryo_rate_floor" );
+	bz_selftest_check( st, !IsDefined( dog.ignoreall ) || !dog.ignoreall, "hellhound_not_ignored" );
+	dog_origin = dog.origin;
+	pushed = maps\_bz_special_weapons::bz_special_push_zombie_safely( dog, p.origin, ( 1, 0, 0 ), 64 );
+	bz_selftest_check( st, !pushed && Distance( dog_origin, dog.origin ) == 0, "hellhound_push_refused" );
+
+	dog.bz_is_frozen = frozen_before;
+	dog.bz_cryo_frozen_until = frozen_until_before;
+	dog.bz_stunned = stunned_before;
+	dog.bz_base_moveplaybackrate = base_rate_before;
+	if ( IsDefined( ignore_before ) )
+	{
+		dog.ignoreall = ignore_before;
+	}
+	if ( IsDefined( rate_before ) )
+	{
+		dog.moveplaybackrate = rate_before;
+	}
+	return rate;
+}
+
+bz_run_coop_selftest()
+{
+	if ( !bz_enabled() || GetDvarInt( "bz_test_coop_selftest" ) != 1 )
+	{
+		return;
+	}
+	level endon( "end_game" );
+	map_name = bz_get_map_name();
+	st = SpawnStruct();
+	st.passed = 0;
+	st.failed = 0;
+	st.fail_list = "";
+
+	p = bz_test_get_spawned_host();
+	for ( tries = 0; tries < 80 && !IsDefined( p ); tries++ )
+	{
+		wait( 0.25 );
+		p = bz_test_get_spawned_host();
+	}
+
+	build_id = GetDvar( "bz_build_id" );
+	dog_rate = 0;
+	bz_selftest_check( st, build_id != "" && build_id == maps\_bz_version::bz_get_build_id(), "build_parity" );
+	if ( bz_selftest_check( st, IsDefined( p ), "spawned_host" ) &&
+		bz_selftest_check( st, map_name == "nazi_zombie_factory", "factory_map" ) )
+	{
+		wait( 1.5 );
+		if ( !IsDefined( p ) )
+		{
+			return;
+		}
+		p endon( "disconnect" );
+		p.maxhealth = 99999;
+		p.health = 99999;
+		p.score = 50000;
+		native_trig = bz_test_unlock_native_pap();
+		wait( 0.15 );
+		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlock_hook_fired ) &&
+			level.bz_native_pap_unlock_hook_fired, "native_pap_unlock_hook" );
+
+		bz_test_equip_native_pap_colt( p );
+		cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		for ( tries = 0; tries < 40 && ( cur_w != "zombie_colt_upgraded" || p IsSwitchingWeapons() ); tries++ )
+		{
+			wait( 0.05 );
+			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		}
+		bz_selftest_check( st, cur_w == "zombie_colt_upgraded" && !p IsSwitchingWeapons(), "native_pap_colt_equipped" );
+		p SetOrigin( ( -61, 515, 153 ) );
+
+		if ( bz_selftest_check( st, IsDefined( native_trig ), "native_pap_trigger_found" ) )
+		{
+			bz_test_check_native_prompt( st, p, native_trig );
+			native_trig notify( "trigger", p );
+			for ( tries = 0; tries < 20 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ); tries++ )
+			{
+				wait( 0.05 );
+			}
+			bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "native_double_pap" );
+		}
+
+		dog = bz_test_find_active_dog();
+		if ( !IsDefined( dog ) && IsDefined( level.bz_test_coop_spawn_dog ) )
+		{
+			spawn_dog = level.bz_test_coop_spawn_dog;
+			level thread [[ spawn_dog ]]( undefined, 1 );
+		}
+		for ( tries = 0; tries < 100 && !IsDefined( dog ); tries++ )
+		{
+			wait( 0.05 );
+			dog = bz_test_find_active_dog();
+		}
+		if ( bz_selftest_check( st, IsDefined( dog ), "live_hellhound_after_show" ) )
+		{
+			dog_rate = bz_test_check_dog_protection( st, p, dog );
+		}
+	}
+
+	if ( st.failed == 0 )
+	{
+		maps\_bz_log::emit( "BZ_COOP_SELFTEST_PASS", "map=" + map_name + ";checks=" + st.passed +
+			";build_id=" + build_id + ";dog_rate=" + dog_rate );
+	}
+	else
+	{
+		maps\_bz_log::emit( "BZ_COOP_SELFTEST_FAIL", "map=" + map_name + ";passed=" + st.passed +
+			";failed=" + st.failed + ";reasons=" + st.fail_list );
+	}
+}
+
+bz_test_visual_phase( name )
+{
+	maps\_bz_log::emit( "VISUAL_TOUR_PHASE", "phase=" + name + ";t=" + GetTime() );
+}
+
+bz_test_visual_pose( p, pos, station )
+{
+	p SetOrigin( pos );
+	eye = p GetEye();
+	org = station.origin;
+	look_dir = ( org[0] - eye[0], org[1] - eye[1], org[2] + 24 - eye[2] );
+	p SetPlayerAngles( VectorToAngles( look_dir ) );
+}
+
+bz_run_visual_tour()
+{
+	if ( !bz_enabled() || GetDvarInt( "bz_test_visual_tour" ) != 1 )
+	{
+		return;
+	}
+	level endon( "end_game" );
+
+	p = bz_test_get_spawned_host();
+	for ( tries = 0; tries < 80 && !IsDefined( p ); tries++ )
+	{
+		wait( 0.25 );
+		p = bz_test_get_spawned_host();
+	}
+	if ( !IsDefined( p ) )
+	{
+		maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=no_spawned_host" );
+		return;
+	}
+
+	p endon( "disconnect" );
+	wait( 1.5 );
+	p.maxhealth = 99999;
+	p.health = 99999;
+	p.score = 50000;
+	map_name = bz_get_map_name();
+	slug = "";
+	ids = [];
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		slug = "factory";
+		ids[0] = "perks";
+		ids[1] = "class";
+		ids[2] = "arsenal";
+		poses = [];
+		poses[0] = ( -120, -240, 20 );
+		poses[1] = ( 155, -200, 20 );
+		poses[2] = ( 115, 65, 20 );
+	}
+	else
+	{
+		if ( map_name == "nazi_zombie_prototype" )
+		{
+			slug = "prototype";
+		}
+		else if ( map_name == "nazi_zombie_asylum" )
+		{
+			slug = "asylum";
+		}
+		else if ( map_name == "nazi_zombie_sumpf" )
+		{
+			slug = "sumpf";
+		}
+		else
+		{
+			return;
+		}
+		ids[0] = "arsenal";
+		ids[1] = "pap";
+	}
+
+	phase_count = 0;
+	for ( i = 0; i < ids.size; i++ )
+	{
+		id = ids[i];
+		if ( !IsDefined( level.bz_stations ) || !IsDefined( level.bz_stations[id] ) )
+		{
+			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + id );
+			return;
+		}
+
+		station = level.bz_stations[id];
+		if ( slug == "factory" )
+		{
+			bz_test_visual_pose( p, poses[i], station );
+			if ( id == "perks" )
+			{
+				// The courtyard overview is 190u away. Step inside the real HUD's 96u radius.
+				wait( 0.6 );
+				bz_test_visual_pose( p, ( -238, -240, 20 ), station );
+			}
+			wait( 0.6 );
+		}
+		else
+		{
+			fwd = AnglesToForward( station.angles );
+			org = station.origin;
+			pos = ( org[0] + fwd[0] * 64, org[1] + fwd[1] * 64, org[2] + 8 );
+			bz_test_visual_pose( p, pos, station );
+			wait( 0.8 );
+		}
+
+		prompt = maps\_bz_stations::bz_stations_format_prompt_text( id, station.display_name );
+		if ( !IsDefined( p.bz_station_prompt_hud ) || p.bz_station_prompt_hud.alpha != 1 ||
+			p.bz_station_prompt_text != prompt )
+		{
+			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + id );
+			return;
+		}
+		bz_test_visual_phase( slug + "_" + id + "_prompt" );
+		phase_count++;
+		wait( 0.6 );
+	}
+
+	if ( slug == "factory" )
+	{
+		p SetOrigin( ( -40, -140, 10 ) );
+		p SetPlayerAngles( ( 18, 90, 0 ) );
+		bz_on_menu_response( p, "bz_station_perks", "buy_perk:mule_kick" );
+		bz_on_menu_response( p, "bz_station_perks", "buy_t2:mule_kick" );
+		if ( bz_get_max_primary_weapons( p ) != 4 )
+		{
+			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_mule_kick_ii" );
+			return;
+		}
+		primaries = p GetWeaponsListPrimaries();
+		for ( i = 0; i < primaries.size; i++ )
+		{
+			p TakeWeapon( primaries[i] );
+		}
+		items = [];
+		items[0] = "acid_sprayer";
+		items[1] = "cryo_cannon";
+		items[2] = "multi_crossbow";
+		items[3] = "blade_boomerang";
+		weap_slugs = [];
+		weap_slugs[0] = "acid";
+		weap_slugs[1] = "cryo";
+		weap_slugs[2] = "crossbow";
+		weap_slugs[3] = "boomerang";
+		for ( i = 0; i < items.size; i++ )
+		{
+			bz_on_menu_response( p, "bz_station_arsenal", "buy_element:" + items[i] );
+		}
+		p.maxhealth = 99999;
+		p.health = 99999;
+
+		for ( i = 0; i < items.size; i++ )
+		{
+			weap = maps\_bz_rules::bz_get_element_weapon_name( items[i] );
+			if ( !p HasWeapon( weap ) )
+			{
+				maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_weapon;weapon=" + weap );
+				return;
+			}
+			p SwitchToWeapon( weap );
+			wait( 0.8 );
+			if ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap )
+			{
+				maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap );
+				return;
+			}
+			bz_test_visual_phase( weap_slugs[i] + "_idle" );
+			wait( 0.6 );
+			bz_on_weapon_fired( p, weap );
+			wait( 0.35 );
+			bz_test_visual_phase( weap_slugs[i] + "_active" );
+			wait( 0.6 );
+			wait( 7.0 );
+			bz_test_visual_phase( weap_slugs[i] + "_post" );
+			wait( 0.6 );
+			phase_count = phase_count + 3;
+		}
+
+		native_trig = bz_test_unlock_native_pap();
+		p SetOrigin( ( -61, 495, 118 ) );
+		p SetPlayerAngles( ( 5, 90, 0 ) );
+		p TakeWeapon( "bz_blade_boomerang" );
+		bz_test_equip_native_pap_colt( p );
+		wait( 0.8 );
+		if ( !IsDefined( native_trig ) || !IsDefined( p.bz_pap_prompt_hud ) || p.bz_pap_prompt_hud.alpha != 1 )
+		{
+			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_prompt" );
+			return;
+		}
+		bz_test_visual_phase( "native_pap_prompt" );
+		wait( 0.6 );
+		native_trig notify( "trigger", p );
+		wait( 0.6 );
+		if ( !maps\_bz_state::bz_state_is_weapon_double_pap( p, "zombie_colt_upgraded" ) )
+		{
+			maps\_bz_log::emit( "VISUAL_TOUR_FAIL", "reason=missing_native_pap_ii" );
+			return;
+		}
+		bz_test_visual_phase( "native_pap_ii_badge" );
+		wait( 0.6 );
+		phase_count = phase_count + 2;
+	}
+
+	maps\_bz_log::emit( "VISUAL_TOUR_DONE", "map=" + map_name + ";phases=" + phase_count );
+}
+
+bz_run_gauntlet_seed()
+{
+	if ( !bz_enabled() || GetDvarInt( "bz_test_gauntlet_seed" ) != 1 ||
+		GetDvarInt( "gauntlet_enabled" ) != 1 || bz_get_map_name() != "nazi_zombie_prototype" )
+	{
+		return;
+	}
+	level endon( "end_game" );
+
+	p = undefined;
+	for ( tries = 0; tries < 80; tries++ )
+	{
+		p = bz_test_get_spawned_host();
+		if ( IsDefined( p ) && IsDefined( p.gauntlet_points_applied ) && p.gauntlet_points_applied )
+		{
+			break;
+		}
+		p = undefined;
+		wait( 0.25 );
+	}
+	if ( !IsDefined( p ) )
+	{
+		maps\_bz_log::emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_points" );
+		return;
+	}
+
+	p.score = 50000;
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:staminup" );
+	bz_on_menu_response( p, "bz_station_perks", "buy_perk:mule_kick" );
+	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:cryo_cannon" );
+	// Seed a Phase 2 item the existing cross-Stage bridge carries in its perm record.
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:war_club" );
+
+	acid = "bz_acid_sprayer";
+	if ( p HasWeapon( acid ) )
+	{
+		single_pap = maps\_bz_stations::bz_stations_try_buy_single_pap( p, acid );
+		if ( single_pap.ok )
+		{
+			bz_on_item_purchased( p, "pap", "single_pap", single_pap, acid );
+		}
+		pap_prereq = maps\_bz_stations::bz_stations_is_weapon_pap( p, acid );
+		double_pap = maps\_bz_state::bz_try_buy_pap_upgrade( p, "double_pap", acid, pap_prereq );
+		if ( double_pap.ok )
+		{
+			bz_on_item_purchased( p, "pap", "double_pap", double_pap, acid );
+		}
+	}
+	if ( !maps\_bz_state::bz_state_has_perk( p, "staminup" ) ||
+		!maps\_bz_state::bz_state_has_perk( p, "mule_kick" ) ||
+		maps\_bz_state::bz_state_get_class( p ) != "titan" ||
+		!maps\_bz_state::bz_state_owns_war_club( p ) || !p HasWeapon( acid ) || !p HasWeapon( "bz_cryo_cannon" ) ||
+		!maps\_bz_state::bz_state_is_weapon_double_pap( p, acid ) )
+	{
+		maps\_bz_log::emit( "GAUNTLET_BZ_SEED_FAIL", "reason=incomplete_seed" );
+		return;
+	}
+
+	maps\_bz_log::emit( "GAUNTLET_BZ_SEEDED", "map=nazi_zombie_prototype;class=titan;weapons=2" );
 }
