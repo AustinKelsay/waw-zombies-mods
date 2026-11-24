@@ -318,6 +318,7 @@ class BzGscRuntime(GscRuntime):
         self.level.set_field("script", "nazi_zombie_factory")
         self.players: list[FakeEntity] = []
         self.emitted_events: list[str] = []
+        self.player_prints: list[tuple[FakeEntity, str]] = []
         self._py_callbacks: dict[str, Callable[..., Any]] = {}
         self._current_self: Any = self.level
         self._threads: list[tuple[Any, str, list[Any]]] = []
@@ -547,6 +548,11 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return receiver._ent_num
             return 0
+        if method == "iprintln":
+            if not isinstance(receiver, FakeEntity) or not receiver.is_player:
+                raise GscRuntimeError(f"line {line}: IPrintLn on non-player {receiver!r}")
+            self.player_prints.append((receiver, _waw_to_str(args[0])))
+            return UNDEFINED
         if method == "setclientdvar":
             if not isinstance(receiver, FakeEntity):
                 raise GscRuntimeError(f"line {line}: SetClientDvar on non-entity {receiver!r}")
@@ -2228,6 +2234,87 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 self.assertIn(dvar, patched_levels)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
+
+    def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
+        # WaW 1.7's GSC compiler enforces a 1,024-entry MAX_PRECACHE_ENTRIES table across
+        # the active compile chain (Der Riese & Shi No Numa overflowed at 205 refs in _bz_hooks.gsc).
+        source = (MOD_ROOT / "maps" / "_bz_hooks.gsc").read_text(encoding="latin1")
+        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        refs = re.findall(r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+", code_only)
+        self.assertLessEqual(
+            len(refs),
+            130,
+            f"_bz_hooks.gsc has {len(refs)} cross-file refs (budget <= 130 to stay safely under MAX_PRECACHE_ENTRIES)",
+        )
+
+    def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        from zipfile import ZipFile
+
+        import build_mod
+        import verify_hud_menus
+
+        stock_1arg = (
+            b"localclientconnect(clientNum)\n{\n\tlevel notify(\"connected\");\n}\n"
+            b"level_notify(notify_name)\n{\n\tlevel notify(notify_name);\n}\n"
+        )
+        patched = build_mod.inject_clientscript_callbacks_patch(stock_1arg)
+        assert isinstance(patched, bytes)
+        self.assertIn(b"level_notify(notify_name, param1, param2)", patched)
+        self.assertIn(b"level notify(notify_name, param1, param2);", patched)
+        # WaW 1.7 CSC SetClientDvar rejects custom dvars; _callbacks.csc must stay clean.
+        self.assertNotIn(b"SetClientDvar", patched)
+        # Idempotent when already patched
+        self.assertEqual(build_mod.inject_clientscript_callbacks_patch(patched), patched)
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools = root / "tools"
+            stage = root / "stage"
+            raw_csc = tools / "raw" / "clientscripts" / "_callbacks.csc"
+            raw_csc.parent.mkdir(parents=True)
+            raw_csc.write_bytes(stock_1arg)
+            (stage / "maps").mkdir(parents=True)
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.5.0-dev\"; }\n", encoding="ascii")
+
+            out_csc = build_mod.stage_bz_clientscript_callbacks(
+                tools, stage, steam_game=root / "steam"
+            )
+            self.assertEqual(out_csc, stage / "clientscripts" / "_callbacks.csc")
+            assert out_csc is not None
+            csc_bytes = out_csc.read_bytes()
+            self.assertIn(b"level_notify(notify_name, param1, param2)", csc_bytes)
+
+            updated_csv = build_mod.generate_staged_mod_csv(
+                "rawfile,maps/_bz_version.gsc\n",
+                ["maps/_bz_version.gsc", "clientscripts/_callbacks.csc"],
+            )
+            self.assertIn("rawfile,clientscripts/_callbacks.csc", updated_csv)
+            self.assertNotRegex(updated_csv, r"(?im)^\s*fx\s*,")
+
+            with patch.object(build_mod, "DIST_DIR", root / "dist"):
+                iwd = build_mod.build_iwd(stage)
+            with ZipFile(iwd) as archive:
+                self.assertIn("clientscripts/_callbacks.csc", archive.namelist())
+                self.assertIn(b"level_notify(notify_name, param1, param2)", archive.read("clientscripts/_callbacks.csc"))
+
+        # Retail-visible client-package parity stamp across all 4 station menus
+        for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
+            raw_menu = menu_path.read_text(encoding="latin1")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.5.0-abc1234")
+            self.assertEqual(
+                verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
+                [],
+                f"Brace imbalance in stamped {menu_path.name}",
+            )
+            self.assertIn('"BUILD: 0.5.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.5.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.5.0-abc1234 != HOST ', stamped)
+            # Idempotent
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.5.0-abc1234"), stamped)
+            # Tracked menu remains unstamped
+            self.assertNotIn("bz_parity_mismatch", raw_menu)
 
 
 if __name__ == "__main__":

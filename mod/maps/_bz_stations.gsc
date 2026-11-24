@@ -238,8 +238,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 1060, 310, 96 ),
-			( 0, 180, 0 ),
+			( 985, 295, 96 ),
+			( 0, 0, 0 ),
 			false,
 			false
 		);
@@ -410,6 +410,7 @@ bz_stations_init()
 
 	level.bz_stations = [];
 	level.bz_station_entities = [];
+	level.bz_station_prompt_huds = [];
 
 	map_name = maps\_bz_hooks::bz_get_map_name();
 	specs = bz_stations_get_map_specs( map_name );
@@ -503,7 +504,7 @@ bz_stations_get_model_for_station( map_name, station_id )
 		}
 		if ( sid == "pap" )
 		{
-			return "zombie_treasure_box_lid";
+			return "global_explosive_barrel_japanese";
 		}
 	}
 	return "";
@@ -606,13 +607,61 @@ bz_station_trigger_think()
 		}
 		player.bz_station_next_use_time = now + 450;
 
-		bz_stations_open_for_player( player, self.id );
+		target_id = bz_stations_resolve_use_target( player, self.id );
+		bz_stations_open_for_player( player, target_id );
 	}
+}
+
+bz_stations_get_prompt_tag( station_id )
+{
+	if ( station_id == "perks" )
+	{
+		return "[PERKS]";
+	}
+	if ( station_id == "class" )
+	{
+		return "[CLASS]";
+	}
+	if ( station_id == "arsenal" )
+	{
+		return "[ARSENAL]";
+	}
+	if ( station_id == "pap" )
+	{
+		return "[PAP]";
+	}
+	return "";
+}
+
+bz_stations_get_prompt_color( station_id )
+{
+	if ( station_id == "perks" )
+	{
+		return ( 1.0, 0.35, 0.35 );
+	}
+	if ( station_id == "class" )
+	{
+		return ( 0.35, 0.85, 1.0 );
+	}
+	if ( station_id == "arsenal" )
+	{
+		return ( 0.45, 1.0, 0.55 );
+	}
+	if ( station_id == "pap" )
+	{
+		return ( 1.0, 0.85, 0.30 );
+	}
+	return ( 1.0, 1.0, 1.0 );
+}
+
+bz_stations_format_prompt_text( station_id, display_name )
+{
+	return bz_stations_get_prompt_tag( station_id ) + " " + display_name + " - Press [F]";
 }
 
 bz_stations_ensure_prompt_hud( player )
 {
-	if ( !IsDefined( player ) )
+	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) || !IsDefined( level.bz_station_prompt_huds ) )
 	{
 		return undefined;
 	}
@@ -627,44 +676,177 @@ bz_stations_ensure_prompt_hud( player )
 	hud.horzAlign = "center";
 	hud.vertAlign = "bottom";
 	hud.x = 0;
-	hud.y = -112;
+	hud.y = -132;
 	hud.fontScale = 1.45;
-	hud.color = ( 0.72, 0.94, 1.0 );
 	hud.alpha = 0;
 	hud.sort = 10;
 	hud.hidewheninmenu = true;
 	hud.archived = false;
 	player.bz_station_prompt_hud = hud;
+	level.bz_station_prompt_huds[level.bz_station_prompt_huds.size] = hud;
 	player.bz_station_prompt_text = "";
 	return hud;
 }
 
 bz_stations_hide_prompt_hud( player )
 {
-	if ( !IsDefined( player ) || !IsDefined( player.bz_station_prompt_hud ) )
+	if ( !IsDefined( player ) )
 	{
 		return;
 	}
-	player.bz_station_prompt_hud.alpha = 0;
+	player.bz_station_prompt_id = "";
 	player.bz_station_prompt_text = "";
+	if ( IsDefined( player.bz_station_prompt_hud ) )
+	{
+		player.bz_station_prompt_hud.alpha = 0;
+	}
 }
 
-bz_stations_destroy_prompt_hud( player )
+bz_stations_watch_prompt_disconnect()
+{
+	level endon( "end_game" );
+	self waittill( "disconnect" );
+
+	if ( !IsDefined( self.bz_station_prompt_hud ) )
+	{
+		return;
+	}
+
+	hud = self.bz_station_prompt_hud;
+	self.bz_station_prompt_hud = undefined;
+	self.bz_station_prompt_id = "";
+	self.bz_station_prompt_text = "";
+	// Keep the level's HUD list dense so end-game cleanup visits every handle.
+	kept = [];
+	for ( i = 0; i < level.bz_station_prompt_huds.size; i++ )
+	{
+		elem = level.bz_station_prompt_huds[i];
+		if ( IsDefined( elem ) && elem != hud )
+		{
+			kept[kept.size] = elem;
+		}
+	}
+	level.bz_station_prompt_huds = kept;
+	hud Destroy();
+}
+
+bz_stations_is_player_in_station_range( player, st )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.origin ) || !IsDefined( st ) || !IsDefined( st.origin ) )
+	{
+		return false;
+	}
+	if ( !bz_stations_is_station_enabled( st.id ) )
+	{
+		return false;
+	}
+	dz = player.origin[2] - st.origin[2];
+	if ( dz < -32.0 || dz > 72.0 )
+	{
+		return false;
+	}
+	dist = Distance( ( player.origin[0], player.origin[1], 0 ), ( st.origin[0], st.origin[1], 0 ) );
+	return dist <= 64.0;
+}
+
+// Shared station selection for both the proximity prompt HUD and trigger interaction.
+// Uses the exact trigger_radius(origin, 64, 72) cylinder so overlapping triggers always
+// open the same station shown on the player's HUD.
+bz_stations_find_nearest_in_range( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.origin ) || !IsDefined( level.bz_stations ) )
+	{
+		return undefined;
+	}
+
+	best = undefined;
+	best_dist = 64.0;
+	ids = [];
+	ids[0] = "perks";
+	ids[1] = "class";
+	ids[2] = "arsenal";
+	ids[3] = "pap";
+	for ( i = 0; i < ids.size; i++ )
+	{
+		sid = ids[i];
+		st = level.bz_stations[sid];
+		if ( !bz_stations_is_player_in_station_range( player, st ) )
+		{
+			continue;
+		}
+		dist = Distance( ( player.origin[0], player.origin[1], 0 ), ( st.origin[0], st.origin[1], 0 ) );
+		if ( dist <= best_dist )
+		{
+			best_dist = dist;
+			best = st;
+		}
+	}
+	return best;
+}
+
+// Prefer the currently displayed station while it remains eligible so pressing Use
+// between HUD ticks cannot open a different overlapping station.
+bz_stations_resolve_use_target( player, fallback_id )
+{
+	if ( IsDefined( player ) && IsDefined( player.bz_station_prompt_id ) && player.bz_station_prompt_id != "" &&
+		IsDefined( level.bz_stations ) )
+	{
+		shown = level.bz_stations[player.bz_station_prompt_id];
+		if ( bz_stations_is_player_in_station_range( player, shown ) )
+		{
+			return shown.id;
+		}
+	}
+	nearest = bz_stations_find_nearest_in_range( player );
+	if ( IsDefined( nearest ) )
+	{
+		return nearest.id;
+	}
+	return fallback_id;
+}
+
+bz_stations_update_prompt_hud( player )
 {
 	if ( !IsDefined( player ) )
 	{
 		return;
 	}
-	if ( IsDefined( player.bz_station_prompt_hud ) )
+	if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
+		!IsDefined( level.bz_stations ) ||
+		IsDefined( player.revivetrigger ) ||
+		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
+		( IsDefined( player.in_last_stand ) && player.in_last_stand ) ||
+		( IsDefined( player.bz_station_open ) && player.bz_station_open ) )
 	{
-		player.bz_station_prompt_hud Destroy();
-		player.bz_station_prompt_hud = undefined;
+		bz_stations_hide_prompt_hud( player );
+		return;
 	}
-	player.bz_station_prompt_text = "";
+
+	best = bz_stations_find_nearest_in_range( player );
+
+	if ( !IsDefined( best ) )
+	{
+		bz_stations_hide_prompt_hud( player );
+		return;
+	}
+	hud = bz_stations_ensure_prompt_hud( player );
+	if ( !IsDefined( hud ) )
+	{
+		return;
+	}
+
+	label = bz_stations_format_prompt_text( best.id, best.display_name );
+	player.bz_station_prompt_id = best.id;
+	if ( player.bz_station_prompt_text != label )
+	{
+		hud.color = bz_stations_get_prompt_color( best.id );
+		hud SetText( label );
+		player.bz_station_prompt_text = label;
+	}
+	hud.alpha = 1;
 }
 
-// Per-player proximity prompt loop: WaW 1.7 ignores SetHintString on script-spawned
-// trigger_radius entities, so this renders a crisp HUD prompt near any active station.
+// WaW 1.7 ignores SetHintString on script-spawned trigger_radius entities.
 bz_stations_watch_player_prompt()
 {
 	self endon( "disconnect" );
@@ -673,68 +855,7 @@ bz_stations_watch_player_prompt()
 	for ( ;; )
 	{
 		wait( 0.15 );
-		if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( self ) || !IsDefined( level.bz_stations ) )
-		{
-			bz_stations_hide_prompt_hud( self );
-			continue;
-		}
-		if ( IsDefined( self.origin ) )
-		{
-			best = undefined;
-			best_dist = 78.0;
-			ids = [];
-			ids[0] = "perks";
-			ids[1] = "class";
-			ids[2] = "arsenal";
-			ids[3] = "pap";
-			for ( i = 0; i < ids.size; i++ )
-			{
-				sid = ids[i];
-				if ( !IsDefined( level.bz_stations[sid] ) || !bz_stations_is_station_enabled( sid ) )
-				{
-					continue;
-				}
-				st = level.bz_stations[sid];
-				if ( !IsDefined( st.origin ) )
-				{
-					continue;
-				}
-				dz = self.origin[2] - st.origin[2];
-				if ( dz < 0 )
-				{
-					dz = 0 - dz;
-				}
-				if ( dz > 72 )
-				{
-					continue;
-				}
-				d = Distance( self.origin, st.origin );
-				if ( d <= best_dist )
-				{
-					best_dist = d;
-					best = st;
-				}
-			}
-
-			if ( IsDefined( best ) )
-			{
-				hud = bz_stations_ensure_prompt_hud( self );
-				if ( IsDefined( hud ) )
-				{
-					label = "Press [F] to open " + best.display_name;
-					if ( !IsDefined( self.bz_station_prompt_text ) || self.bz_station_prompt_text != label )
-					{
-						hud SetText( label );
-						self.bz_station_prompt_text = label;
-					}
-					hud.alpha = 1;
-				}
-			}
-			else
-			{
-				bz_stations_hide_prompt_hud( self );
-			}
-		}
+		bz_stations_update_prompt_hud( self );
 	}
 }
 
@@ -756,6 +877,19 @@ bz_stations_cleanup()
 	level.bz_stations = [];
 	level.bz_stations_initialized = false;
 
+	if ( IsDefined( level.bz_station_prompt_huds ) )
+	{
+		for ( i = 0; i < level.bz_station_prompt_huds.size; i++ )
+		{
+			hud = level.bz_station_prompt_huds[i];
+			if ( IsDefined( hud ) )
+			{
+				hud Destroy();
+			}
+		}
+		level.bz_station_prompt_huds = [];
+	}
+
 	players = GetPlayers();
 	if ( IsDefined( players ) )
 	{
@@ -764,7 +898,8 @@ bz_stations_cleanup()
 			p = players[i];
 			if ( IsDefined( p ) )
 			{
-				bz_stations_destroy_prompt_hud( p );
+				p.bz_station_prompt_hud = undefined;
+				p.bz_station_prompt_text = "";
 				if ( IsDefined( p.bz_station_open ) && p.bz_station_open )
 				{
 					p.bz_station_open = false;
@@ -1263,6 +1398,7 @@ bz_stations_on_player_spawned( player )
 	{
 		player.bz_station_prompt_watching = true;
 		player thread bz_stations_watch_player_prompt();
+		player thread bz_stations_watch_prompt_disconnect();
 	}
 }
 
@@ -1306,6 +1442,7 @@ bz_stations_open_for_player( player, station_id )
 	player.bz_station_open = true;
 	player.bz_active_station_id = sid;
 	player.bz_active_station_menu = menu_name;
+	bz_stations_hide_prompt_hud( player );
 	player openMenu( menu_name );
 
 	score = maps\_bz_state::bz_state_get_score_safe( player );

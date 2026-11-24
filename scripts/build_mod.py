@@ -16,6 +16,8 @@ from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 MOD_NAME = "waw_gauntlet"
+BZ_BUILD_VERSION = "0.5.0"
+BZ_BUILD_COMMIT_RE = re.compile(r"[0-9a-zA-Z_-]+")
 STOCK_MAPS = (
     "nazi_zombie_prototype",
     "nazi_zombie_asylum",
@@ -523,9 +525,17 @@ def inject_map_hooks(
     line_ending = "\r" if match.group(0).endswith("\r") else ""
     zm_mod = zombiemode_module_for_map(map_name)
     rewired_line = f"{indent}maps\\{zm_mod}::main({args});{trailing}"
+    coop_dog_hook = ""
+    if map_name == "nazi_zombie_factory" and rewire_dogs_module:
+        # Keep the factory-only stock script dependency out of the shared BZ hooks.
+        coop_dog_hook = (
+            f'{indent}if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_coop_selftest" ) == 1 ) '
+            f"{{ level.bz_test_coop_spawn_dog = maps\\{rewire_dogs_module}::special_dog_spawn; }}{newline}"
+        )
     replacement = (
         f"{indent}{PRE_HOOK_CALL}{newline}"
         f"{indent}{BZ_PRE_HOOK_CALL}{newline}"
+        f"{coop_dog_hook}"
         f"{rewired_line}{newline}"
         f"{indent}{POST_HOOK_CALL}{newline}"
         f"{indent}{BZ_POST_HOOK_CALL}{line_ending}"
@@ -1311,6 +1321,136 @@ def stage_bz_tesla_script(
     return out_path
 
 
+_CSC_LEVEL_NOTIFY_1ARG_RE = re.compile(
+    r"(?P<sig>level_notify\s*\(\s*notify_name\s*\)\s*\{)"
+    r"(?P<body>[^}]*?\blevel\s+notify\s*\(\s*notify_name\s*\)\s*;[^}]*?\})",
+    re.DOTALL,
+)
+
+
+def inject_clientscript_callbacks_patch(source: bytes | str) -> bytes | str:
+    """Ensure clientscripts/_callbacks.csc::level_notify accepts DLC 3-arg notetrack callbacks.
+
+    Pre-DLC2 stock maps (Nacht der Untoten, Verruckt) load common.ff's 1-arg
+    `level_notify(notify_name)`, which throws a client script runtime error when
+    `bz_cryo_cannon` (cloned from `tesla_gun`) dispatches viewmodel animation
+    notetracks via `level_notify("notetrack", localClientNum, note)`.
+    """
+    is_bytes = isinstance(source, bytes)
+    text = source.decode("latin1") if is_bytes else source
+    if re.search(r"level_notify\s*\(\s*notify_name\s*,\s*\w+\s*,\s*\w+\s*\)", text):
+        return source
+
+    newline = "\r\n" if "\r\n" in text else "\n"
+    patched, count = _CSC_LEVEL_NOTIFY_1ARG_RE.subn(
+        f"level_notify(notify_name, param1, param2){newline}"
+        f"{{{newline}"
+        f"\tlevel notify(notify_name, param1, param2);{newline}"
+        f"}}",
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise ValueError("Could not locate level_notify() in clientscripts/_callbacks.csc")
+    return patched.encode("latin1") if is_bytes else patched
+
+
+def stage_bz_clientscript_callbacks(
+    tools_root: Path,
+    stage_dir: Path,
+    steam_game: Path | None = None,
+) -> Path | None:
+    """Stage DLC-compatible clientscripts/_callbacks.csc so Cryo Cannon notetracks work on all 4 maps."""
+    stock_bytes: bytes | None = None
+    search_steam = steam_game if steam_game is not None else tools_root
+    for map_name in ("nazi_zombie_factory", "nazi_zombie_sumpf"):
+        try:
+            extracted = try_extract_stock_script(
+                map_name, "clientscripts/_callbacks.csc", search_steam, tools_root
+            )
+        except FileNotFoundError:
+            extracted = None
+        if extracted is not None:
+            stock_bytes = extracted
+            break
+
+    if stock_bytes is None:
+        raw_csc = tools_root / "raw" / "clientscripts" / "_callbacks.csc"
+        if raw_csc.is_file():
+            stock_bytes = raw_csc.read_bytes()
+
+    if stock_bytes is None:
+        for base in (search_steam, tools_root):
+            common_ff = base / "zone" / "english" / "common.ff"
+            if common_ff.is_file():
+                try:
+                    stock_bytes = extract_rawfile_from_ff(common_ff, "clientscripts/_callbacks.csc")
+                    break
+                except ValueError:
+                    continue
+
+    if stock_bytes is None:
+        return None
+
+    patched_bytes = inject_clientscript_callbacks_patch(stock_bytes)
+    assert isinstance(patched_bytes, bytes)
+    out_path = stage_dir / "clientscripts" / "_callbacks.csc"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(patched_bytes)
+    return out_path
+
+
+def stamp_bz_station_menu_build_parity(menu_text: str, build_id: str) -> str:
+    """Stamp an independent retail-visible client-package build fingerprint & mismatch alert into a station menu."""
+    if not re.fullmatch(r"[0-9a-zA-Z_.-]+", build_id):
+        raise ValueError("Invalid Base Zombies client build ID")
+    if '"bz_parity_mismatch"' in menu_text:
+        return menu_text
+
+    newline = "\r\n" if "\r\n" in menu_text else "\n"
+    # Insert just before the final closing braces of `menuDef { ... }` inside outer `{ ... }`.
+    closing_re = re.compile(r"(?P<tail>\r?\n\t\}\r?\n\}\s*)$")
+    match = closing_re.search(menu_text)
+    if match is None:
+        raise ValueError("Could not locate closing menuDef brace in Base Zombies station menu")
+
+    snippet = (
+        f"{newline}"
+        f"\t\t// Build-stamped local mod.ff fingerprint & retail-visible host parity alert{newline}"
+        f"\t\titemDef{newline}"
+        f"\t\t{{{newline}"
+        f'\t\t\tname\t\t\t"bz_parity_ok"{newline}'
+        f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
+        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f'\t\t\ttext\t\t\t"BUILD: {build_id}"{newline}'
+        f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
+        f"\t\t\ttextscale\t\t0.22{newline}"
+        f"\t\t\ttextstyle\t\tITEM_TEXTSTYLE_SHADOWED{newline}"
+        f"\t\t\ttextalign\t\tITEM_ALIGN_RIGHT{newline}"
+        f"\t\t\ttextaligny\t\t11{newline}"
+        f"\t\t\tforecolor\t\t0.70 0.78 0.85 0.90{newline}"
+        f'\t\t\tvisible\t\t\twhen( dvarString( "bz_host_build_id" ) == "" || dvarString( "bz_host_build_id" ) == "{build_id}" );{newline}'
+        f"\t\t\tdecoration{newline}"
+        f"\t\t}}{newline}"
+        f"\t\titemDef{newline}"
+        f"\t\t{{{newline}"
+        f'\t\t\tname\t\t\t"bz_parity_mismatch"{newline}'
+        f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
+        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f'\t\t\texp\t\t\t\ttext( "BUILD MISMATCH! LOCAL {build_id} != HOST " + dvarString( "bz_host_build_id" ) );{newline}'
+        f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
+        f"\t\t\ttextscale\t\t0.22{newline}"
+        f"\t\t\ttextstyle\t\tITEM_TEXTSTYLE_SHADOWED{newline}"
+        f"\t\t\ttextalign\t\tITEM_ALIGN_CENTER{newline}"
+        f"\t\t\ttextaligny\t\t11{newline}"
+        f"\t\t\tforecolor\t\t1.0 0.25 0.25 1.0{newline}"
+        f'\t\t\tvisible\t\t\twhen( dvarString( "bz_host_build_id" ) != "" && dvarString( "bz_host_build_id" ) != "{build_id}" );{newline}'
+        f"\t\t\tdecoration{newline}"
+        f"\t\t}}"
+    )
+    return menu_text[: match.start()] + snippet + match.group("tail")
+
+
 def parse_weapon_file(text: str) -> list[tuple[str, str]]:
     """Parse a WaW 1.7 backslash-delimited WEAPONFILE\\key\\val\\... string."""
     cleaned = text.rstrip("\r\n")
@@ -1503,6 +1643,7 @@ def generate_staged_mod_csv(
                 "_zombiemode_score.gsc",
                 "_laststand.gsc",
                 "_zombiemode_tesla.gsc",
+                "_callbacks.csc",
                 "nazi_zombie_factory_teleporter.gsc",
             )
         )
@@ -1688,6 +1829,46 @@ def apply_bz_menu_patches(stage_dir: Path) -> list[Path]:
     return updated
 
 
+def render_bz_version_gsc(version: str, commit_sha: str) -> str:
+    """Render ASCII GSC getters for the build fingerprint."""
+    if not re.fullmatch(r"[0-9a-zA-Z_.-]+", version):
+        raise ValueError("Invalid Base Zombies build version")
+    if not BZ_BUILD_COMMIT_RE.fullmatch(commit_sha):
+        raise ValueError("Invalid Base Zombies build commit")
+
+    return f'''\
+// The build stamps the commit in the staged copy of this module.
+bz_get_build_version()
+{{
+\treturn "{version}";
+}}
+
+bz_get_build_commit()
+{{
+\treturn "{commit_sha}";
+}}
+
+bz_get_build_id()
+{{
+\treturn bz_get_build_version() + "-" + bz_get_build_commit();
+}}
+'''
+
+
+def resolve_git_short_sha(repo_root: Path) -> str:
+    """Read the short HEAD commit or use the dev fallback for source-only builds."""
+    try:
+        output = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            stderr=subprocess.DEVNULL,
+        )
+        commit_sha = output.decode("ascii").strip()
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+        return "dev"
+    return commit_sha if BZ_BUILD_COMMIT_RE.fullmatch(commit_sha) else "dev"
+
+
 def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     """Stage mod sources, hooked stock map entry scripts, and per-map _zombiemode wrappers."""
     stage_dir = tools_root / "mods" / MOD_NAME
@@ -1703,6 +1884,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         dst = stage_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_path, dst)
+
+    # Both the linker and IWD packager use this staged script.
+    build_commit = resolve_git_short_sha(REPO_ROOT)
+    (stage_dir / "maps" / "_bz_version.gsc").write_text(
+        render_bz_version_gsc(BZ_BUILD_VERSION, build_commit),
+        encoding="ascii",
+    )
 
     # Extract each stock map entry script and era-specific _zombiemode, _zombiemode_weapons,
     # and _zombiemode_perks scripts (preferring <map>_patch.ff so DLC3 features and local
@@ -1833,6 +2021,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Patch and stage stock maps/_zombiemode_tesla.gsc (Wunderwaffe Juggernog fix & chain-stun)
     stage_bz_tesla_script(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
+    # Stage DLC-compatible clientscripts/_callbacks.csc (3-arg level_notify for Cryo Cannon on Nacht/Verruckt)
+    stage_bz_clientscript_callbacks(
+        tools_root=tools_root,
+        stage_dir=stage_dir,
+        steam_game=steam_game,
+    )
+
     # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
 
@@ -1844,6 +2039,12 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             p.relative_to(stage_dir).as_posix()
             for p in sorted((stage_dir / "maps").rglob("*.gsc"))
         ]
+        clientscripts_dir = stage_dir / "clientscripts"
+        if clientscripts_dir.is_dir():
+            staged_gscs.extend(
+                p.relative_to(stage_dir).as_posix()
+                for p in sorted(clientscripts_dir.rglob("*.csc"))
+            )
         raw_xmodel_dir = tools_root / "raw" / "xmodel"
         compat_xmodels = [
             xm for xm in DER_RIESE_COMPAT_XMODELS if (raw_xmodel_dir / xm).is_file()
@@ -1868,12 +2069,18 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     verify_hud_menus.stage_patched_menus(tools_root=tools_root, stage_dir=stage_dir)
     apply_bz_menu_patches(stage_dir=stage_dir)
 
-    # Mirror Base Zombies station popups under ui/scriptmenus/ so WaW 1.7 PrecacheMenu()
-    # and openMenu() resolve ui/scriptmenus/bz_station_*.menu cleanly in-game.
+    # Mirror Base Zombies station popups under ui/scriptmenus/ with build-stamped local
+    # mod.ff parity indicators so WaW 1.7 PrecacheMenu()/openMenu() resolve them cleanly
+    # and show retail-visible host/client mismatch alerts without modifying tracked menus.
     scriptmenus_dir = stage_dir / "ui" / "scriptmenus"
     scriptmenus_dir.mkdir(parents=True, exist_ok=True)
+    build_id = f"{BZ_BUILD_VERSION}-{build_commit}"
     for menu_src in sorted((stage_dir / "ui").glob("bz_station_*.menu")):
-        shutil.copy2(menu_src, scriptmenus_dir / menu_src.name)
+        stamped = stamp_bz_station_menu_build_parity(menu_src.read_text(encoding="latin1"), build_id)
+        brace_errors = verify_hud_menus.validate_menu_braces(stamped, filename=menu_src.name)
+        if brace_errors:
+            raise ValueError(f"Parity-stamped menu {menu_src.name} failed brace validation: {brace_errors}")
+        (scriptmenus_dir / menu_src.name).write_text(stamped, encoding="latin1")
 
     return stage_dir
 
@@ -2054,6 +2261,8 @@ def build_iwd(stage_dir: Path) -> Path:
     gsc_files = sorted((stage_dir / "maps").rglob("*.gsc"))
     if not gsc_files:
         raise RuntimeError(f"No staged GSC files found under {stage_dir / 'maps'}")
+    clientscripts_dir = stage_dir / "clientscripts"
+    csc_files = sorted(clientscripts_dir.rglob("*.csc")) if clientscripts_dir.is_dir() else []
     weapons_sp_dir = stage_dir / "weapons" / "sp"
     weapon_files = (
         sorted(p for p in weapons_sp_dir.iterdir() if p.is_file())
@@ -2064,7 +2273,7 @@ def build_iwd(stage_dir: Path) -> Path:
     with TemporaryDirectory(dir=DIST_DIR) as tmp:
         staged_iwd = Path(tmp) / dist_iwd.name
         with ZipFile(staged_iwd, "w") as archive:
-            for file_path in (*gsc_files, *weapon_files):
+            for file_path in (*gsc_files, *csc_files, *weapon_files):
                 rel = file_path.relative_to(stage_dir).as_posix()
                 archive.writestr(ZipInfo(rel), file_path.read_bytes(), compress_type=ZIP_DEFLATED)
         staged_iwd.replace(dist_iwd)

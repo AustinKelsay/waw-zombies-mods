@@ -64,12 +64,35 @@ def _vec_dist(a: GscArray, b: GscArray) -> float:
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
+class StationHudRuntime(BzGscRuntime):
+    """Record client HUD allocation and destruction while executing the station GSC."""
+
+    def __init__(self, mod_root: Path, dvars: FakeDvarStore) -> None:
+        super().__init__(mod_root, dvars)
+        self.hud_elems: list[GscStruct] = []
+        self.destroyed_huds: list[GscStruct] = []
+        self.waits: list[tuple[Any, str]] = []
+
+    def _call_builtin(self, name_lower: str, args: list[Any], line: int) -> tuple[bool, Any]:
+        handled, result = super()._call_builtin(name_lower, args, line)
+        if name_lower == "newclienthudelem":
+            self.hud_elems.append(result)
+        return handled, result
+
+    def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
+        if method == "destroy" and receiver in self.hud_elems:
+            self.destroyed_huds.append(receiver)
+        if method == "waittill":
+            self.waits.append((receiver, args[0]))
+        return super()._exec_method(receiver, method, args, line)
+
+
 class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
     """Slice 1: 4-map coordinate coverage, floor-snap, Classic/Feature-Gate isolation & cleanup."""
 
     def setUp(self) -> None:
         self.dvars = FakeDvarStore()
-        self.gsc = BzGscRuntime(MOD_ROOT, self.dvars)
+        self.gsc = StationHudRuntime(MOD_ROOT, self.dvars)
         self.player = FakeEntity("HostPlayer", ent_num=0)
         self.gsc.players.append(self.player)
 
@@ -118,7 +141,7 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
 
             self.assertEqual(tuple(seen_ids), expected_ids, f"Station IDs mismatch on {map_name}")
 
-            # Every pair of stations must be separated beyond the 78u prompt / 64u trigger radius (>= 85u)
+            # Keep at least 85u between station anchors so their interact points stay distinct.
             for i in range(len(origins)):
                 for j in range(i + 1, len(origins)):
                     sid_a, pos_a = origins[i]
@@ -145,9 +168,19 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (10020, 610, -492))
                 self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10280, 610, -492))
                 self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10280, 410, -492))
-            elif map_name == "nazi_zombie_asylum":
-                # Verruckt arsenal aligned cleanly away from doorway and Quick Revive (1149, 402)
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (1060, 310, 96))
+
+    def test_verruckt_arsenal_trigger_clears_all_four_north_spawns(self) -> None:
+        specs = self.gsc.call(BZ_STATIONS_MOD, "bz_stations_get_map_specs", "nazi_zombie_asylum")
+        arsenal = next(spec for spec in specs.to_list() if spec.get_field("id") == "arsenal")
+        origin = arsenal.get_field("origin")
+        self.assertEqual(tuple(origin.to_list()), (985, 295, 96))
+        self.assertEqual(tuple(arsenal.get_field("angles").to_list()), (0, 0, 0))
+
+        # initial_spawn_points with script_noteworthy=north_spawn in nazi_zombie_asylum.ff.
+        north_spawns = ((1097, 302, 91), (1098, 237, 91), (1076.5, 394.5, 97), (1137.5, 121.5, 88))
+        for x, y, z in north_spawns:
+            with self.subTest(spawn=(x, y, z)):
+                self.assertGreaterEqual(math.hypot(origin[0] - x, origin[1] - y), 65.0)
 
     def test_unrecognized_map_uses_safe_spawn_offset_fallback_and_floor_snap(self) -> None:
         spawn_ent = FakeEntity("info_player_start", ent_num=50, is_player=False)
@@ -181,8 +214,13 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
         self.gsc.call(BZ_HOOKS_MOD, "bz_init")
 
+        self.player.set_field("origin", GscArray([-310, -240, 20]))
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", self.player)
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", self.player)
+
         self.assertEqual(self.gsc.precached_menus, [])
         self.assertEqual(self.gsc.spawned_entities, [])
+        self.assertEqual(self.gsc.hud_elems, [])
         self.assertFalse(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.player, "bz_station_perks", "buy_perk:staminup")
         )
@@ -258,6 +296,17 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 expected_count,
                 f"Expected {expected_count} station script_models on {map_name}",
             )
+            models_by_station = {mdl.get_field("bz_station_id"): mdl.get_field("model") for mdl in models}
+            if map_name == "nazi_zombie_prototype":
+                self.assertEqual(models_by_station["perks"], "static_berlin_ger_radio")
+                self.assertEqual(models_by_station["class"], "dest_peleliu_generator_mobile_dmg0")
+                self.assertEqual(models_by_station["arsenal"], "german_grenade_bag")
+                self.assertEqual(models_by_station["pap"], "global_explosive_barrel_japanese")
+            else:
+                self.assertEqual(models_by_station["arsenal"], "zombie_treasure_box")
+                if map_name == "nazi_zombie_factory":
+                    self.assertEqual(models_by_station["class"], "zombie_vending_revive_on")
+
             for mdl in models:
                 self.assertEqual(
                     mdl.__dict__.get("contents"),
@@ -299,6 +348,193 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         stations2 = gsc2.level.get_field("bz_stations")
         self.assertIsNot(stations2["arsenal"], UNDEFINED)
         self.assertIs(stations2["pap"], UNDEFINED)
+
+
+class TestBzStationProximityPrompt(unittest.TestCase):
+    def setUp(self) -> None:
+        dvars = FakeDvarStore()
+        for gate in ("bz_enabled", "bz_perks_enabled", "bz_classes_enabled", "bz_pap_enabled"):
+            dvars.set(gate, "1")
+
+        self.gsc = StationHudRuntime(MOD_ROOT, dvars)
+        self.gsc.level.set_field("script", "nazi_zombie_prototype")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+        self.player = FakeEntity("HostPlayer", ent_num=0)
+        self.gsc.players.append(self.player)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", self.player)
+
+    def update_at(self, origin: tuple[int, int, int]) -> None:
+        self.player.set_field("origin", GscArray(list(origin)))
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", self.player)
+
+    def test_moving_between_stations_updates_text_and_color_on_one_client_hud(self) -> None:
+        cases = (
+            ((-140, 460, 24), "[PERKS] Specialty Perk Station - Press [F]", (1.0, 0.35, 0.35)),
+            ((-140, 320, 24), "[CLASS] Class Altar - Press [F]", (0.35, 0.85, 1.0)),
+            ((150, 460, 24), "[ARSENAL] Arsenal & Squad Station - Press [F]", (0.45, 1.0, 0.55)),
+            ((150, 320, 24), "[PAP] Pack-a-Punch Station - Press [F]", (1.0, 0.85, 0.30)),
+        )
+        self.assertEqual(self.gsc.hud_elems, [])
+        for origin, label, color in cases:
+            with self.subTest(label=label):
+                self.update_at(origin)
+                hud = self.player.get_field("bz_station_prompt_hud")
+                self.assertEqual(self.gsc.hud_elems, [hud])
+                self.assertIs(hud.get_field("owner"), self.player)
+                self.assertEqual(hud.get_field("text"), label)
+                self.assertEqual(tuple(hud.get_field("color").to_list()), color)
+                self.assertEqual(hud.get_field("alpha"), 1)
+
+    def test_prompt_uses_nearest_station_within_64_unit_trigger_cylinder(self) -> None:
+        self.update_at((-235, 460, 24))  # 95u horizontally (outside 64u trigger)
+        self.assertEqual(self.gsc.hud_elems, [])
+        self.update_at((-205, 460, 24))  # 65u horizontally (outside 64u trigger)
+        self.assertEqual(self.gsc.hud_elems, [])
+        self.update_at((-204, 460, 24))  # 64u horizontally (on trigger boundary)
+        hud = self.player.get_field("bz_station_prompt_hud")
+        self.assertEqual(hud.get_field("alpha"), 1)
+        self.assertIn("[PERKS]", hud.get_field("text"))
+
+        # Within 64u of Perks (-140, 460) and outside Class (-140, 320)
+        self.update_at((-140, 400, 24))
+        self.assertIn("[PERKS]", hud.get_field("text"))
+        # Within 64u of Class (-140, 320) and outside Perks (-140, 460)
+        self.update_at((-140, 380, 24))
+        self.assertIn("[CLASS]", hud.get_field("text"))
+
+        self.update_at((-140, 460, 96))  # +72u vertically (inside trigger height)
+        self.assertEqual(hud.get_field("alpha"), 1)
+        self.update_at((-140, 460, 97))  # +73u vertically (above trigger height)
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.update_at((-140, 460, -9))  # -33u vertically (below trigger floor tolerance)
+        self.assertEqual(hud.get_field("alpha"), 0)
+        triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
+        self.assertTrue(triggers)
+        self.assertTrue(all(trig.get_field("radius") == 64 for trig in triggers))
+
+    def test_overlapping_verruckt_triggers_open_same_nearest_station_as_hud(self) -> None:
+        class _StopTriggerLoop(Exception):
+            pass
+
+        class _TriggerStationRuntime(StationHudRuntime):
+            def __init__(self, mod_root: Path, dvars: FakeDvarStore) -> None:
+                super().__init__(mod_root, dvars)
+                self.trigger_player: FakeEntity | None = None
+                self.trigger_delivered = False
+
+            def _eval_expr(self, expr: Any, mod_key: str, env: dict[str, Any]) -> Any:
+                from tests.gsc_runtime import VarRef
+                from tests.test_bz_hooks_and_build import MethodCallExpr
+
+                if isinstance(expr, MethodCallExpr) and expr.method_name.lower() == "waittill" and expr.args:
+                    ev_name = self._eval_expr(expr.args[0], mod_key, env)
+                    if ev_name == "trigger":
+                        if self.trigger_delivered:
+                            raise _StopTriggerLoop()
+                        self.trigger_delivered = True
+                        if len(expr.args) > 1 and isinstance(expr.args[1], VarRef):
+                            env[expr.args[1].name.lower()] = self.trigger_player
+                        return UNDEFINED
+                return super()._eval_expr(expr, mod_key, env)
+
+            def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
+                if method == "usebuttonpressed":
+                    return True
+                return super()._exec_method(receiver, method, args, line)
+
+        dvars = FakeDvarStore()
+        for gate in ("bz_enabled", "bz_perks_enabled", "bz_classes_enabled", "bz_pap_enabled", "bz_elements_enabled"):
+            dvars.set(gate, "1")
+        gsc = _TriggerStationRuntime(MOD_ROOT, dvars)
+        gsc.level.set_field("script", "nazi_zombie_asylum")
+        gsc.call(BZ_HOOKS_MOD, "bz_init")
+        player = FakeEntity("VerrucktPlayer", ent_num=0)
+        gsc.players.append(player)
+        gsc.trigger_player = player
+        gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
+
+        # (949, 335, 96) lies inside BOTH Perks (920, 370; ~45u) and Arsenal (985, 295; ~54u).
+        player.set_field("origin", GscArray([949, 335, 96]))
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        hud = player.get_field("bz_station_prompt_hud")
+        self.assertIn("[PERKS]", hud.get_field("text"))
+
+        # Move to (955, 330, 96) BEFORE the next HUD refresh (Perks ~53u, Arsenal ~46u — both eligible).
+        # Exercise Arsenal's actual bz_station_trigger_think(): it must open the displayed Perks station.
+        player.set_field("origin", GscArray([955, 330, 96]))
+        arsenal_station = gsc.level.get_field("bz_stations")["arsenal"]
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(arsenal_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "perks")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_perks")
+
+        # Close menu, advance past Use cooldown, refresh HUD at (955, 330, 96) -> [ARSENAL].
+        # Now Perks's trigger firing Use must open the displayed Arsenal station.
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_perks", "close")
+        player.set_field("bz_station_next_use_time", 0)
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        self.assertIn("[ARSENAL]", hud.get_field("text"))
+        perks_station = gsc.level.get_field("bz_stations")["perks"]
+        gsc.trigger_delivered = False
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "arsenal")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_arsenal")
+
+    def test_prompt_hides_when_dead_in_last_stand_or_in_station_menu(self) -> None:
+        origin = (-140, 460, 24)
+        self.update_at(origin)
+        hud = self.player.get_field("bz_station_prompt_hud")
+        for field, blocked, restored in (
+            ("health", 0, 100),
+            ("revivetrigger", GscStruct(), UNDEFINED),
+            ("is_in_laststand", True, False),
+            ("in_last_stand", True, False),
+        ):
+            with self.subTest(field=field):
+                self.player.set_field(field, blocked)
+                self.update_at(origin)
+                self.assertEqual(hud.get_field("alpha"), 0)
+                self.player.set_field(field, restored)
+                self.update_at(origin)
+                self.assertEqual(hud.get_field("alpha"), 1)
+
+        self.assertTrue(self.gsc.call(BZ_STATIONS_MOD, "bz_stations_open_for_player", self.player, "perks"))
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.update_at(origin)
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.assertEqual(self.gsc.hud_elems, [hud])
+
+    def test_disconnect_and_end_game_destroy_each_tracked_client_hud_once(self) -> None:
+        second = FakeEntity("PlayerTwo", ent_num=1)
+        third = FakeEntity("PlayerThree", ent_num=2)
+        self.gsc.players.extend([second, third])
+        for player in (self.player, second, third):
+            player.set_field("origin", GscArray([-140, 460, 24]))
+            self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
+            self.gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+
+        watcher = "bz_stations_watch_prompt_disconnect"
+        self.assertEqual(self.gsc._threads.count((self.player, watcher, [])), 1)
+        first_hud, second_hud, third_hud = self.gsc.hud_elems
+
+        # Run the scheduled child for the departing player. The offline runtime
+        # records waittill and executes the body that would resume at disconnect.
+        self.gsc.players.remove(self.player)
+        self.gsc.call_on(self.player, BZ_STATIONS_MOD, watcher)
+        self.assertIn((self.player, "disconnect"), self.gsc.waits)
+        self.assertEqual(self.gsc.destroyed_huds, [first_hud])
+        self.assertIs(self.player.get_field("bz_station_prompt_hud"), UNDEFINED)
+        self.assertEqual(second_hud.get_field("alpha"), 1)
+        self.assertEqual(third_hud.get_field("alpha"), 1)
+
+        # The tracked list covers a client already absent from GetPlayers at shutdown.
+        self.gsc.players.remove(second)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_cleanup")
+        self.assertEqual(self.gsc.destroyed_huds, [first_hud, second_hud, third_hud])
+        self.assertIs(third.get_field("bz_station_prompt_hud"), UNDEFINED)
+        self.assertEqual(self.gsc.level.get_field("bz_station_prompt_huds").size, 0)
 
 
 class TestBzStationUiSyncAndPurchases(unittest.TestCase):

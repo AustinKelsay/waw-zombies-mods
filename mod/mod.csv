@@ -14,6 +14,7 @@ rawfile,maps/_gauntlet_bootstrap.gsc
 
 // Base Zombies modular enhancement framework scripts (future _bz_*.gsc staged automatically)
 rawfile,maps/_bz_log.gsc
+rawfile,maps/_bz_version.gsc
 rawfile,maps/_bz_hooks.gsc
 rawfile,maps/_bz_rules.gsc
 rawfile,maps/_bz_state.gsc
