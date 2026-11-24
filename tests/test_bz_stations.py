@@ -48,6 +48,7 @@ STOCK_MAPS = (
     "nazi_zombie_sumpf",
 )
 EXPECTED_STATION_IDS = ("perks", "class", "arsenal", "pap")
+EXPECTED_FACTORY_STATION_IDS = ("perks", "class", "arsenal")
 EXPECTED_MENUS = (
     "bz_station_perks",
     "bz_station_class",
@@ -83,14 +84,23 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
     def test_all_four_stock_maps_have_distinct_non_overlapping_ascii_station_specs(self) -> None:
         for map_name in STOCK_MAPS:
             specs = self.gsc.call(BZ_STATIONS_MOD, "bz_stations_get_map_specs", map_name)
-            self.assertEqual(specs.size, 4, f"{map_name} should define 4 stations")
+            expected_ids = (
+                EXPECTED_FACTORY_STATION_IDS if map_name == "nazi_zombie_factory" else EXPECTED_STATION_IDS
+            )
+            self.assertEqual(
+                specs.size,
+                len(expected_ids),
+                f"{map_name} should define {len(expected_ids)} stations",
+            )
 
             seen_ids: list[str] = []
             origins: list[tuple[str, GscArray]] = []
+            by_id: dict[str, GscStruct] = {}
             for i in range(specs.size):
                 spec = specs[i]
                 sid = spec.get_field("id")
                 seen_ids.append(sid)
+                by_id[sid] = spec
                 self.assertFalse(spec.get_field("is_fallback"), f"{map_name}/{sid} should be curated")
 
                 hint = spec.get_field("hint_string")
@@ -104,14 +114,11 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 origins.append((sid, origin))
 
                 if sid == "pap":
-                    if map_name == "nazi_zombie_factory":
-                        self.assertTrue(spec.get_field("paired_with_native_pap"))
-                    else:
-                        self.assertFalse(spec.get_field("paired_with_native_pap"))
+                    self.assertFalse(spec.get_field("paired_with_native_pap"))
 
-            self.assertEqual(tuple(seen_ids), EXPECTED_STATION_IDS, f"Station IDs mismatch on {map_name}")
+            self.assertEqual(tuple(seen_ids), expected_ids, f"Station IDs mismatch on {map_name}")
 
-            # Every pair of stations must be separated by at least 120 units (non-overlapping, non-blocking)
+            # Every pair of stations must be separated beyond the 78u prompt / 64u trigger radius (>= 85u)
             for i in range(len(origins)):
                 for j in range(i + 1, len(origins)):
                     sid_a, pos_a = origins[i]
@@ -119,9 +126,28 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                     dist = _vec_dist(pos_a, pos_b)
                     self.assertGreaterEqual(
                         dist,
-                        120.0,
+                        85.0,
                         f"{map_name}: stations {sid_a} and {sid_b} too close ({dist:.1f} units)",
                     )
+
+            # Verify BSP-verified non-blocking station placement polish (POL-T4 #40)
+            if map_name == "nazi_zombie_factory":
+                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (-310, -240, 20))
+                self.assertEqual(tuple(by_id["perks"].get_field("angles")[i] for i in range(3)), (0, 0, 0))
+                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (230, -200, 20))
+                self.assertEqual(tuple(by_id["class"].get_field("angles")[i] for i in range(3)), (0, 180, 0))
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (180, 120, 20))
+                self.assertEqual(tuple(by_id["arsenal"].get_field("angles")[i] for i in range(3)), (0, 225, 0))
+                self.assertNotIn("pap", by_id)
+            elif map_name == "nazi_zombie_sumpf":
+                # Shi No Numa arsenal moved off central stairwell cutout onto solid -528 upstairs floor
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (9960, 520, -492))
+                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (10020, 610, -492))
+                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10280, 610, -492))
+                self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10280, 410, -492))
+            elif map_name == "nazi_zombie_asylum":
+                # Verruckt arsenal nudged for clean breathing room from Quick Revive (1149, 402)
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (1010, 390, 96))
 
     def test_unrecognized_map_uses_safe_spawn_offset_fallback_and_floor_snap(self) -> None:
         spawn_ent = FakeEntity("info_player_start", ent_num=50, is_player=False)
@@ -162,24 +188,26 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         )
         self.assertEqual(self.gsc.emitted_events, [])
 
-    def test_auto_registration_precaches_menus_spawns_all_4_stations_and_cleans_up_on_end_game(self) -> None:
+    def test_auto_registration_precaches_menus_spawns_expected_stations_and_cleans_up_on_end_game(self) -> None:
         self._enable_all_phase1()
         self.gsc.level.set_field("script", "nazi_zombie_factory")
 
         self.gsc.call(BZ_HOOKS_MOD, "bz_pre_init")
+        # Keep bz_station_pap precached across all maps for non-Factory compatibility
         self.assertEqual(tuple(self.gsc.precached_menus), EXPECTED_MENUS)
 
         self.gsc.call(BZ_HOOKS_MOD, "bz_init")
         stations = self.gsc.level.get_field("bz_stations")
-        for sid in EXPECTED_STATION_IDS:
-            self.assertIsNot(stations[sid], UNDEFINED, f"Station {sid} did not spawn")
+        for sid in EXPECTED_FACTORY_STATION_IDS:
+            self.assertIsNot(stations[sid], UNDEFINED, f"Station {sid} did not spawn on Der Riese")
+        self.assertIs(stations["pap"], UNDEFINED, "Der Riese must NOT spawn duplicate standalone PaP station")
 
-        # 4 stations x (script_origin + trigger_radius + visible script_model) = 12 lightweight entities, zero FX
-        self.assertEqual(len(self.gsc.spawned_entities), 12)
+        # Der Riese: 3 stations x (script_origin + trigger_radius + visible script_model) = 9 entities, zero FX
+        self.assertEqual(len(self.gsc.spawned_entities), 9)
         triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
         models = [e for e in self.gsc.spawned_entities if e.classname == "script_model"]
-        self.assertEqual(len(triggers), 4)
-        self.assertEqual(len(models), 4)
+        self.assertEqual(len(triggers), 3)
+        self.assertEqual(len(models), 3)
         for mdl in models:
             self.assertTrue(bool(mdl.get_field("model")))
         for trig in triggers:
@@ -187,11 +215,28 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             self.assertIn("&&1", trig.hint_string)
 
         spawn_events = [e for e in self.gsc.emitted_events if e.startswith("BZ_EVENT|STATION_SPAWN|")]
-        self.assertEqual(len(spawn_events), 4)
+        self.assertEqual(len(spawn_events), 3)
 
         # End game cleans up all spawned station entities cleanly
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(all(e.deleted for e in self.gsc.spawned_entities))
+
+        # Non-Factory maps (Nacht, Verruckt, Shi No Numa) still spawn all 4 stations including standalone pap
+        for non_factory in ("nazi_zombie_prototype", "nazi_zombie_asylum", "nazi_zombie_sumpf"):
+            dvars2 = FakeDvarStore()
+            gsc2 = BzGscRuntime(MOD_ROOT, dvars2)
+            dvars2.set("bz_enabled", "1")
+            dvars2.set("bz_perks_enabled", "1")
+            dvars2.set("bz_classes_enabled", "1")
+            dvars2.set("bz_pap_enabled", "1")
+            gsc2.level.set_field("script", non_factory)
+
+            gsc2.call(BZ_HOOKS_MOD, "bz_pre_init")
+            gsc2.call(BZ_HOOKS_MOD, "bz_init")
+            stations2 = gsc2.level.get_field("bz_stations")
+            for sid in EXPECTED_STATION_IDS:
+                self.assertIsNot(stations2[sid], UNDEFINED, f"Station {sid} did not spawn on {non_factory}")
+            self.assertEqual(len(gsc2.spawned_entities), 12, f"Expected 12 entities on {non_factory}")
 
     def test_spawned_station_models_are_non_solid_with_zero_contents_across_all_maps(self) -> None:
         for map_name in STOCK_MAPS:
@@ -207,7 +252,12 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             gsc.call(BZ_HOOKS_MOD, "bz_init")
 
             models = [e for e in gsc.spawned_entities if e.classname == "script_model"]
-            self.assertEqual(len(models), 4, f"Expected 4 station script_models on {map_name}")
+            expected_count = 3 if map_name == "nazi_zombie_factory" else 4
+            self.assertEqual(
+                len(models),
+                expected_count,
+                f"Expected {expected_count} station script_models on {map_name}",
+            )
             for mdl in models:
                 self.assertEqual(
                     mdl.__dict__.get("contents"),

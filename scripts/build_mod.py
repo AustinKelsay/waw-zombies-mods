@@ -112,6 +112,34 @@ PERK_RESET_HEALTH_RE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*100;(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE,
 )
+VENDING_UPGRADE_DEF_RE = re.compile(
+    r"^vending_upgrade\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+PAP_FLAG_WAIT_RE = re.compile(
+    r'^(?P<indent>[ \t]*)flag_wait[ \t]*\([ \t]*"Pack_A_Punch_on"[ \t]*\);(?P<trailing>[ \t]*)\r?$',
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_UPGRADE_GUARD_RE = re.compile(
+    r'^(?P<indent>[ \t]*)if[ \t]*\([ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\][ \t]*\)[ \t]*\|\|[ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\+[ \t]*"_upgraded"[ \t]*\][ \t]*\)[ \t]*\)(?P<trailing>[ \t]*)\r?$',
+    re.MULTILINE | re.IGNORECASE,
+)
+WAIT_FOR_PLAYER_TAKE_DEF_RE = re.compile(
+    r"^wait_for_player_to_take\([^)]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+PAP_TAKE_GIVE_MAX_AMMO_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GiveMaxAmmo[ \t]*\([ \t]*(?P<weap>[^,)]+?)[ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_TAKE_GIVE_WEAPON_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GiveWeapon[ \t]*\([ \t]*(?P<weap>[^,)]+?)(?:[ \t]*,[^)]*)?\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_TAKE_WEAPON_GIVE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_weapons::weapon_give[ \t]*\([ \t]*(?P<weap>[^,)]+?)(?:[ \t]*,[^)]*)?\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
 ADD_PLAYER_SCORE_DEF_RE = re.compile(
     r"^add_to_player_score\([ \t]*(?P<param>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*\r?\n\{",
     re.MULTILINE,
@@ -758,6 +786,83 @@ def inject_zombiemode_perks_hooks(
         raise ValueError(
             "Expected at least 1 weapon-cap or maxhealth hook site in _zombiemode_perks.gsc"
         )
+
+    # Der Riese native Pack-a-Punch console hooks (only when vending_upgrade() exists,
+    # so Verruckt & Shi No Numa _zombiemode_perks.gsc patch cleanly without error).
+    vu_match = VENDING_UPGRADE_DEF_RE.search(text)
+    if vu_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=vu_match.end())
+        vu_end = next_fn.start() if next_fn is not None else len(text)
+        vu_body = text[vu_match.start() : vu_end]
+
+        def _inject_after_pap_flag(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ level.bz_native_pap_unlocked = true; }}{ending}"
+            )
+
+        vu_body = PAP_FLAG_WAIT_RE.sub(_inject_after_pap_flag, vu_body, count=1)
+
+        def _inject_before_pap_guard(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0)
+            return (
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() && "
+                f"maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers ) ){newline}"
+                f"{indent}{{{newline}"
+                f"{indent}\tcontinue;{newline}"
+                f"{indent}}}{newline}"
+                f"{orig}"
+            )
+
+        vu_body, guard_hits = PAP_UPGRADE_GUARD_RE.subn(_inject_before_pap_guard, vu_body, count=1)
+        if guard_hits != 1:
+            raise ValueError(
+                "Could not locate zombie_include_weapons upgrade guard inside vending_upgrade() "
+                "in _zombiemode_perks.gsc"
+            )
+        text = text[: vu_match.start()] + vu_body + text[vu_end:]
+
+        # Hook wait_for_player_to_take() right after GiveMaxAmmo / GiveWeapon / weapon_give
+        # so picking up a native *_upgraded weapon refreshes reserve ammo & HUD immediately.
+        take_match = WAIT_FOR_PLAYER_TAKE_DEF_RE.search(text)
+        if take_match is not None:
+            next_take_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=take_match.end())
+            take_end = next_take_fn.start() if next_take_fn is not None else len(text)
+            take_body = text[take_match.start() : take_end]
+
+            def _inject_after_take(match: re.Match[str]) -> str:
+                indent = match.group("indent")
+                ent = match.group("ent")
+                weap = match.group("weap").strip()
+                orig = match.group(0).rstrip("\r")
+                ending = "\r" if match.group(0).endswith("\r") else ""
+                return (
+                    f"{orig}{newline}"
+                    f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                    f"{{ maps\\_bz_pap::bz_pap_on_native_weapon_taken( {ent}, {weap} ); }}{ending}"
+                )
+
+            take_hits = 0
+            for take_re in (
+                PAP_TAKE_GIVE_MAX_AMMO_RE,
+                PAP_TAKE_GIVE_WEAPON_RE,
+                PAP_TAKE_WEAPON_GIVE_RE,
+            ):
+                take_body, take_hits = take_re.subn(_inject_after_take, take_body)
+                if take_hits > 0:
+                    break
+            if take_hits == 0:
+                raise ValueError(
+                    "Could not locate GiveMaxAmmo/GiveWeapon/weapon_give inside "
+                    "wait_for_player_to_take() in _zombiemode_perks.gsc"
+                )
+            text = text[: take_match.start()] + take_body + text[take_end:]
+
     text = _rewire_stock_module_refs(
         text,
         rewire_weapons_module=rewire_weapons_module,

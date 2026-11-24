@@ -1845,16 +1845,29 @@ bz_run_test_selftest()
 
 	map_name = bz_get_map_name();
 
-	// 1. All 4 Stations spawned with visible precached stock models
+	// 1. Stations spawned with visible precached stock models:
+	//    Der Riese spawns 3 courtyard stations (real native PaP console handles Double PaP + bz_* Tier 1);
+	//    Nacht, Verruckt, and Shi No Numa spawn all 4 including standalone PaP Station.
+	expected_stations = 4;
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		expected_stations = 3;
+	}
 	stations_ok = IsDefined( level.bz_stations ) &&
 		IsDefined( level.bz_stations["perks"] ) &&
 		IsDefined( level.bz_stations["class"] ) &&
 		IsDefined( level.bz_stations["arsenal"] ) &&
-		IsDefined( level.bz_stations["pap"] ) &&
 		IsDefined( level.bz_stations["perks"].model ) &&
 		IsDefined( level.bz_stations["class"].model ) &&
-		IsDefined( level.bz_stations["arsenal"].model ) &&
-		IsDefined( level.bz_stations["pap"].model );
+		IsDefined( level.bz_stations["arsenal"].model );
+	if ( expected_stations == 4 )
+	{
+		stations_ok = stations_ok && IsDefined( level.bz_stations["pap"] ) && IsDefined( level.bz_stations["pap"].model );
+	}
+	else
+	{
+		stations_ok = stations_ok && !IsDefined( level.bz_stations["pap"] );
+	}
 	bz_selftest_check( st, stations_ok, "stations_spawned" );
 
 	// 1b. Actor damage hook wired onto stock level.global_damage_func & _ads
@@ -2018,7 +2031,23 @@ bz_run_test_selftest()
 	live_score_delta = Int( p.score ) - score_before_live;
 	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
 
-	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP + PaP Bowie + PaP Cluster
+	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP (via native console on Der Riese) + PaP Bowie + PaP Cluster
+	native_trig = undefined;
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		pap_trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+		if ( IsDefined( pap_trigs ) && pap_trigs.size > 0 )
+		{
+			native_trig = pap_trigs[0];
+		}
+		base_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )
+		{
+			base_fallthrough = !maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
+			bz_selftest_check( st, base_fallthrough, "pap_native_base_fallthrough" );
+		}
+	}
+
 	bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
 	cur_w = "";
 	w_wait = 0.0;
@@ -2034,8 +2063,17 @@ bz_run_test_selftest()
 	}
 	bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
 
-	bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		p.bz_pap_console_next_ms = 0;
+		native_dpap_ok = maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, cur_w, undefined, undefined );
+		bz_selftest_check( st, native_dpap_ok && maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double_native_console" );
+	}
+	else
+	{
+		bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
+		bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+	}
 
 	p SetPerk( "specialty_altmelee" );
 	p.has_altmelee = true;
@@ -2079,7 +2117,7 @@ bz_run_test_selftest()
 		fields = [];
 		fields[0] = maps\_bz_log::kv( "map", map_name );
 		fields[1] = maps\_bz_log::kv( "checks", st.passed );
-		fields[2] = maps\_bz_log::kv( "stations", 4 );
+		fields[2] = maps\_bz_log::kv( "stations", expected_stations );
 		fields[3] = maps\_bz_log::kv( "titan_hp", titan_hp );
 		fields[4] = maps\_bz_log::kv( "sapper_nades", sapper_nades );
 		fields[5] = maps\_bz_log::kv( "broker_pts", broker_pts );

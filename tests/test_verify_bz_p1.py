@@ -20,12 +20,12 @@ from tests.test_bz_hooks_and_build import BzGscRuntime  # noqa: E402
 VALID_RUN_A_LOG = """
 Loading fastfile 'mod'
       dvar set bz_event BZ_EVENT|BZ_INIT|map=nazi_zombie_factory;perks=1;classes=1;pap=1;elements=0;companions=0
-      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=perks;menu=bz_station_perks;x=-240;y=-220;z=-2;paired_native=0
-      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=class;menu=bz_station_class;x=240;y=-220;z=90;paired_native=0
-      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=arsenal;menu=bz_station_arsenal;x=210;y=90;z=-3;paired_native=0
-      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=pap;menu=bz_station_pap;x=-130;y=-490;z=68;paired_native=1
+      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=perks;menu=bz_station_perks;x=-310;y=-240;z=0;paired_native=0
+      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=class;menu=bz_station_class;x=230;y=-200;z=0;paired_native=0
+      dvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=arsenal;menu=bz_station_arsenal;x=180;y=120;z=0;paired_native=0
+      dvar set bz_event BZ_EVENT|PAP_DOUBLE_UPGRADE|player=Host;map=nazi_zombie_factory;weapon=zombie_colt_upgraded;dmg_mult=1.75;ammo_mult=3;stock=240;console=native
       dvar set gauntlet_event GAUNTLET_EVENT|MOD_LOADED|map=nazi_zombie_factory;gauntlet_enabled=0
-      dvar set bz_event BZ_EVENT|BZ_SELFTEST_PASS|map=nazi_zombie_factory;checks=22;stations=4;titan_hp=440;sapper_nades=10;broker_pts=200;broker_box=475;dpap_weapon=zombie_colt_upgraded;assassin_ghost=1
+      dvar set bz_event BZ_EVENT|BZ_SELFTEST_PASS|map=nazi_zombie_factory;checks=23;stations=3;titan_hp=440;sapper_nades=10;broker_pts=200;broker_box=475;dpap_weapon=zombie_colt_upgraded;assassin_ghost=1
 """
 
 VALID_RUN_B_CLASSIC_LOG = """
@@ -49,10 +49,23 @@ class TestVerifyBaseZombiesP1LogAnalyzers(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(any(e.event_type == "BZ_SELFTEST_PASS" for e in events))
 
-    def test_analyze_bz_p1_log_rejects_missing_station(self) -> None:
-        broken = VALID_RUN_A_LOG.replace("station=pap", "station=other")
+    def test_analyze_bz_p1_log_rejects_missing_station_or_duplicate_factory_pap(self) -> None:
+        broken = VALID_RUN_A_LOG.replace("station=arsenal", "station=other")
         _, errors = vb.analyze_bz_p1_log(broken)
-        self.assertTrue(any("station='pap'" in err for err in errors))
+        self.assertTrue(any("station='arsenal'" in err for err in errors))
+
+        dup_pap = (
+            VALID_RUN_A_LOG
+            + "\ndvar set bz_event BZ_EVENT|STATION_SPAWN|map=nazi_zombie_factory;station=pap;menu=bz_station_pap;x=-130;y=-490;z=68;paired_native=1\n"
+        )
+        _, dup_errors = vb.analyze_bz_p1_log(dup_pap)
+        self.assertTrue(any("pap" in err.lower() for err in dup_errors))
+
+        no_native_dpap = "\n".join(
+            line for line in VALID_RUN_A_LOG.splitlines() if "PAP_DOUBLE_UPGRADE" not in line
+        )
+        _, native_errors = vb.analyze_bz_p1_log(no_native_dpap)
+        self.assertTrue(any("console=native" in err for err in native_errors))
 
     def test_analyze_bz_p1_log_rejects_fatal_400_fx_and_script_runtime_error(self) -> None:
         log_fx = VALID_RUN_A_LOG + "\nERROR: Exceeded limit of 400 'fx' assets\n"
