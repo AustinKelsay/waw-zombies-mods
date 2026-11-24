@@ -1,0 +1,811 @@
+// Cross-Stage Base Zombies Persistence & Lifecycle Bridge for Zombie Gauntlet
+// (Call of Duty: WaW 1.7).
+//
+// Persists Base Zombies player progression across Gauntlet Stage & Cycle map
+// transitions using compact, Co-op-safe host dvars (keyed identically to
+// maps\_gauntlet_state::make_player_key):
+//   - gauntlet_bz_perm  : Permanent-per-Run gear (survives downs & stage clears):
+//                         Class, PaP Knife/Bowie/Cluster, War Club / PaP War Club,
+//                         Bowie ownership, active melee slot, Portal Grenade.
+//   - gauntlet_bz_perks : Alive-only perks (carried across Stage clears when alive;
+//                         cleared on death/spectator just like _gauntlet_perks):
+//                         Standard Perks (stock + custom), Perk Tier 2, Apex Perks.
+//
+// Both dvars are cleared automatically on Run Reset, Team Wipe, and Lobby Disband.
+// Strictly WaW 1.7 GSC compliant (indexed for-loops only; no foreach; no endon).
+
+clear_bz_gauntlet_dvars()
+{
+	SetDvar( "gauntlet_bz_perm", "" );
+	SetDvar( "gauntlet_bz_perks", "" );
+}
+
+// ---------------------------------------------------------------------------
+// Compact Code Tables (keeps 4-player Co-op dvars well under 1024-byte cap)
+// ---------------------------------------------------------------------------
+
+bz_gauntlet_perk_to_code( perk_id )
+{
+	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	if ( id == "juggernog" )
+	{
+		return "jg";
+	}
+	if ( id == "speed_cola" )
+	{
+		return "sc";
+	}
+	if ( id == "double_tap" )
+	{
+		return "dt";
+	}
+	if ( id == "quick_revive" )
+	{
+		return "qr";
+	}
+	if ( id == "staminup" )
+	{
+		return "su";
+	}
+	if ( id == "mule_kick" )
+	{
+		return "mk";
+	}
+	if ( id == "ap" )
+	{
+		return "ap";
+	}
+	return "";
+}
+
+bz_gauntlet_code_to_perk( code )
+{
+	c = maps\_bz_rules::bz_normalize_id( code );
+	if ( c == "jg" )
+	{
+		return "juggernog";
+	}
+	if ( c == "sc" )
+	{
+		return "speed_cola";
+	}
+	if ( c == "dt" )
+	{
+		return "double_tap";
+	}
+	if ( c == "qr" )
+	{
+		return "quick_revive";
+	}
+	if ( c == "su" )
+	{
+		return "staminup";
+	}
+	if ( c == "mk" )
+	{
+		return "mule_kick";
+	}
+	if ( c == "ap" )
+	{
+		return "ap";
+	}
+	return "";
+}
+
+bz_gauntlet_apex_to_code( apex_id )
+{
+	id = maps\_bz_rules::bz_normalize_id( apex_id );
+	if ( id == "double_ammo" )
+	{
+		return "da";
+	}
+	if ( id == "lightweight_heavy" )
+	{
+		return "lh";
+	}
+	if ( id == "second_chance" )
+	{
+		return "sc";
+	}
+	if ( id == "blast_shield" )
+	{
+		return "bs";
+	}
+	return "";
+}
+
+bz_gauntlet_code_to_apex( code )
+{
+	c = maps\_bz_rules::bz_normalize_id( code );
+	if ( c == "da" )
+	{
+		return "double_ammo";
+	}
+	if ( c == "lh" )
+	{
+		return "lightweight_heavy";
+	}
+	if ( c == "sc" )
+	{
+		return "second_chance";
+	}
+	if ( c == "bs" )
+	{
+		return "blast_shield";
+	}
+	return "";
+}
+
+bz_gauntlet_join_csv( items )
+{
+	if ( !IsDefined( items ) || items.size == 0 )
+	{
+		return "-";
+	}
+	out = "" + items[0];
+	for ( i = 1; i < items.size; i++ )
+	{
+		out = out + "," + items[i];
+	}
+	return out;
+}
+
+bz_gauntlet_array_contains( arr, target )
+{
+	if ( !IsDefined( arr ) || !IsDefined( target ) )
+	{
+		return false;
+	}
+	for ( i = 0; i < arr.size; i++ )
+	{
+		if ( arr[i] == target )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bz_gauntlet_player_is_alive_non_spectator( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" )
+	{
+		return false;
+	}
+	if ( !IsAlive( player ) )
+	{
+		return false;
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Serialization & Deserialization (Pure, Offline-Testable)
+// ---------------------------------------------------------------------------
+
+// Encodes permanent-per-Run BZ progression as "<class>|<flags_csv>|<melee_slot>".
+// Returns "" if the player has no permanent BZ progression to carry over.
+encode_perm_record( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return "";
+	}
+
+	maps\_bz_state::bz_state_ensure_init( player );
+	if ( maps\_bz_stations::bz_stations_player_has_bowie( player ) )
+	{
+		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+	}
+
+	cls = maps\_bz_state::bz_state_get_class( player );
+	cls_tok = "-";
+	if ( cls != "" && maps\_bz_rules::bz_is_valid_class( cls ) )
+	{
+		cls_tok = cls;
+	}
+
+	flags = [];
+	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
+	{
+		flags[flags.size] = "pk";
+	}
+	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
+	{
+		flags[flags.size] = "pb";
+	}
+	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_cluster", "" ) )
+	{
+		flags[flags.size] = "pc";
+	}
+	if ( maps\_bz_state::bz_state_owns_war_club( player ) )
+	{
+		flags[flags.size] = "wc";
+	}
+	if ( maps\_bz_state::bz_state_has_pap_war_club( player ) )
+	{
+		flags[flags.size] = "pwc";
+	}
+	if ( maps\_bz_state::bz_state_owns_bowie( player ) )
+	{
+		flags[flags.size] = "bw";
+	}
+	if ( maps\_bz_state::bz_state_owns_portal_grenade( player ) )
+	{
+		flags[flags.size] = "pg";
+	}
+
+	melee_slot = maps\_bz_state::bz_state_get_melee_slot( player );
+	if ( melee_slot != "bowie" && melee_slot != "war_club" )
+	{
+		melee_slot = "knife";
+	}
+
+	if ( cls_tok == "-" && flags.size == 0 && melee_slot == "knife" )
+	{
+		return "";
+	}
+
+	return cls_tok + "|" + bz_gauntlet_join_csv( flags ) + "|" + melee_slot;
+}
+
+parse_perm_record( raw )
+{
+	rec = SpawnStruct();
+	rec.class_id = "";
+	rec.pap_knife = false;
+	rec.pap_bowie = false;
+	rec.pap_cluster = false;
+	rec.owns_war_club = false;
+	rec.pap_war_club = false;
+	rec.owns_bowie = false;
+	rec.owns_portal_grenade = false;
+	rec.melee_slot = "knife";
+
+	if ( !IsDefined( raw ) || raw == "" )
+	{
+		return rec;
+	}
+
+	parts = StrTok( "" + raw, "|" );
+	if ( parts.size < 3 )
+	{
+		return rec;
+	}
+
+	cls = maps\_bz_rules::bz_normalize_id( parts[0] );
+	if ( cls != "-" && maps\_bz_rules::bz_is_valid_class( cls ) )
+	{
+		rec.class_id = cls;
+	}
+
+	if ( parts[1] != "-" && parts[1] != "" )
+	{
+		ftoks = StrTok( parts[1], "," );
+		for ( i = 0; i < ftoks.size; i++ )
+		{
+			tok = maps\_bz_rules::bz_normalize_id( ftoks[i] );
+			if ( tok == "pk" )
+			{
+				rec.pap_knife = true;
+			}
+			else if ( tok == "pb" )
+			{
+				rec.pap_bowie = true;
+			}
+			else if ( tok == "pc" )
+			{
+				rec.pap_cluster = true;
+			}
+			else if ( tok == "wc" )
+			{
+				rec.owns_war_club = true;
+			}
+			else if ( tok == "pwc" )
+			{
+				rec.pap_war_club = true;
+			}
+			else if ( tok == "bw" )
+			{
+				rec.owns_bowie = true;
+			}
+			else if ( tok == "pg" )
+			{
+				rec.owns_portal_grenade = true;
+			}
+		}
+	}
+
+	slot = maps\_bz_rules::bz_normalize_id( parts[2] );
+	if ( slot == "bowie" || slot == "war_club" || slot == "knife" )
+	{
+		rec.melee_slot = slot;
+	}
+
+	return rec;
+}
+
+// Encodes alive-only BZ perks as "<t1_csv>|<t2_csv>|<apex_csv>".
+// Returns "" if player is dead/spectating or owns no perks.
+encode_perks_record( player )
+{
+	if ( !bz_gauntlet_player_is_alive_non_spectator( player ) )
+	{
+		return "";
+	}
+
+	maps\_bz_state::bz_state_ensure_init( player );
+	maps\_bz_stations::bz_stations_sync_stock_perks( player );
+
+	std_ids = maps\_bz_rules::bz_get_standard_perk_ids();
+	t1_codes = [];
+	t2_codes = [];
+	for ( i = 0; i < std_ids.size; i++ )
+	{
+		pid = std_ids[i];
+		code = bz_gauntlet_perk_to_code( pid );
+		if ( code == "" )
+		{
+			continue;
+		}
+		if ( maps\_bz_state::bz_state_has_perk( player, pid ) )
+		{
+			t1_codes[t1_codes.size] = code;
+			if ( maps\_bz_state::bz_state_has_perk_t2( player, pid ) )
+			{
+				t2_codes[t2_codes.size] = code;
+			}
+		}
+	}
+
+	apex_ids = maps\_bz_rules::bz_get_apex_perk_ids();
+	apex_codes = [];
+	for ( i = 0; i < apex_ids.size; i++ )
+	{
+		aid = apex_ids[i];
+		acode = bz_gauntlet_apex_to_code( aid );
+		if ( acode == "" )
+		{
+			continue;
+		}
+		if ( maps\_bz_state::bz_state_has_apex( player, aid ) )
+		{
+			apex_codes[apex_codes.size] = acode;
+		}
+	}
+
+	if ( t1_codes.size == 0 && t2_codes.size == 0 && apex_codes.size == 0 )
+	{
+		return "";
+	}
+
+	return bz_gauntlet_join_csv( t1_codes ) + "|" + bz_gauntlet_join_csv( t2_codes ) + "|" + bz_gauntlet_join_csv( apex_codes );
+}
+
+parse_perks_record( raw )
+{
+	rec = SpawnStruct();
+	rec.t1 = [];
+	rec.t2 = [];
+	rec.apex = [];
+
+	if ( !IsDefined( raw ) || raw == "" )
+	{
+		return rec;
+	}
+
+	parts = StrTok( "" + raw, "|" );
+	if ( parts.size < 3 )
+	{
+		return rec;
+	}
+
+	if ( parts[0] != "-" && parts[0] != "" )
+	{
+		toks = StrTok( parts[0], "," );
+		for ( i = 0; i < toks.size; i++ )
+		{
+			pid = bz_gauntlet_code_to_perk( toks[i] );
+			if ( pid != "" && !bz_gauntlet_array_contains( rec.t1, pid ) )
+			{
+				rec.t1[rec.t1.size] = pid;
+			}
+		}
+	}
+
+	if ( parts[1] != "-" && parts[1] != "" )
+	{
+		toks = StrTok( parts[1], "," );
+		for ( i = 0; i < toks.size; i++ )
+		{
+			pid = bz_gauntlet_code_to_perk( toks[i] );
+			if ( pid != "" && !bz_gauntlet_array_contains( rec.t2, pid ) )
+			{
+				rec.t2[rec.t2.size] = pid;
+			}
+		}
+	}
+
+	if ( parts[2] != "-" && parts[2] != "" )
+	{
+		toks = StrTok( parts[2], "," );
+		for ( i = 0; i < toks.size; i++ )
+		{
+			aid = bz_gauntlet_code_to_apex( toks[i] );
+			if ( aid != "" && !bz_gauntlet_array_contains( rec.apex, aid ) )
+			{
+				rec.apex[rec.apex.size] = aid;
+			}
+		}
+	}
+
+	return rec;
+}
+
+// ---------------------------------------------------------------------------
+// Host Dvar Ledger Helpers (Keyed by maps\_gauntlet_state::make_player_key)
+// ---------------------------------------------------------------------------
+
+upsert_dvar_entry( dvar_name, player_key, value_str )
+{
+	if ( !IsDefined( player_key ) || player_key == "" )
+	{
+		return false;
+	}
+
+	val = "";
+	if ( IsDefined( value_str ) )
+	{
+		val = "" + value_str;
+	}
+
+	raw_ledger = GetDvar( dvar_name );
+	keys = [];
+	vals = [];
+	found = false;
+
+	if ( raw_ledger != "" )
+	{
+		entries = StrTok( raw_ledger, ";" );
+		for ( i = 0; i < entries.size; i++ )
+		{
+			pair = StrTok( entries[i], "=" );
+			if ( pair.size != 2 )
+			{
+				continue;
+			}
+			ekey = pair[0];
+			eval = pair[1];
+			if ( ekey == player_key )
+			{
+				found = true;
+				if ( val != "" )
+				{
+					idx = keys.size;
+					keys[idx] = ekey;
+					vals[idx] = val;
+				}
+			}
+			else if ( ekey != "" && eval != "" )
+			{
+				idx = keys.size;
+				keys[idx] = ekey;
+				vals[idx] = eval;
+			}
+		}
+	}
+
+	if ( !found && val != "" )
+	{
+		idx = keys.size;
+		keys[idx] = player_key;
+		vals[idx] = val;
+	}
+
+	serialized = "";
+	for ( i = 0; i < keys.size; i++ )
+	{
+		chunk = keys[i] + "=" + vals[i];
+		if ( serialized == "" )
+		{
+			serialized = chunk;
+		}
+		else
+		{
+			serialized = serialized + ";" + chunk;
+		}
+	}
+
+	SetDvar( dvar_name, serialized );
+	return true;
+}
+
+get_dvar_entry( dvar_name, player_key )
+{
+	if ( !IsDefined( player_key ) || player_key == "" )
+	{
+		return "";
+	}
+
+	raw_ledger = GetDvar( dvar_name );
+	if ( raw_ledger == "" )
+	{
+		return "";
+	}
+
+	entries = StrTok( raw_ledger, ";" );
+	for ( i = 0; i < entries.size; i++ )
+	{
+		pair = StrTok( entries[i], "=" );
+		if ( pair.size == 2 && pair[0] == player_key )
+		{
+			return pair[1];
+		}
+	}
+	return "";
+}
+
+record_player_bz_state( player_guid, player_name, perm_str, perks_str )
+{
+	key = maps\_gauntlet_state::make_player_key( player_guid, player_name );
+	if ( key == "" )
+	{
+		return false;
+	}
+
+	upsert_dvar_entry( "gauntlet_bz_perm", key, perm_str );
+	upsert_dvar_entry( "gauntlet_bz_perks", key, perks_str );
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Stage Snapshot, Restore & Transition Cleanup Seams
+// ---------------------------------------------------------------------------
+
+snapshot_player_bz_state( player, current_map )
+{
+	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	guid = maps\_gauntlet_mode::get_player_guid( player );
+	name = maps\_gauntlet_mode::get_player_name( player );
+	player_key = maps\_gauntlet_state::make_player_key( guid, name );
+	if ( player_key == "" )
+	{
+		return false;
+	}
+
+	perm_str = encode_perm_record( player );
+	perks_str = encode_perks_record( player );
+	record_player_bz_state( guid, name, perm_str, perks_str );
+
+	map_label = "";
+	if ( IsDefined( current_map ) )
+	{
+		map_label = "" + current_map;
+	}
+
+	perm_log = "none";
+	if ( perm_str != "" )
+	{
+		perm_log = perm_str;
+	}
+	perks_log = "none";
+	if ( perks_str != "" )
+	{
+		perks_log = perks_str;
+	}
+
+	fields = [];
+	fields[0] = maps\_bz_log::kv( "player", player_key );
+	fields[1] = maps\_bz_log::kv( "map", map_label );
+	fields[2] = maps\_bz_log::kv( "perm", perm_log );
+	fields[3] = maps\_bz_log::kv( "perks", perks_log );
+	maps\_bz_log::emit( "GAUNTLET_BZ_SAVED", maps\_bz_log::join_fields( fields ) );
+	return true;
+}
+
+restore_player_bz_state( player, current_map )
+{
+	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	if ( IsDefined( player.gauntlet_bz_restored ) && player.gauntlet_bz_restored )
+	{
+		return false;
+	}
+	player.gauntlet_bz_restored = true;
+
+	maps\_bz_hooks::bz_on_player_connect( player );
+	maps\_bz_state::bz_state_ensure_init( player );
+
+	guid = maps\_gauntlet_mode::get_player_guid( player );
+	name = maps\_gauntlet_mode::get_player_name( player );
+	player_key = maps\_gauntlet_state::make_player_key( guid, name );
+
+	perm_raw = get_dvar_entry( "gauntlet_bz_perm", player_key );
+	perks_raw = get_dvar_entry( "gauntlet_bz_perks", player_key );
+
+	perm = parse_perm_record( perm_raw );
+	perks = parse_perks_record( perks_raw );
+
+	// 1. Restore permanent-per-Run BZ progression (Class, PaP melee/cluster, Special gear).
+	if ( perm.class_id != "" && maps\_bz_hooks::bz_classes_enabled() )
+	{
+		player.bz_class = perm.class_id;
+		maps\_bz_classes::bz_class_apply( player, perm.class_id );
+		maps\_bz_classes::bz_class_update_hud( player );
+	}
+
+	if ( maps\_bz_hooks::bz_pap_enabled() )
+	{
+		if ( perm.pap_knife )
+		{
+			player.bz_pap_knife = true;
+		}
+		if ( perm.pap_bowie )
+		{
+			player.bz_pap_bowie = true;
+		}
+		if ( perm.pap_cluster )
+		{
+			player.bz_pap_cluster = true;
+			maps\_bz_pap::bz_pap_ensure_player_watchers( player );
+		}
+		if ( perm.pap_knife || perm.pap_bowie || perm.pap_cluster )
+		{
+			maps\_bz_pap::bz_pap_update_hud( player );
+		}
+	}
+
+	if ( perm.owns_bowie )
+	{
+		player.bz_owns_bowie = true;
+		player.bz_has_bowie = true;
+	}
+
+	if ( maps\_bz_hooks::bz_elements_enabled() )
+	{
+		if ( perm.owns_war_club )
+		{
+			player.bz_owns_war_club = true;
+		}
+		if ( perm.pap_war_club )
+		{
+			player.bz_pap_war_club = true;
+		}
+		if ( perm.owns_portal_grenade )
+		{
+			player.bz_owns_portal_grenade = true;
+			player.bz_portal_charges = maps\_bz_rules::bz_get_portal_max_charges();
+		}
+		if ( perm.melee_slot == "war_club" && perm.owns_war_club )
+		{
+			player.bz_melee_slot = "war_club";
+		}
+		else if ( perm.melee_slot == "bowie" && perm.owns_bowie )
+		{
+			player.bz_melee_slot = "bowie";
+		}
+		else
+		{
+			player.bz_melee_slot = "knife";
+		}
+		maps\_bz_special_weapons::bz_special_sync_melee_slot_perk( player );
+		maps\_bz_special_weapons::bz_special_ensure_player_watchers( player );
+		maps\_bz_special_weapons::bz_special_update_hud( player );
+	}
+	else if ( perm.owns_bowie )
+	{
+		player.bz_melee_slot = "bowie";
+		player SetPerk( "specialty_altmelee" );
+		player.has_altmelee = true;
+	}
+
+	// 2. Restore alive-only BZ perks (Standard + Tier 2 + Apex).
+	t1_restored = 0;
+	t2_restored = 0;
+	apex_restored = 0;
+
+	if ( maps\_bz_hooks::bz_perks_enabled() && bz_gauntlet_player_is_alive_non_spectator( player ) )
+	{
+		maps\_bz_perks::bz_perks_sync_stock_perks( player );
+
+		for ( i = 0; i < perks.t1.size; i++ )
+		{
+			pid = perks.t1[i];
+			player.bz_perks[pid] = true;
+			maps\_bz_perks::bz_perks_apply_standard_perk( player, pid );
+			t1_restored++;
+		}
+
+		for ( i = 0; i < perks.t2.size; i++ )
+		{
+			pid = perks.t2[i];
+			if ( maps\_bz_state::bz_state_has_perk( player, pid ) )
+			{
+				player.bz_perks_t2[pid] = true;
+				maps\_bz_perks::bz_perks_apply_perk_t2( player, pid );
+				t2_restored++;
+			}
+		}
+
+		for ( i = 0; i < perks.apex.size; i++ )
+		{
+			aid = perks.apex[i];
+			player.bz_apex_perks[aid] = true;
+			maps\_bz_perks::bz_perks_apply_apex_perk( player, aid );
+			apex_restored++;
+		}
+
+		maps\_bz_perks::bz_perks_update_hud( player );
+	}
+
+	// 3. Recompute composed runtime modifiers (Titan + Jugg I/II, Stamin-Up, Lightweight Heavy)
+	//    and sync per-player station menu dvars with carried-over/floored Gauntlet points.
+	maps\_bz_hooks::bz_recompute_player_speed( player );
+	maps\_bz_hooks::bz_recompute_player_max_health( player );
+	if ( bz_gauntlet_player_is_alive_non_spectator( player ) && IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
+	{
+		player.health = Int( player.maxhealth );
+	}
+	maps\_bz_stations::bz_stations_sync_player_ui( player );
+
+	map_label = "";
+	if ( IsDefined( current_map ) )
+	{
+		map_label = "" + current_map;
+	}
+	cls_label = "none";
+	if ( perm.class_id != "" )
+	{
+		cls_label = perm.class_id;
+	}
+
+	fields = [];
+	fields[0] = maps\_bz_log::kv( "player", player_key );
+	fields[1] = maps\_bz_log::kv( "map", map_label );
+	fields[2] = maps\_bz_log::kv( "class", cls_label );
+	fields[3] = maps\_bz_log::kv( "t1", t1_restored );
+	fields[4] = maps\_bz_log::kv( "t2", t2_restored );
+	fields[5] = maps\_bz_log::kv( "apex", apex_restored );
+	maps\_bz_log::emit( "GAUNTLET_BZ_RESTORED", maps\_bz_log::join_fields( fields ) );
+	return true;
+}
+
+// Closes any open Base Zombies station menu on all players at Stage Clear
+// so nobody stays trapped inside a station popup during the celebration/transition.
+close_all_bz_station_menus()
+{
+	if ( !maps\_bz_hooks::bz_enabled() )
+	{
+		return 0;
+	}
+
+	closed = 0;
+	players = GetPlayers();
+	if ( IsDefined( players ) )
+	{
+		for ( i = 0; i < players.size; i++ )
+		{
+			p = players[i];
+			if ( IsDefined( p ) && IsDefined( p.bz_station_open ) && p.bz_station_open )
+			{
+				p.bz_station_open = false;
+				p.bz_active_station_id = "";
+				p.bz_active_station_menu = "";
+				p closeMenu();
+				closed++;
+			}
+		}
+	}
+	return closed;
+}

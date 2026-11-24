@@ -243,6 +243,8 @@ clear_run_state()
 	SetDvar( "gauntlet_fresh_run", "0" );
 	SetDvar( "gauntlet_disconnected_players", "" );
 	SetDvar( "gauntlet_spectators", "" );
+	SetDvar( "gauntlet_bz_perm", "" );
+	SetDvar( "gauntlet_bz_perks", "" );
 }
 
 sanitize_token( raw )

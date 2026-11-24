@@ -540,6 +540,11 @@ monitor_player_score_cache( cache )
 			{
 				cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
 			}
+			if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
+			{
+				cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
+				cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
+			}
 		}
 		wait( 0.5 );
 	}
@@ -557,6 +562,13 @@ watch_player_disconnect()
 	cache.name = get_player_name( self );
 	cache.score = get_player_score_safe( self );
 	cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
+	cache.bz_perm = "";
+	cache.bz_perks = "";
+	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	{
+		cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
+		cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
+	}
 
 	self thread monitor_player_score_cache( cache );
 
@@ -577,6 +589,10 @@ watch_player_disconnect()
 		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
 		maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
+		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		{
+			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks );
+		}
 
 		fields = [];
 		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
@@ -691,6 +707,11 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 	maps\_gauntlet_log::emit( "POINTS_APPLIED", maps\_gauntlet_log::join_fields( fields ) );
 
 	maps\_gauntlet_perks::restore_player_perks( player, current_map );
+
+	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	{
+		maps\_bz_gauntlet_bridge::restore_player_bz_state( player, current_map );
+	}
 }
 
 // Seam threaded right before round_wait() in round_think() when Gauntlet is enabled.
@@ -898,6 +919,10 @@ checkpoint_all_players_points()
 		pts = get_player_score_safe( player );
 		maps\_gauntlet_state::record_player_points( guid, name, pts );
 		maps\_gauntlet_perks::snapshot_player_perks( player, get_current_map_name() );
+		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		{
+			maps\_bz_gauntlet_bridge::snapshot_player_bz_state( player, get_current_map_name() );
+		}
 	}
 }
 
@@ -972,6 +997,10 @@ snapshot_all_players_points( current_map )
 		maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
 
 		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
+		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		{
+			maps\_bz_gauntlet_bridge::snapshot_player_bz_state( player, current_map );
+		}
 	}
 }
 
@@ -984,6 +1013,11 @@ handle_stage_clear( completed_round )
 	// Protect squad during Stage Clear banner (revive downed players + invulnerability)
 	// so nobody can bleed out or wipe during the 5s celebration.
 	protect_players_for_stage_clear();
+
+	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	{
+		maps\_bz_gauntlet_bridge::close_all_bz_station_menus();
+	}
 
 	snapshot_all_players_points( current_map );
 

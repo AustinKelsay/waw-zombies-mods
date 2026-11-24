@@ -498,6 +498,14 @@ handle_carried_perk_lost( player, perk )
 	if ( perk == "specialty_armorvest" )
 	{
 		player.maxhealth = 100;
+		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		{
+			maps\_bz_state::bz_state_ensure_init( player );
+			player.bz_perks["juggernog"] = false;
+			player.bz_perks_t2["juggernog"] = false;
+			maps\_bz_hooks::bz_clear_base_max_health( player, "bz_jugg_t2" );
+			maps\_bz_hooks::bz_recompute_player_max_health( player );
+		}
 	}
 
 	destroy_perk_hud_icon( player, perk );
@@ -607,6 +615,16 @@ apply_single_perk_to_player( player, perk )
 		jugg_health = get_juggernaut_health();
 		player.maxhealth = jugg_health;
 		player.health = jugg_health;
+		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		{
+			maps\_bz_state::bz_state_ensure_init( player );
+			player.bz_perks["juggernog"] = true;
+			maps\_bz_hooks::bz_recompute_player_max_health( player );
+			if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
+			{
+				player.health = Int( player.maxhealth );
+			}
+		}
 	}
 
 	create_perk_hud_icon( player, perk );
