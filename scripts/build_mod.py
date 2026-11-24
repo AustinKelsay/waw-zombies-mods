@@ -148,6 +148,18 @@ PAP_TAKE_WEAPON_GIVE_RE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_weapons::weapon_give[ \t]*\([ \t]*(?P<weap>[^,)]+?)(?:[ \t]*,[^)]*)?\);(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE | re.IGNORECASE,
 )
+DOG_HIDE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+hide\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+DOG_STOP_SHIELD_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+(?:thread[ \t]+)?stop_magic_bullet_shield\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+DOG_SHOW_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+show\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
 ADD_PLAYER_SCORE_DEF_RE = re.compile(
     r"^add_to_player_score\([ \t]*(?P<param>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*\r?\n\{",
     re.MULTILINE,
@@ -422,6 +434,14 @@ def zombiemode_perks_module_for_map(map_name: str) -> str:
     return f"_zombiemode_perks_bz_{slug}"
 
 
+def zombiemode_dogs_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_dogs script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_dogs_bz_{slug}"
+
+
 def extract_stock_script(
     map_name: str, rawfile_rel: str, steam_game: Path, tools_root: Path
 ) -> bytes:
@@ -455,11 +475,14 @@ def _rewire_stock_module_refs(
     text: str,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
 ) -> str:
     if rewire_weapons_module:
         text = text.replace("maps\\_zombiemode_weapons::", f"maps\\{rewire_weapons_module}::")
     if rewire_perks_module:
         text = text.replace("maps\\_zombiemode_perks::", f"maps\\{rewire_perks_module}::")
+    if rewire_dogs_module:
+        text = text.replace("maps\\_zombiemode_dogs::", f"maps\\{rewire_dogs_module}::")
     return text
 
 
@@ -469,6 +492,7 @@ def inject_map_hooks(
     *,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
 ) -> bytes:
     """Inject Gauntlet + guarded Base Zombies bootstrap hooks and rewire maps\\_zombiemode::main(...)."""
     text = script_bytes.decode("latin1")
@@ -499,6 +523,7 @@ def inject_map_hooks(
         patched,
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
+        rewire_dogs_module=rewire_dogs_module,
     )
     return patched.encode("latin1")
 
@@ -509,6 +534,7 @@ def inject_zombiemode_hooks(
     *,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
 ) -> bytes:
     """Inject strictly gated Gauntlet & Base Zombies hooks into a stock map's maps/_zombiemode.gsc.
 
@@ -618,6 +644,7 @@ def inject_zombiemode_hooks(
         text,
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
+        rewire_dogs_module=rewire_dogs_module,
     )
     return text.encode("latin1")
 
@@ -815,7 +842,7 @@ def inject_zombiemode_perks_hooks(
             return (
                 f"{orig}{newline}"
                 f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
-                f"{{ level.bz_native_pap_unlocked = true; }}{ending}"
+                f"{{ level.bz_native_pap_unlocked = true; level.bz_native_pap_unlock_hook_fired = true; }}{ending}"
             )
 
         vu_body = PAP_FLAG_WAIT_RE.sub(_inject_after_pap_flag, vu_body, count=1)
@@ -901,6 +928,57 @@ def inject_zombiemode_perks_hooks(
         text,
         rewire_weapons_module=rewire_weapons_module,
     )
+    return text.encode("latin1")
+
+
+def inject_zombiemode_dogs_hooks(script_bytes: bytes) -> bytes:
+    """Patch stock maps/_zombiemode_dogs.gsc to keep bz_spawning_dog set through Show().
+
+    Stock dog_spawn_fx() clears ignoreall and calls stop_magic_bullet_shield(), then waits
+    100 ms before calling show(). Setting bz_spawning_dog=true on hide() and right before
+    stop_magic_bullet_shield() and clearing it right after show() guarantees Base Zombies
+    combat/CC effects never hit a still-hidden Hellhound during that 100 ms window.
+    """
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    def _inject_after_hide(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = true; }}{ending}"
+        )
+
+    def _inject_before_stop_shield(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0)
+        return (
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = true; }}{newline}"
+            f"{orig}"
+        )
+
+    def _inject_after_show(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = false; }}{ending}"
+        )
+
+    text, _hide_hits = DOG_HIDE_RE.subn(_inject_after_hide, text)
+    text, stop_hits = DOG_STOP_SHIELD_RE.subn(_inject_before_stop_shield, text)
+    text, show_hits = DOG_SHOW_RE.subn(_inject_after_show, text)
+    if stop_hits == 0 or show_hits == 0:
+        raise ValueError(
+            f"Could not locate stop_magic_bullet_shield()/show() spawn markers in _zombiemode_dogs.gsc "
+            f"(stop_hits={stop_hits}, show_hits={show_hits})"
+        )
     return text.encode("latin1")
 
 
@@ -1622,6 +1700,17 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             perks_dst.parent.mkdir(parents=True, exist_ok=True)
             perks_dst.write_bytes(perks_patched)
 
+        dogs_mod: str | None = None
+        dogs_stock = try_extract_stock_script(
+            map_name, "maps/_zombiemode_dogs.gsc", steam_game, tools_root
+        )
+        if dogs_stock is not None:
+            dogs_mod = zombiemode_dogs_module_for_map(map_name)
+            dogs_patched = inject_zombiemode_dogs_hooks(dogs_stock)
+            dogs_dst = stage_dir / "maps" / f"{dogs_mod}.gsc"
+            dogs_dst.parent.mkdir(parents=True, exist_ok=True)
+            dogs_dst.write_bytes(dogs_patched)
+
         rawfile_rel = f"maps/{map_name}.gsc"
         ff_path = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
         stock_bytes = extract_rawfile_from_ff(ff_path, rawfile_rel)
@@ -1630,6 +1719,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             map_name,
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
+            rewire_dogs_module=dogs_mod,
         )
         dst = stage_dir / rawfile_rel
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1641,6 +1731,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             map_name,
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
+            rewire_dogs_module=dogs_mod,
         )
         zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
         zm_dst.parent.mkdir(parents=True, exist_ok=True)

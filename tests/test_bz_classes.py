@@ -1104,6 +1104,16 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_acquire_ghost_on_zombie", self.p1, dog_contact)
         self.assertEqual(dog_contact.contents, orig_contents)
 
+        # 2b. Reversing direction at 40u (still inside 42u contact radius, outside 16u overlap) restores immediately!
+        self.p1.set_velocity(-200, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+
+        # Re-acquire moving forward, then back out past 42u -> restores immediately!
+        self.p1.set_velocity(200, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
+        self.assertEqual(z_contact.contents, 0)
+
         # 3. Immediate release outside 42u contact radius (e.g. backing away to 50u restores bullet collision!)
         self.p1.set_origin(-10, 0, 64)
         self.p1.set_velocity(-200, 0, 0)

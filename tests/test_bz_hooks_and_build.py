@@ -1824,11 +1824,14 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             rewire_weapons_module="_zombiemode_weapons_bz_factory",
         ).decode("latin1")
 
-        # 1. Native PaP unlock flag set right after flag_wait( "Pack_A_Punch_on" )
-        self.assertIn('if ( maps\\_bz_hooks::bz_pap_enabled() ) { level.bz_native_pap_unlocked = true; }', patched)
+        # 1. Native PaP unlock flag & dedicated build-hook marker set right after flag_wait( "Pack_A_Punch_on" )
+        self.assertIn(
+            'if ( maps\\_bz_hooks::bz_pap_enabled() ) { level.bz_native_pap_unlocked = true; level.bz_native_pap_unlock_hook_fired = true; }',
+            patched,
+        )
         self.assertLess(
             patched.index('flag_wait( "Pack_A_Punch_on" );'),
-            patched.index("level.bz_native_pap_unlocked = true;"),
+            patched.index("level.bz_native_pap_unlock_hook_fired = true;"),
         )
 
         # 2. Native console upgrade hook injected right BEFORE stock zombie_include_weapons check
@@ -1896,12 +1899,42 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             rewire_weapons_module="_zombiemode_weapons_bz_factory",
         ).decode("latin1")
         self.assertIn("level.bz_native_pap_unlocked = true;", patched_dual)
+        self.assertIn("level.bz_native_pap_unlock_hook_fired = true;", patched_dual)
         self.assertIn("self.bz_pap_stock_busy = true;", patched_dual)
         self.assertIn("self.bz_pap_stock_busy = false;", patched_dual)
         take_section = patched_dual.split("wait_for_player_to_take", 1)[1]
         if_part, else_part = take_section.split("else", 1)
         self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", if_part)
         self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", else_part)
+
+    def test_inject_zombiemode_dogs_hooks_preserves_spawning_marker_through_show(self) -> None:
+        stock_dogs = (
+            "dog_init()\n"
+            "{\n"
+            "\tself hide();\n"
+            "\tself thread magic_bullet_shield();\n"
+            "}\n"
+            "\n"
+            "dog_spawn_fx( ai, ent )\n"
+            "{\n"
+            "\tai zombie_setup_attack_properties_dog();\n"
+            "\tai stop_magic_bullet_shield();\n"
+            "\twait( 0.1 );\n"
+            "\tai show();\n"
+            "}\n"
+        ).encode("latin1")
+        patched = self.bm.inject_zombiemode_dogs_hooks(stock_dogs).decode("latin1")
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { self.bz_spawning_dog = true; }", patched)
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { ai.bz_spawning_dog = true; }", patched)
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { ai.bz_spawning_dog = false; }", patched)
+        self.assertLess(
+            patched.index("ai.bz_spawning_dog = true;"),
+            patched.index("ai stop_magic_bullet_shield();"),
+        )
+        self.assertLess(
+            patched.index("ai show();"),
+            patched.index("ai.bz_spawning_dog = false;"),
+        )
 
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")

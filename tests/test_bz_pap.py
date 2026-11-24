@@ -1306,6 +1306,26 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
             1,
         )
 
+        # Fresh dog in 100ms pre-Show() wait where Cluster is the VERY FIRST BZ effect to inspect it:
+        # patched _zombiemode_dogs sets bz_spawning_dog=true before stop_magic_bullet_shield() and clears after show()
+        dog_preshow = PapFakeEntity("FreshPreShowDog", ent_num=97, is_player=False)
+        dog_preshow.set_field("health", 500)
+        dog_preshow.set_field("origin", GscArray([80, 0, 0]))
+        dog_preshow.set_field("animname", "zombie_dog")
+        dog_preshow.set_field("ignoreall", False)
+        dog_preshow.set_field("magic_bullet_shield", False)
+        dog_preshow.set_field("bz_spawning_dog", True)
+        gsc.ai_enemies = [dog_preshow]
+        self.assertEqual(
+            gsc.call(BZ_PAP_MOD, "bz_pap_apply_radial_blast", p2, GscArray([0, 0, 0]), 120, 100, 0, True),
+            0,
+        )
+        dog_preshow.set_field("bz_spawning_dog", False)
+        self.assertEqual(
+            gsc.call(BZ_PAP_MOD, "bz_pap_apply_radial_blast", p2, GscArray([0, 0, 0]), 120, 100, 0, True),
+            1,
+        )
+
         # Disconnect destroys P1's HUDs (badge + prompt) without affecting P2; end_game cleans up P2 cleanly
         gsc.call(BZ_PAP_MOD, "bz_pap_destroy_player_hud", p1)
         self.assertTrue(prompt1.destroyed)

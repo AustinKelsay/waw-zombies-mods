@@ -2060,7 +2060,7 @@ bz_run_test_selftest()
 		level.flag["Pack_A_Punch_on"] = true;
 		level notify( "Pack_A_Punch_on" );
 		wait( 0.15 );
-		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlocked ) && level.bz_native_pap_unlocked, "pap_native_unlock_hook" );
+		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired, "pap_native_unlock_hook" );
 
 		base_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
 		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )

@@ -2100,12 +2100,27 @@ bz_assassin_ghost_tick( player )
 	ghost_radius = 42;
 	release_radius = 42;
 
-	// First restore any previously ghosted zombies that died or exited contact radius (> 42u)
+	// First restore any previously ghosted zombies that died, exited contact radius (> 42u),
+	// or that the Assassin is no longer moving toward outside tight body overlap (> 16u)
 	kept = [];
 	for ( i = 0; i < player.bz_ghost_zombies.size; i++ )
 	{
 		z = player.bz_ghost_zombies[i];
-		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || Distance( player.origin, z.origin ) > release_radius )
+		keep_z = false;
+		if ( IsDefined( z ) && IsAlive( z ) && IsDefined( z.origin ) )
+		{
+			z_dist = Distance( player.origin, z.origin );
+			if ( z_dist <= release_radius )
+			{
+				z_dx = z.origin[0] - player.origin[0];
+				z_dy = z.origin[1] - player.origin[1];
+				if ( ( ( vx * z_dx ) + ( vy * z_dy ) ) > 0.0 || z_dist <= 16.0 )
+				{
+					keep_z = true;
+				}
+			}
+		}
+		if ( !keep_z )
 		{
 			if ( IsDefined( z ) )
 			{
