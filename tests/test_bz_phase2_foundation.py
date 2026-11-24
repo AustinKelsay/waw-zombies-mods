@@ -386,10 +386,10 @@ class TestPhase2RulesAndStatusMath(unittest.TestCase):
         )
 
         expected_elems = [
-            ("acid_sprayer", "bz_acid_sprayer", 6500, "Acid Sprayer"),
-            ("cryo_cannon", "bz_cryo_cannon", 7000, "Cryo Cannon"),
-            ("multi_crossbow", "bz_multi_crossbow", 7500, "Multi-Crossbow"),
-            ("blade_boomerang", "bz_blade_boomerang", 6000, "Blade Boomerang"),
+            ("acid_sprayer", "bz_acid_sprayer", 5000, "Acid Sprayer"),
+            ("cryo_cannon", "bz_cryo_cannon", 5000, "Cryo Cannon"),
+            ("multi_crossbow", "bz_multi_crossbow", 5000, "Multi-Crossbow"),
+            ("blade_boomerang", "bz_blade_boomerang", 5000, "Blade Boomerang"),
         ]
         for item_id, weap_name, price, display_name in expected_elems:
             self.assertTrue(self.gsc.call(RULES_MOD, "bz_is_valid_element_weapon", item_id))
@@ -419,7 +419,7 @@ class TestPhase2RulesAndStatusMath(unittest.TestCase):
         expected_gear = [
             ("war_club", 5000, "", "War Club"),
             ("pap_war_club", 5000, "war_club", "PaP War Club"),
-            ("portal_grenade", 6000, "", "Portal Grenade"),
+            ("portal_grenade", 5000, "", "Portal Grenade"),
         ]
         for gear_id, price, prereq, display_name in expected_gear:
             self.assertTrue(self.gsc.call(RULES_MOD, "bz_is_valid_special_gear", gear_id))
@@ -514,19 +514,19 @@ class TestPhase2PlayerStateAndTransitions(unittest.TestCase):
         self.assertFalse(self.player.get_field("bz_owns_portal_grenade"))
         self.assertEqual(self.player.get_field("bz_portal_charges"), 0)
 
-        # Buy Acid Sprayer (6500)
+        # Buy Acid Sprayer (5000 test cap)
         res = self.gsc.call(STATE_MOD, "bz_try_buy_element_weapon", self.player, "acid_sprayer", False)
         self.assertTrue(res.ok)
         self.assertEqual(res.status, "ok")
-        self.assertEqual(res.cost, 6500)
+        self.assertEqual(res.cost, 5000)
         self.assertEqual(res.weapon_name, "bz_acid_sprayer")
-        self.assertEqual(self.player.get_field("score"), 33500)
+        self.assertEqual(self.player.get_field("score"), 35000)
 
         # Already held rejection does not deduct score
         dup = self.gsc.call(STATE_MOD, "bz_try_buy_element_weapon", self.player, "acid_sprayer", True)
         self.assertFalse(dup.ok)
         self.assertEqual(dup.status, "already_owned")
-        self.assertEqual(self.player.get_field("score"), 33500)
+        self.assertEqual(self.player.get_field("score"), 35000)
 
         # Invalid weapon ID rejected cleanly
         bad = self.gsc.call(STATE_MOD, "bz_try_buy_element_weapon", self.player, "bfg9000", False)
@@ -534,11 +534,11 @@ class TestPhase2PlayerStateAndTransitions(unittest.TestCase):
         self.assertEqual(bad.status, "invalid_item")
 
         # Insufficient points rejection
-        self.player.set_field("score", 5999)
+        self.player.set_field("score", 4999)
         poor = self.gsc.call(STATE_MOD, "bz_try_buy_element_weapon", self.player, "blade_boomerang", False)
         self.assertFalse(poor.ok)
         self.assertEqual(poor.status, "insufficient_points")
-        self.assertEqual(self.player.get_field("score"), 5999)
+        self.assertEqual(self.player.get_field("score"), 4999)
 
     def test_melee_slot_war_club_purchase_pap_prereq_and_free_bowie_swap(self) -> None:
         # PaP War Club requires War Club first
@@ -620,7 +620,7 @@ class TestPhase2PlayerStateAndTransitions(unittest.TestCase):
 
         portal = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "portal_grenade", True)
         self.assertTrue(portal.ok)
-        self.assertEqual(portal.cost, 6000)
+        self.assertEqual(portal.cost, 5000)
         self.assertTrue(self.player.get_field("bz_owns_portal_grenade"))
         self.assertEqual(self.player.get_field("bz_portal_charges"), 2)
 
@@ -731,45 +731,45 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_perk:mule_kick")
         self.assertEqual(self.p1.get_field("score"), 76000)
 
-        # 1. Buy Acid Sprayer (6500)
+        # 1. Buy Acid Sprayer (5000 test cap)
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:acid_sprayer")
         )
-        self.assertEqual(self.p1.get_field("score"), 69500)
+        self.assertEqual(self.p1.get_field("score"), 71000)
         self.assertIn("bz_acid_sprayer", self.p1.weapons)
         self.assertEqual(self.p1.current_weapon, "bz_acid_sprayer")
         self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "OWNED")
-        self.assertEqual(self.p1.client_dvars["ui_bz_elem_cryo_cannon"], "BUY 7000")
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_cryo_cannon"], "BUY 5000")
 
-        # 2. Buy Cryo Cannon (7000) -> fills 3rd Mule Kick slot without dropping thompson
+        # 2. Buy Cryo Cannon (5000 test cap) -> fills 3rd Mule Kick slot without dropping thompson
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:cryo_cannon")
         )
-        self.assertEqual(self.p1.get_field("score"), 62500)
+        self.assertEqual(self.p1.get_field("score"), 66000)
         self.assertIn("thompson", self.p1.weapons)
         self.assertIn("bz_acid_sprayer", self.p1.weapons)
         self.assertIn("bz_cryo_cannon", self.p1.weapons)
 
-        # 3. Buy Multi-Crossbow (7500) -> at 3-slot cap, replaces current weapon (bz_cryo_cannon)
+        # 3. Buy Multi-Crossbow (5000 test cap) -> at 3-slot cap, replaces current weapon (bz_cryo_cannon)
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:multi_crossbow")
         )
-        self.assertEqual(self.p1.get_field("score"), 55000)
+        self.assertEqual(self.p1.get_field("score"), 61000)
         self.assertIn("bz_multi_crossbow", self.p1.weapons)
         self.assertEqual(len(self.p1.weapons), 3)
 
-        # 4. Buy Blade Boomerang (6000)
+        # 4. Buy Blade Boomerang (5000 test cap)
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_element:blade_boomerang")
         )
-        self.assertEqual(self.p1.get_field("score"), 49000)
+        self.assertEqual(self.p1.get_field("score"), 56000)
         self.assertIn("bz_blade_boomerang", self.p1.weapons)
 
         # 5. Buy War Club (5000) -> unsets specialty_altmelee per ADR-0003 while preserving bz_owns_bowie
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_gear:war_club")
         )
-        self.assertEqual(self.p1.get_field("score"), 44000)
+        self.assertEqual(self.p1.get_field("score"), 51000)
         self.assertFalse(self.p1.has_perk("specialty_altmelee"))
         self.assertFalse(self.p1.get_field("has_altmelee"))
         self.assertEqual(self.p1.get_field("bz_melee_slot"), "war_club")
@@ -782,7 +782,7 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_gear:pap_war_club")
         )
-        self.assertEqual(self.p1.get_field("score"), 39000)
+        self.assertEqual(self.p1.get_field("score"), 46000)
         self.assertEqual(self.p1.client_dvars["ui_bz_melee_slot"], "MELEE: PAP WAR CLUB")
         self.assertEqual(self.p1.client_dvars["ui_bz_gear_pap_war_club"], "OWNED")
 
@@ -813,7 +813,7 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_gear:equip_bowie")
         )
-        self.assertEqual(self.p1.get_field("score"), 34000)
+        self.assertEqual(self.p1.get_field("score"), 41000)
         self.assertTrue(self.p1.has_perk("specialty_altmelee"))
         self.assertTrue(self.p1.get_field("has_altmelee"))
         self.assertEqual(self.p1.get_field("bz_melee_slot"), "bowie")
@@ -837,26 +837,26 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         )
         self.assertGreaterEqual(bowie_melee_dmg, 5000)
 
-        # 8. Buy Portal Grenade (6000)
+        # 8. Buy Portal Grenade (5000 test cap)
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_gear:portal_grenade")
         )
-        self.assertEqual(self.p1.get_field("score"), 28000)
+        self.assertEqual(self.p1.get_field("score"), 36000)
         self.assertEqual(self.p1.client_dvars["ui_bz_portal"], "READY (2)")
 
         self.assertEqual(
             dispatched,
             [
                 ("perk", "mule_kick", 4000, "thompson"),
-                ("element_weapon", "acid_sprayer", 6500, "bz_acid_sprayer"),
-                ("element_weapon", "cryo_cannon", 7000, "bz_cryo_cannon"),
-                ("element_weapon", "multi_crossbow", 7500, "bz_multi_crossbow"),
-                ("element_weapon", "blade_boomerang", 6000, "bz_blade_boomerang"),
+                ("element_weapon", "acid_sprayer", 5000, "bz_acid_sprayer"),
+                ("element_weapon", "cryo_cannon", 5000, "bz_cryo_cannon"),
+                ("element_weapon", "multi_crossbow", 5000, "bz_multi_crossbow"),
+                ("element_weapon", "blade_boomerang", 5000, "bz_blade_boomerang"),
                 ("special_gear", "war_club", 5000, "bz_blade_boomerang"),
                 ("special_gear", "pap_war_club", 5000, "bz_blade_boomerang"),
                 ("pap", "pap_bowie", 5000, "bz_blade_boomerang"),
                 ("special_gear", "equip_bowie", 0, "bz_blade_boomerang"),
-                ("special_gear", "portal_grenade", 6000, "bz_blade_boomerang"),
+                ("special_gear", "portal_grenade", 5000, "bz_blade_boomerang"),
             ],
         )
 

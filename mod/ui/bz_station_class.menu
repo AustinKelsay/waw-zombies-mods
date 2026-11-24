@@ -1,7 +1,7 @@
 #include "ui/menudef.h"
 
 // Base Zombies - Class Altar Popup (Call of Duty: WaW 1.7)
-// 6 permanent-until-swapped Classes (10000 pts each, never lost on down).
+// 6 permanent-until-swapped Classes (5000 pts each - test cap, never lost on down).
 // Strictly ASCII-only strings and balanced braces.
 
 {
@@ -51,7 +51,7 @@
 			name			"bz_class_title"
 			type			ITEM_TYPE_TEXT
 			rect			38 38 250 24
-			text			"CLASS ALTAR (10000 PTS)"
+			text			"CLASS ALTAR (5000 PTS)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.35
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -97,7 +97,7 @@
 			name			"bz_class_subtitle"
 			type			ITEM_TYPE_TEXT
 			rect			38 78 564 18
-			text			"Permanent per match (kept on down). Swap anytime at this Altar for 10000 pts."
+			text			"Permanent per match (kept on down). Swap anytime at this Altar for 5000 pts."
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
