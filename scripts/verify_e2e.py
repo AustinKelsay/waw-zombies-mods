@@ -16,7 +16,7 @@ import shlex
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Sequence, TextIO
@@ -24,6 +24,10 @@ from typing import Callable, Sequence, TextIO
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_TAIL_MAX_LINES = 40
 OUTPUT_TAIL_MAX_CHARS = 4000
+BZ_COOP_VISUALS_SCRIPT = "scripts/verify_bz_coop_and_visuals.py"
+DEFAULT_VISUAL_OUT_DIR = Path(".smoke_logs/bz_coop_and_visuals")
+BUILD_PATH_OPTIONS = ("tools_root", "steam_root", "dev_root", "steam_game")
+ENGINE_PATH_OPTIONS = (*BUILD_PATH_OPTIONS, "playtest_prefix", "proton")
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,7 @@ class StageSpec:
     args: tuple[str, ...]
     script_relpath: str | None
     description: str
+    optional: bool = False
 
     def build_command(self, python_executable: str = sys.executable) -> list[str]:
         return [python_executable, *self.args]
@@ -90,6 +95,14 @@ class GateConfig:
     allow_missing_scripts: bool = False
     json_report: Path | None = None
     python_executable: str = sys.executable
+    include_visual_tour: bool = False
+    visual_out_dir: Path = DEFAULT_VISUAL_OUT_DIR
+    tools_root: Path | None = None
+    steam_root: Path | None = None
+    dev_root: Path | None = None
+    steam_game: Path | None = None
+    playtest_prefix: Path | None = None
+    proton: Path | None = None
 
 
 @dataclass
@@ -123,6 +136,8 @@ class GateReport:
                 "offline_only": self.config.offline_only,
                 "skip_build": self.config.skip_build,
                 "only": list(self.config.only),
+                "include_visual_tour": self.config.include_visual_tour,
+                "visual_out_dir": str(self.config.visual_out_dir),
                 "continue_on_error": self.config.continue_on_error,
                 "allow_missing_scripts": self.config.allow_missing_scripts,
             },
@@ -223,6 +238,31 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         script_relpath="scripts/verify_base_zombies_p2.py",
         description="Verify Der Riese Base Zombies Phase 2 (4 cloned weapons, Wunderwaffe HP fix & stun, Flamethrower, Acid, Cryo, War Club, Crossbow, Boomerang, Portal) and Classic Mode isolation.",
     ),
+    StageSpec(
+        stage_id="bz-coop",
+        name="Base Zombies Co-op self-test",
+        category="engine",
+        args=(BZ_COOP_VISUALS_SCRIPT, "--skip-build", "--mode", "coop"),
+        script_relpath=BZ_COOP_VISUALS_SCRIPT,
+        description="Verify Base Zombies Co-op behavior on Der Riese.",
+    ),
+    StageSpec(
+        stage_id="enhanced-gauntlet",
+        name="Enhanced Gauntlet carryover",
+        category="engine",
+        args=(BZ_COOP_VISUALS_SCRIPT, "--skip-build", "--mode", "enhanced-gauntlet"),
+        script_relpath=BZ_COOP_VISUALS_SCRIPT,
+        description="Verify Base Zombies state carries from Nacht der Untoten to Verrückt in Gauntlet.",
+    ),
+    StageSpec(
+        stage_id="bz-visual-tour",
+        name="Base Zombies visual tour",
+        category="engine",
+        args=(BZ_COOP_VISUALS_SCRIPT, "--skip-build", "--mode", "visual-tour"),
+        script_relpath=BZ_COOP_VISUALS_SCRIPT,
+        description="Capture Base Zombies screenshots across all four stock maps.",
+        optional=True,
+    ),
 )
 
 
@@ -234,6 +274,15 @@ DIAGNOSIS_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         "Headless X11 tooling issue: verify 'Xvfb' and 'xfwm4' are installed on plebdev-ultra, "
         "and remove stale '/tmp/.X11-unix/X*' or '/tmp/.X*-lock' files if displays :110-:159 are exhausted.",
+    ),
+    (
+        re.compile(r"Missing X11 startup-dialog responder|python-xlib|xdotool|No module named ['\"]Xlib", re.IGNORECASE),
+        "X11 startup-dialog responder unavailable: install 'xdotool' or make 'python-xlib' "
+        "available to the Python interpreter running the gate.",
+    ),
+    (
+        re.compile(r"Missing live verification tools:[^\n]*\bimport\b|['\"]import['\"], ['\"]-window['\"]", re.IGNORECASE),
+        "Visual screenshot capture requires ImageMagick's 'import' command on PATH and access to the X11 display.",
     ),
     (
         re.compile(
@@ -267,7 +316,7 @@ DIAGNOSIS_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"Playtest.*AppData.*missing|World at War AppData folder is missing|"
-            r"Proton launcher not found|Could not locate stock fastfile",
+            r"Expected a playtest AppData folder|Proton launcher not found|Could not locate stock fastfile",
             re.IGNORECASE,
         ),
         "Missing Steam/Proton or playtest prefix prerequisites on this host: check WAW_STEAM_ROOT, "
@@ -315,11 +364,31 @@ def _tail_output(output: str) -> str:
     return tail
 
 
+def _configure_stage(stage: StageSpec, config: GateConfig) -> StageSpec:
+    extra_args: list[str] = []
+    if stage.stage_id == "bz-visual-tour":
+        extra_args.extend(("--capture-visuals", str(config.visual_out_dir)))
+
+    path_options = {
+        "build": BUILD_PATH_OPTIONS,
+        "engine": ENGINE_PATH_OPTIONS,
+    }.get(stage.category, ())
+    for option in path_options:
+        path = getattr(config, option)
+        if path is not None:
+            extra_args.extend(("--" + option.replace("_", "-"), str(path)))
+
+    return replace(stage, args=(*stage.args, *extra_args)) if extra_args else stage
+
+
 def plan_stages(
     config: GateConfig,
     stages: Sequence[StageSpec] = GATE_STAGES,
 ) -> list[StageSpec]:
     """Resolve the ordered list of stages to execute for the given GateConfig."""
+    if config.offline_only and config.include_visual_tour:
+        raise ValueError("--offline-only cannot be combined with --include-visual-tour.")
+
     known_ids = {s.stage_id for s in stages}
     if config.only:
         unknown = [sid for sid in config.only if sid not in known_ids]
@@ -331,7 +400,7 @@ def plan_stages(
         selected_set = set(config.only)
         planned = [s for s in stages if s.stage_id in selected_set]
     else:
-        planned = list(stages)
+        planned = [s for s in stages if not s.optional or config.include_visual_tour]
 
     if config.offline_only:
         planned = [s for s in planned if s.category == "offline"]
@@ -343,7 +412,7 @@ def plan_stages(
         raise ValueError(
             "Stage filters selected 0 stages to run (check --offline-only, --skip-build, and --only)."
         )
-    return planned
+    return [_configure_stage(stage, config) for stage in planned]
 
 
 def diagnose_failure(stage_id: str, output: str) -> list[str]:
@@ -577,6 +646,7 @@ def format_stage_list(
 ) -> str:
     """Format configured gate stages for --list-stages."""
     lines = ["=== Zombie Gauntlet E2E Gate Stages ==="]
+    config = GateConfig()
     for idx, stage in enumerate(stages, start=1):
         if stage.script_relpath is None:
             presence = "builtin"
@@ -584,9 +654,10 @@ def format_stage_list(
             presence = "present"
         else:
             presence = "missing"
-        cmd_str = " ".join(stage.build_command(python_executable))
+        cmd_str = shlex.join(_configure_stage(stage, config).build_command(python_executable))
+        optional = " [optional]" if stage.optional else ""
         lines.append(
-            f"  {idx}. {stage.stage_id:<22s} [{stage.category:<7s}] [{presence:<7s}] {cmd_str}"
+            f"  {idx}. {stage.stage_id:<22s} [{stage.category:<7s}] [{presence:<7s}]{optional} {cmd_str}"
         )
         lines.append(f"     {stage.description}")
     return "\n".join(lines) + "\n"
@@ -661,6 +732,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run only the selected stage ID(s) in canonical gate order.",
     )
     parser.add_argument(
+        "--include-visual-tour",
+        action="store_true",
+        help="Add the optional Base Zombies visual tour to the default stage selection.",
+    )
+    parser.add_argument(
+        "--visual-out-dir",
+        type=Path,
+        default=DEFAULT_VISUAL_OUT_DIR,
+        metavar="PATH",
+        help=f"Write visual tour captures to PATH (default: {DEFAULT_VISUAL_OUT_DIR}).",
+    )
+    for option in ENGINE_PATH_OPTIONS:
+        scope = "build and engine stages" if option in BUILD_PATH_OPTIONS else "engine stages"
+        parser.add_argument(
+            "--" + option.replace("_", "-"),
+            type=Path,
+            metavar="PATH",
+            help=f"Override the {option.replace('_', ' ')} path for {scope}.",
+        )
+    parser.add_argument(
         "--continue-on-error",
         action="store_true",
         help="Continue running remaining stages after a failure (still exits non-zero at the end).",
@@ -710,6 +801,9 @@ def main(
         allow_missing_scripts=args.allow_missing_scripts,
         json_report=args.json_report,
         python_executable=sys.executable,
+        include_visual_tour=args.include_visual_tour,
+        visual_out_dir=args.visual_out_dir,
+        **{option: getattr(args, option) for option in ENGINE_PATH_OPTIONS},
     )
 
     try:

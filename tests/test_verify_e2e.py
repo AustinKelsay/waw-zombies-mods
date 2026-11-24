@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +18,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 import verify_e2e  # noqa: E402
 
 
-ALL_STAGE_IDS = [
+DEFAULT_STAGE_IDS = [
     "offline-tests",
     "build-deploy",
     "classic-gauntlet-smoke",
@@ -29,7 +30,10 @@ ALL_STAGE_IDS = [
     "perk-carryover",
     "base-zombies-p1",
     "base-zombies-p2",
+    "bz-coop",
+    "enhanced-gauntlet",
 ]
+ALL_STAGE_IDS = [*DEFAULT_STAGE_IDS, "bz-visual-tour"]
 
 
 def _make_fake_repo(tmp_dir: Path, existing_scripts: list[str] | None = None) -> Path:
@@ -48,6 +52,7 @@ def _make_fake_repo(tmp_dir: Path, existing_scripts: list[str] | None = None) ->
             "scripts/verify_perks.py",
             "scripts/verify_base_zombies_p1.py",
             "scripts/verify_base_zombies_p2.py",
+            "scripts/verify_bz_coop_and_visuals.py",
         ]
     )
     for rel in scripts_to_create:
@@ -61,7 +66,7 @@ class TestStagePlanning(unittest.TestCase):
     def test_default_stage_order_and_exact_commands(self) -> None:
         config = verify_e2e.GateConfig(python_executable="python3")
         planned = verify_e2e.plan_stages(config)
-        self.assertEqual([s.stage_id for s in planned], ALL_STAGE_IDS)
+        self.assertEqual([s.stage_id for s in planned], DEFAULT_STAGE_IDS)
 
         cmds = {s.stage_id: s.build_command("python3") for s in planned}
         self.assertEqual(
@@ -104,6 +109,11 @@ class TestStagePlanning(unittest.TestCase):
             cmds["base-zombies-p2"],
             ["python3", "scripts/verify_base_zombies_p2.py", "--skip-build"],
         )
+        for stage_id, mode in (("bz-coop", "coop"), ("enhanced-gauntlet", "enhanced-gauntlet")):
+            self.assertEqual(
+                cmds[stage_id],
+                ["python3", "scripts/verify_bz_coop_and_visuals.py", "--skip-build", "--mode", mode],
+            )
 
     def test_offline_only_selects_only_offline_tests(self) -> None:
         planned = verify_e2e.plan_stages(verify_e2e.GateConfig(offline_only=True))
@@ -113,7 +123,7 @@ class TestStagePlanning(unittest.TestCase):
         planned = verify_e2e.plan_stages(verify_e2e.GateConfig(skip_build=True))
         self.assertEqual(
             [s.stage_id for s in planned],
-            [sid for sid in ALL_STAGE_IDS if sid != "build-deploy"],
+            [sid for sid in DEFAULT_STAGE_IDS if sid != "build-deploy"],
         )
 
     def test_only_filters_and_preserves_canonical_order(self) -> None:
@@ -230,12 +240,14 @@ class TestMissingScriptsHandling(unittest.TestCase):
                 "perk-carryover",
                 "base-zombies-p1",
                 "base-zombies-p2",
+                "bz-coop",
+                "enhanced-gauntlet",
             ):
                 self.assertEqual(by_id[missing_id].status, "SKIPPED")
                 self.assertIn("Missing script", by_id[missing_id].skip_reason or "")
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 11, "passed": 5, "failed": 0, "skipped": 6, "not_run": 0},
+                {"total": 13, "passed": 5, "failed": 0, "skipped": 8, "not_run": 0},
             )
 
 
@@ -278,7 +290,7 @@ class TestExecutionModes(unittest.TestCase):
             self.assertEqual(by_id["base-zombies-p2"].status, "NOT_RUN")
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 11, "passed": 2, "failed": 1, "skipped": 0, "not_run": 8},
+                {"total": 13, "passed": 2, "failed": 1, "skipped": 0, "not_run": 10},
             )
 
     def test_continue_on_error_runs_all_remaining_stages_and_exits_nonzero(self) -> None:
@@ -304,10 +316,10 @@ class TestExecutionModes(unittest.TestCase):
 
             self.assertEqual(report.status, "FAILED")
             self.assertEqual(report.exit_code, 1)
-            self.assertEqual(executed, ALL_STAGE_IDS)
+            self.assertEqual(executed, DEFAULT_STAGE_IDS)
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 11, "passed": 9, "failed": 2, "skipped": 0, "not_run": 0},
+                {"total": 13, "passed": 11, "failed": 2, "skipped": 0, "not_run": 0},
             )
 
 
@@ -393,8 +405,10 @@ class TestReportingAndCLI(unittest.TestCase):
             )
             self.assertEqual(rc, 0)
             output = buf.getvalue()
-            for stage_id in ALL_STAGE_IDS:
-                self.assertIn(stage_id, output)
+            stage_lines = [line for line in output.splitlines() if line.split(".", 1)[0].strip().isdigit()]
+            self.assertEqual([line.split()[1] for line in stage_lines], ALL_STAGE_IDS)
+            self.assertEqual([line.split()[1] for line in stage_lines if "[optional]" in line], ["bz-visual-tour"])
+            self.assertIn("--mode visual-tour --capture-visuals .smoke_logs/bz_coop_and_visuals", stage_lines[-1])
             self.assertIn("--modes 0 1", output)
             self.assertIn("missing", output.lower())
 
@@ -424,11 +438,94 @@ class TestReportingAndCLI(unittest.TestCase):
                 stream=io.StringIO(),
             )
             self.assertEqual(rc_skip, 0)
-            self.assertNotIn("build-deploy", seen)
-            self.assertEqual(len(seen), 10)
+            self.assertEqual(seen, [sid for sid in DEFAULT_STAGE_IDS if sid != "build-deploy"])
+
+    def test_cli_include_visual_tour_and_capture_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = _make_fake_repo(Path(tmp))
+            capture_dir = fake_repo / "visual captures"
+            seen: dict[str, tuple[str, ...]] = {}
+
+            def fake_runner(stage: verify_e2e.StageSpec, cwd: Path) -> verify_e2e.CommandResult:
+                seen[stage.stage_id] = stage.args
+                return verify_e2e.CommandResult(exit_code=0)
+
+            for extra_flags in ([], ["--skip-build"]):
+                with self.subTest(extra_flags=extra_flags):
+                    seen.clear()
+                    rc = verify_e2e.main(
+                        ["--include-visual-tour", "--visual-out-dir", str(capture_dir), *extra_flags],
+                        repo_root=fake_repo,
+                        runner=fake_runner,
+                        stream=io.StringIO(),
+                    )
+                    self.assertEqual(rc, 0)
+                    expected = [sid for sid in ALL_STAGE_IDS if not extra_flags or sid != "build-deploy"]
+                    self.assertEqual(list(seen), expected)
+                    self.assertEqual(
+                        seen["bz-visual-tour"],
+                        (
+                            "scripts/verify_bz_coop_and_visuals.py", "--skip-build", "--mode", "visual-tour",
+                            "--capture-visuals", str(capture_dir),
+                        ),
+                    )
+                    self.assertNotIn("--capture-visuals", seen["bz-coop"])
+                    self.assertNotIn("--capture-visuals", seen["enhanced-gauntlet"])
+
+    def test_cli_only_selects_new_stages_and_forwards_path_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = _make_fake_repo(Path(tmp))
+            seen: dict[str, tuple[str, ...]] = {}
+            path_args = [
+                "--tools-root", "/test/tools",
+                "--steam-root", "/test/steam",
+                "--dev-root", "/test/dev",
+                "--steam-game", "/test/steam/game files",
+                "--playtest-prefix", "/test/prefix",
+                "--proton", "/test/proton",
+            ]
+
+            def fake_runner(stage: verify_e2e.StageSpec, cwd: Path) -> verify_e2e.CommandResult:
+                seen[stage.stage_id] = stage.args
+                return verify_e2e.CommandResult(exit_code=0)
+
+            rc = verify_e2e.main(
+                ["--only", "bz-visual-tour", "enhanced-gauntlet", "bz-coop", *path_args],
+                repo_root=fake_repo,
+                runner=fake_runner,
+                stream=io.StringIO(),
+            )
+            self.assertEqual(rc, 0)
+            self.assertEqual(list(seen), ["bz-coop", "enhanced-gauntlet", "bz-visual-tour"])
+            for args in seen.values():
+                self.assertEqual(args[-len(path_args):], tuple(path_args))
+            self.assertEqual(
+                seen["bz-visual-tour"][4:6],
+                ("--capture-visuals", ".smoke_logs/bz_coop_and_visuals"),
+            )
+
+    def test_cli_rejects_offline_only_with_include_visual_tour(self) -> None:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            rc = verify_e2e.main(["--offline-only", "--include-visual-tour"], stream=io.StringIO())
+        self.assertEqual(rc, 2)
+        self.assertIn("--offline-only cannot be combined with --include-visual-tour", err.getvalue())
 
 
 class TestFailureDiagnosis(unittest.TestCase):
+    def test_diagnose_missing_startup_dialog_responder(self) -> None:
+        hints = verify_e2e.diagnose_failure(
+            "bz-coop", "ERROR: Missing X11 startup-dialog responder: install python-xlib or xdotool",
+        )
+        self.assertTrue(any("python-xlib" in h and "xdotool" in h for h in hints))
+
+    def test_diagnose_missing_visual_capture_tool_alongside_xvfb(self) -> None:
+        hints = verify_e2e.diagnose_failure(
+            "bz-visual-tour", "ERROR: Missing live verification tools: Xvfb, import",
+        )
+        self.assertTrue(any("ImageMagick" in h and "'import'" in h for h in hints))
+        self.assertTrue(any("Xvfb" in h for h in hints))
+
     def test_diagnose_missing_xvfb(self) -> None:
         hints = verify_e2e.diagnose_failure(
             "classic-gauntlet-smoke",
