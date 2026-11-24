@@ -28,6 +28,7 @@ bz_classes_register()
 	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_classes_on_player_connect, "classes" );
 	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_classes_on_player_spawned, "classes" );
 	maps\_bz_hooks::bz_register_hook( "player_downed", ::bz_classes_on_player_downed, "classes" );
+	maps\_bz_hooks::bz_register_hook( "player_revived", ::bz_classes_on_player_revived, "classes" );
 	maps\_bz_hooks::bz_register_hook( "round_start", ::bz_classes_on_round_start, "classes" );
 	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_classes_on_end_game, "classes" );
 	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_classes_on_item_purchased, "classes" );
@@ -397,6 +398,24 @@ bz_classes_on_player_downed( player )
 	}
 }
 
+bz_classes_on_player_revived( player, reviver )
+{
+	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	bz_class_ensure_player_fields( player );
+	player.bz_is_downed = false;
+
+	active_class = maps\_bz_state::bz_state_get_class( player );
+	if ( active_class != "" )
+	{
+		bz_class_apply( player, active_class );
+		bz_class_update_hud( player );
+	}
+}
+
 bz_classes_on_round_start( round_num )
 {
 	if ( !maps\_bz_hooks::bz_classes_enabled() )
@@ -651,6 +670,7 @@ bz_class_apply( player, class_id )
 		player.bz_max_grenades = max_nades;
 		bz_sapper_set_grenades( player, max_nades );
 		player thread bz_sapper_grenade_watch();
+		player thread bz_sapper_max_ammo_watch();
 	}
 	else if ( id == "daredevil" )
 	{
@@ -1357,6 +1377,37 @@ bz_sapper_grenade_watch()
 		{
 			self thread bz_sapper_track_thrown_grenade( grenade );
 		}
+	}
+}
+
+bz_sapper_on_max_ammo( player )
+{
+	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	{
+		return 0;
+	}
+	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	{
+		return 0;
+	}
+	max_nades = maps\_bz_rules::bz_calc_max_grenades( "sapper" );
+	return bz_sapper_set_grenades( player, max_nades );
+}
+
+bz_sapper_max_ammo_watch()
+{
+	self endon( "disconnect" );
+	self endon( "bz_class_changed" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "zmb_max_ammo" );
+		if ( maps\_bz_state::bz_state_get_class( self ) != "sapper" )
+		{
+			return;
+		}
+		bz_sapper_on_max_ammo( self );
 	}
 }
 

@@ -81,15 +81,31 @@ GET_PRIMARIES_ENT_RE = re.compile(
     r"\b(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GetWeaponsListPrimaries[ \t]*\([ \t]*\)",
     re.IGNORECASE,
 )
+CHEST_THINK_DEF_RE = re.compile(
+    r"^treasure_chest_think\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+TOP_LEVEL_FUNC_DEF_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*\([^)]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
 CHEST_SCORE_CHECK_RE = re.compile(
-    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)\.score[ \t]*>=[ \t]*self\.zombie_cost\b"
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)\.score[ \t]*(?P<op>>=|<)[ \t]*(?P<cost>self\.zombie_cost|cost)\b"
 )
 CHEST_SCORE_DEDUCT_RE = re.compile(
-    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*self\.zombie_cost[ \t]*\)"
+    r"(?P<ent>\b[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::minus_to_player_score\([ \t]*(?P<cost>self\.zombie_cost|cost)[ \t]*\)"
 )
 JUGG_HEALTH_BLOCK_RE = re.compile(
-    r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\];(?P<trailing>[ \t]*)\r?'
+    r'^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*(?:level\.zombie_vars\[[ \t]*"zombie_perk_juggernaut_health"[ \t]*\]|160);(?P<trailing>[ \t]*)\r?'
     r'(?:\r?\n[ \t]*(?P=ent)\.health[ \t]*=[^\n;]*;[ \t]*\r?)?',
+    re.MULTILINE,
+)
+WEAPONS_FALLBACK_STRIP_RE = re.compile(
+    r"if\([ \t]*IsDefined\([ \t]*primaryWeapons[ \t]*\)[ \t]*&&[ \t]*!isDefined\([ \t]*current_weapon[ \t]*\)[ \t]*\)",
+    re.IGNORECASE,
+)
+WEAPONS_FALLBACK_TAKE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+TakeWeapon\([ \t]*primaryWeapons\[i\][ \t]*\);(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE,
 )
 PERK_RESET_HEALTH_RE = re.compile(
@@ -587,18 +603,56 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
             "in _zombiemode_weapons.gsc"
         )
 
-    # Route Mystery Box cost checks and deductions through bz_box_cost_modify (noop when bz_enabled=0)
-    text = CHEST_SCORE_CHECK_RE.sub(
-        lambda m: f"{m.group('ent')}.score >= maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost )",
+    # Stock WaW 1.7 treasure_chest_give_weapon() (all 4 maps) and weapon_give()
+    # (Nacht/Verruckt/Shi No Numa) have a fallback loop:
+    #   if( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) )
+    #       for(...) if( primaryWeapons[i] != "zombie_colt" ) self TakeWeapon( primaryWeapons[i] );
+    # When Mule Kick raises the weapon cap to 3 or 4 and the player holds 2+ non-Colt guns,
+    # primaryWeapons.size >= max_weapons is false, leaving current_weapon == undefined and
+    # causing that fallback loop to WIPE every non-Colt gun in the player's inventory!
+    # Gate the fallback on actually being at/over the dynamic weapon cap, and break after
+    # taking one weapon when bz_enabled() so holding a Bouncing Betty at full slots never
+    # wipes the entire loadout either.
+    text = WEAPONS_FALLBACK_STRIP_RE.sub(
+        "if( IsDefined( primaryWeapons ) && !isDefined( current_weapon ) && ( !maps\\_bz_hooks::bz_enabled() || primaryWeapons.size >= maps\\_bz_hooks::bz_get_max_primary_weapons( self ) ) )",
         text,
     )
-    text = CHEST_SCORE_DEDUCT_RE.sub(
-        lambda m: (
-            f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
-            f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, self.zombie_cost ) )"
-        ),
-        text,
-    )
+
+    def _inject_fallback_take_break(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ break; }}{ending}"
+        )
+
+    text = WEAPONS_FALLBACK_TAKE_RE.sub(_inject_fallback_take_break, text)
+
+    # Route Mystery Box cost checks and deductions strictly inside treasure_chest_think()
+    # through bz_box_cost_modify (noop when bz_enabled=0). Supports both Nacht's direct
+    # `self.zombie_cost` and Verruckt/Shi No Numa/Der Riese's local `cost` variable without
+    # accidentally discounting wall buys / weapon cabinets in weapon_spawn_think().
+    chest_match = CHEST_THINK_DEF_RE.search(text)
+    if chest_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=chest_match.end())
+        chest_end = next_fn.start() if next_fn is not None else len(text)
+        chest_body = text[chest_match.start() : chest_end]
+        chest_body = CHEST_SCORE_CHECK_RE.sub(
+            lambda m: (
+                f"{m.group('ent')}.score {m.group('op')} "
+                f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} )"
+            ),
+            chest_body,
+        )
+        chest_body = CHEST_SCORE_DEDUCT_RE.sub(
+            lambda m: (
+                f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
+                f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} ) )"
+            ),
+            chest_body,
+        )
+        text = text[: chest_match.start()] + chest_body + text[chest_end:]
 
     # Inject guarded wall-buy weapon purchase hook (Sapper Wall-Buy Traps)
     def _inject_wall_weapon(match: re.Match[str]) -> str:
@@ -627,7 +681,11 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
     return text.encode("latin1")
 
 
-def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
+def inject_zombiemode_perks_hooks(
+    script_bytes: bytes,
+    *,
+    rewire_weapons_module: str | None = None,
+) -> bytes:
     """Patch stock _zombiemode_perks.gsc with dynamic weapon cap and unified maxhealth recompute."""
     text = script_bytes.decode("latin1")
     newline = "\r\n" if "\r\n" in text else "\n"
@@ -675,6 +733,10 @@ def inject_zombiemode_perks_hooks(script_bytes: bytes) -> bytes:
         raise ValueError(
             "Expected at least 1 weapon-cap or maxhealth hook site in _zombiemode_perks.gsc"
         )
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+    )
     return text.encode("latin1")
 
 
@@ -769,6 +831,7 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
     solo_hook = (
         f"{all_indent}if ( maps\\_bz_hooks::bz_enabled() && GetPlayers().size == 1 && maps\\_bz_perks::bz_perks_try_consume_solo_revive( self ) ){newline}"
         f"{all_indent}{{{newline}"
+        f"{all_indent}\tself reviveplayer();{newline}"
         f"{all_indent}\tself.health = self.maxhealth;{newline}"
         f"{all_indent}\tmaps\\_bz_perks::bz_perks_apply_revive_completed( self, self );{newline}"
         f"{all_indent}\treturn;{newline}"
@@ -1334,7 +1397,10 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         )
         if perks_stock is not None:
             perks_mod = zombiemode_perks_module_for_map(map_name)
-            perks_patched = inject_zombiemode_perks_hooks(perks_stock)
+            perks_patched = inject_zombiemode_perks_hooks(
+                perks_stock,
+                rewire_weapons_module=weapons_mod,
+            )
             perks_dst = stage_dir / "maps" / f"{perks_mod}.gsc"
             perks_dst.parent.mkdir(parents=True, exist_ok=True)
             perks_dst.write_bytes(perks_patched)

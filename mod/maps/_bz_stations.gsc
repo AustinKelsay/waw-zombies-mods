@@ -179,12 +179,12 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_prototype" )
 	{
-		// Nacht der Untoten: ground-floor spawn hub margins
+		// Nacht der Untoten: ground-floor spawn room (z ~ 17, x in [-200..+180], y in [220..500])
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( -70, 560, 144 ),
+			( -140, 460, 24 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -193,8 +193,8 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 190, 560, 144 ),
-			( 0, 180, 0 ),
+			( -140, 320, 24 ),
+			( 0, 0, 0 ),
 			false,
 			false
 		);
@@ -202,8 +202,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( -70, 340, 144 ),
-			( 0, 0, 0 ),
+			( 150, 460, 24 ),
+			( 0, 180, 0 ),
 			false,
 			false
 		);
@@ -211,7 +211,7 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 190, 340, 144 ),
+			( 150, 320, 24 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -221,12 +221,12 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_asylum" )
 	{
-		// Verruckt: non-blocking starting wing margins
+		// Verruckt: north starting wing floor (z ~ 91, M1 Garand at x=867, spawns at x~1097, y in [121..394])
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( -260, 140, 64 ),
+			( 920, 370, 96 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -235,8 +235,8 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 260, 140, 64 ),
-			( 0, 180, 0 ),
+			( 920, 180, 96 ),
+			( 0, 0, 0 ),
 			false,
 			false
 		);
@@ -244,8 +244,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( -260, -140, 64 ),
-			( 0, 0, 0 ),
+			( 1060, 370, 96 ),
+			( 0, 180, 0 ),
 			false,
 			false
 		);
@@ -253,7 +253,7 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 260, -140, 64 ),
+			( 1060, 180, 96 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -263,12 +263,12 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_sumpf" )
 	{
-		// Shi No Numa: central hut walkable corners
+		// Shi No Numa: upstairs central starting hut floor (z ~ -500, x in [9903..10589], y in [344..659])
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( 10120, 760, -528 ),
+			( 10020, 610, -492 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -277,7 +277,7 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 10360, 760, -528 ),
+			( 10280, 610, -492 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -286,7 +286,7 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 10120, 520, -528 ),
+			( 10020, 410, -492 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -295,7 +295,7 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 10360, 520, -528 ),
+			( 10280, 410, -492 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -1626,6 +1626,10 @@ bz_stations_on_menu_response( player, menu, response )
 
 	if ( res.ok )
 	{
+		if ( IsDefined( res.cost ) && Int( res.cost ) > 0 && IsDefined( player.old_score ) )
+		{
+			player maps\_zombiemode_score::set_player_score_hud();
+		}
 		maps\_bz_hooks::bz_on_item_purchased( player, category, item_id, res, weapon_name );
 	}
 

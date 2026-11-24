@@ -508,6 +508,13 @@ class TestFieldMedicAndTitanClasses(unittest.TestCase):
         self.assertEqual(self.p1.ammo_stock["thompson"], 40)
         self.assertEqual(self.p2.ammo_stock["thompson"], 40)
 
+        # Co-op revive clears bz_is_downed and restores Medic ammo regen immediately
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_revived", self.p1, self.p2)
+        self.assertFalse(self.p1.get_field("bz_is_downed"))
+        revived_summary = self.gsc.call(BZ_CLASSES_MOD, "bz_medic_ammo_regen_tick", self.p1)
+        self.assertEqual(revived_summary.get_field("self_added"), 20)
+        self.assertEqual(self.p1.ammo_stock["thompson"], 60)
+
     def test_titan_health_aggro_priority_and_stationary_double_damage(self) -> None:
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:titan")
         # 2x HP composition: 200 base / 320 Jugg I / 440 Jugg II
@@ -662,6 +669,13 @@ class TestSapperAndBrokerClasses(unittest.TestCase):
             "BZ_EVENT|SAPPER_GRENADE_REFILL|player=PlayerOne;count=10;round=2",
             self.gsc.emitted_events,
         )
+
+        # Max Ammo powerup refills Sapper back to 10 grenades mid-round
+        self.p1.ammo_clip["stielhandgranate"] = 1
+        self.p1.set_field("bz_sapper_grenade_reserve", 0)
+        refilled = self.gsc.call(BZ_CLASSES_MOD, "bz_sapper_on_max_ammo", self.p1)
+        self.assertEqual(refilled, 10)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_sapper_get_total_grenades", self.p1), 10)
 
         # Expanded outer-ring blast hits zombie at 320u (between 256 and 384), misses zombie at 420u
         z_outer = ClassFakeEntity("ZombieOuter", ent_num=20, is_player=False, origin=(320, 0, 64))

@@ -993,10 +993,6 @@ bz_perks_on_wall_buy( player, weapon_name, origin, is_ammo )
 	{
 		return;
 	}
-	if ( !IsDefined( is_ammo ) || !is_ammo )
-	{
-		return;
-	}
 
 	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
@@ -1234,6 +1230,10 @@ bz_perks_apply_revive_completed( reviver, revived )
 bz_perks_sync_stock_perks( player )
 {
 	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.laststand ) && player.laststand )
 	{
 		return false;
 	}
@@ -1481,7 +1481,20 @@ bz_perks_player_monitor()
 		}
 
 		bz_perks_sync_stock_perks( self );
-		bz_perks_sync_weapon_order( self );
+
+		prev_order = self.bz_primary_weapon_order;
+		new_order = bz_perks_sync_weapon_order( self );
+		if ( maps\_bz_state::bz_state_has_apex( self, "double_ammo" ) && IsDefined( prev_order ) && prev_order.size > 0 )
+		{
+			for ( wi = 0; wi < new_order.size; wi++ )
+			{
+				nw = new_order[wi];
+				if ( !bz_perks_array_contains( prev_order, nw ) )
+				{
+					bz_perks_refill_ammo_for_player( self, nw );
+				}
+			}
+		}
 
 		cur_weap = maps\_bz_rules::bz_normalize_id( self GetCurrentWeapon() );
 		if ( cur_weap != last_weapon )

@@ -437,6 +437,7 @@ bz_init()
 		}
 	}
 	level thread bz_watch_connecting_players();
+	level thread bz_watch_max_ammo_powerups();
 
 	if ( GetDvarInt( "bz_test_selftest" ) == 1 )
 	{
@@ -507,6 +508,7 @@ bz_on_player_connect( player )
 
 	player thread bz_watch_player_spawned();
 	player thread bz_watch_player_downed();
+	player thread bz_watch_player_revived();
 	player thread bz_watch_player_menu_response();
 	if ( bz_elements_enabled() )
 	{
@@ -575,6 +577,105 @@ bz_watch_player_downed()
 	}
 }
 
+bz_watch_player_revived()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "player_revived", reviver );
+		bz_on_player_revived( self, reviver );
+	}
+}
+
+bz_notify_all_players_max_ammo()
+{
+	if ( !bz_enabled() )
+	{
+		return;
+	}
+	players = GetPlayers();
+	if ( IsDefined( players ) )
+	{
+		for ( i = 0; i < players.size; i++ )
+		{
+			if ( IsDefined( players[i] ) )
+			{
+				players[i] notify( "zmb_max_ammo" );
+			}
+		}
+	}
+}
+
+// Stock WaW 1.7 _zombiemode_powerups::full_ammo_powerup() never emits "zmb_max_ammo".
+// Watch spawned full_ammo powerup script_models across all 4 stock maps and emit
+// "zmb_max_ammo" on all players right after pickup so Double Ammo, Double PaP,
+// and Sapper grenades refill cleanly without modifying era-specific powerup scripts.
+bz_watch_max_ammo_powerups()
+{
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.25 );
+		if ( !bz_enabled() )
+		{
+			continue;
+		}
+		models = GetEntArray( "script_model", "classname" );
+		if ( !IsDefined( models ) )
+		{
+			continue;
+		}
+		for ( i = 0; i < models.size; i++ )
+		{
+			ent = models[i];
+			if ( IsDefined( ent ) && IsDefined( ent.powerup_name ) && ent.powerup_name == "full_ammo" )
+			{
+				if ( !IsDefined( ent.bz_max_ammo_watched ) || !ent.bz_max_ammo_watched )
+				{
+					ent.bz_max_ammo_watched = true;
+					ent thread bz_watch_single_max_ammo_drop();
+				}
+			}
+		}
+	}
+}
+
+bz_watch_single_max_ammo_drop()
+{
+	self endon( "powerup_timedout" );
+	level endon( "end_game" );
+
+	was_grabbed = false;
+	while ( IsDefined( self ) )
+	{
+		players = GetPlayers();
+		if ( IsDefined( players ) && IsDefined( self.origin ) )
+		{
+			for ( i = 0; i < players.size; i++ )
+			{
+				p = players[i];
+				if ( IsDefined( p ) && IsDefined( p.origin ) && Distance( p.origin, self.origin ) < 64 )
+				{
+					was_grabbed = true;
+					break;
+				}
+			}
+		}
+		wait( 0.05 );
+	}
+
+	if ( !was_grabbed )
+	{
+		return;
+	}
+
+	wait( 0.05 );
+	bz_notify_all_players_max_ammo();
+}
+
 bz_watch_player_menu_response()
 {
 	self endon( "disconnect" );
@@ -634,6 +735,30 @@ bz_on_player_downed( player )
 			if ( bz_is_gate_open( entry.gate ) )
 			{
 				[[ entry.fn ]]( player );
+			}
+		}
+	}
+
+	bz_recompute_player_speed( player );
+	bz_recompute_player_max_health( player );
+}
+
+bz_on_player_revived( player, reviver )
+{
+	if ( !bz_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	entries = get_hook_entries( "player_revived" );
+	if ( IsDefined( entries ) )
+	{
+		for ( i = 0; i < entries.size; i++ )
+		{
+			entry = entries[i];
+			if ( bz_is_gate_open( entry.gate ) )
+			{
+				[[ entry.fn ]]( player, reviver );
 			}
 		}
 	}
