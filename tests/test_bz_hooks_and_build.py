@@ -318,6 +318,7 @@ class BzGscRuntime(GscRuntime):
         self.level.set_field("script", "nazi_zombie_factory")
         self.players: list[FakeEntity] = []
         self.emitted_events: list[str] = []
+        self.player_prints: list[tuple[FakeEntity, str]] = []
         self._py_callbacks: dict[str, Callable[..., Any]] = {}
         self._current_self: Any = self.level
         self._threads: list[tuple[Any, str, list[Any]]] = []
@@ -547,6 +548,11 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return receiver._ent_num
             return 0
+        if method == "iprintln":
+            if not isinstance(receiver, FakeEntity) or not receiver.is_player:
+                raise GscRuntimeError(f"line {line}: IPrintLn on non-player {receiver!r}")
+            self.player_prints.append((receiver, _waw_to_str(args[0])))
+            return UNDEFINED
         if method == "setclientdvar":
             if not isinstance(receiver, FakeEntity):
                 raise GscRuntimeError(f"line {line}: SetClientDvar on non-entity {receiver!r}")

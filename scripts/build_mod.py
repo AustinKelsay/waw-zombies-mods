@@ -16,6 +16,8 @@ from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 MOD_NAME = "waw_gauntlet"
+BZ_BUILD_VERSION = "0.5.0"
+BZ_BUILD_COMMIT_RE = re.compile(r"[0-9a-zA-Z_-]+")
 STOCK_MAPS = (
     "nazi_zombie_prototype",
     "nazi_zombie_asylum",
@@ -1688,6 +1690,46 @@ def apply_bz_menu_patches(stage_dir: Path) -> list[Path]:
     return updated
 
 
+def render_bz_version_gsc(version: str, commit_sha: str) -> str:
+    """Render ASCII GSC getters for the build fingerprint."""
+    if not re.fullmatch(r"[0-9a-zA-Z_.-]+", version):
+        raise ValueError("Invalid Base Zombies build version")
+    if not BZ_BUILD_COMMIT_RE.fullmatch(commit_sha):
+        raise ValueError("Invalid Base Zombies build commit")
+
+    return f'''\
+// The build stamps the commit in the staged copy of this module.
+bz_get_build_version()
+{{
+\treturn "{version}";
+}}
+
+bz_get_build_commit()
+{{
+\treturn "{commit_sha}";
+}}
+
+bz_get_build_id()
+{{
+\treturn bz_get_build_version() + "-" + bz_get_build_commit();
+}}
+'''
+
+
+def resolve_git_short_sha(repo_root: Path) -> str:
+    """Read the short HEAD commit or use the dev fallback for source-only builds."""
+    try:
+        output = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            stderr=subprocess.DEVNULL,
+        )
+        commit_sha = output.decode("ascii").strip()
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+        return "dev"
+    return commit_sha if BZ_BUILD_COMMIT_RE.fullmatch(commit_sha) else "dev"
+
+
 def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     """Stage mod sources, hooked stock map entry scripts, and per-map _zombiemode wrappers."""
     stage_dir = tools_root / "mods" / MOD_NAME
@@ -1703,6 +1745,12 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         dst = stage_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_path, dst)
+
+    # Both the linker and IWD packager use this staged script.
+    (stage_dir / "maps" / "_bz_version.gsc").write_text(
+        render_bz_version_gsc(BZ_BUILD_VERSION, resolve_git_short_sha(REPO_ROOT)),
+        encoding="ascii",
+    )
 
     # Extract each stock map entry script and era-specific _zombiemode, _zombiemode_weapons,
     # and _zombiemode_perks scripts (preferring <map>_patch.ff so DLC3 features and local

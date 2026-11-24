@@ -384,6 +384,7 @@ bz_init()
 	}
 	level.bz_initialized = true;
 	level.bz_end_game_notified = false;
+	SetDvar( "bz_build_id", maps\_bz_version::bz_get_build_id() );
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
@@ -688,11 +689,43 @@ bz_watch_player_menu_response()
 	}
 }
 
+// Keep display names and map names inside the ASCII telemetry field format.
+bz_build_parity_label( label )
+{
+	allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-.[]()!@#$%&*+,/:<>?^`~{}'";
+	safe = "";
+	for ( i = 0; i < label.size; i++ )
+	{
+		ch = label[i];
+		if ( !IsSubStr( allowed, ch ) )
+		{
+			ch = "_";
+		}
+		safe = safe + ch;
+	}
+	return safe;
+}
+
 bz_on_player_spawned( player )
 {
 	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return;
+	}
+
+	if ( !IsDefined( player.bz_build_parity_announced ) )
+	{
+		player.bz_build_parity_announced = true;
+		version = maps\_bz_version::bz_get_build_version();
+		commit = maps\_bz_version::bz_get_build_commit();
+		fields = [];
+		fields[0] = maps\_bz_log::kv( "version", version );
+		fields[1] = maps\_bz_log::kv( "commit", commit );
+		fields[2] = maps\_bz_log::kv( "build_id", maps\_bz_version::bz_get_build_id() );
+		fields[3] = maps\_bz_log::kv( "player", bz_build_parity_label( bz_get_player_label( player ) ) );
+		fields[4] = maps\_bz_log::kv( "map", bz_build_parity_label( bz_get_map_name() ) );
+		maps\_bz_log::emit( "BUILD_PARITY", maps\_bz_log::join_fields( fields ) );
+		player IPrintLn( "Base Zombies v" + version + " (" + commit + ") - Co-op: all players must share mod.ff + waw_gauntlet.iwd" );
 	}
 
 	ensure_player_modifier_tables( player );
@@ -811,6 +844,16 @@ bz_on_end_game()
 		return;
 	}
 	level.bz_end_game_notified = true;
+
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		player = players[i];
+		if ( IsDefined( player ) )
+		{
+			player.bz_build_parity_announced = undefined;
+		}
+	}
 
 	fields = [];
 	fields[0] = maps\_bz_log::kv( "map", bz_get_map_name() );
