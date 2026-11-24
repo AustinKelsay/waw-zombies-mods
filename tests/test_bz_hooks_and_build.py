@@ -1986,12 +1986,14 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
         self.assertIn("rawfile,maps/_bz_log.gsc", mod_csv)
         self.assertIn("rawfile,maps/_bz_hooks.gsc", mod_csv)
+        self.assertIn("rawfile,maps/_bz_selftest.gsc", mod_csv.splitlines())
 
         staged = self.bm.generate_staged_mod_csv(
             mod_csv,
             [
                 "maps/_bz_log.gsc",
                 "maps/_bz_hooks.gsc",
+                "maps/_bz_selftest.gsc",
                 "maps/_bz_rules.gsc",
                 "maps/_bz_state.gsc",
                 "maps/_zombiemode_weapons_bz_factory.gsc",
@@ -2000,6 +2002,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         )
         self.assertEqual(staged.count("rawfile,maps/_bz_log.gsc"), 1)
         self.assertEqual(staged.count("rawfile,maps/_bz_hooks.gsc"), 1)
+        self.assertEqual(staged.splitlines().count("rawfile,maps/_bz_selftest.gsc"), 1)
         self.assertIn("rawfile,maps/_bz_rules.gsc", staged)
         self.assertIn("rawfile,maps/_bz_state.gsc", staged)
         self.assertIn("rawfile,maps/_zombiemode_weapons_bz_factory.gsc", staged)
@@ -2235,17 +2238,76 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 
-    def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
-        # WaW 1.7's GSC compiler enforces a 1,024-entry MAX_PRECACHE_ENTRIES table across
-        # the active compile chain (Der Riese & Shi No Numa overflowed at 205 refs in _bz_hooks.gsc).
-        source = (MOD_ROOT / "maps" / "_bz_hooks.gsc").read_text(encoding="latin1")
-        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
-        refs = re.findall(r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+", code_only)
-        self.assertLessEqual(
-            len(refs),
-            130,
-            f"_bz_hooks.gsc has {len(refs)} cross-file refs (budget <= 130 to stay safely under MAX_PRECACHE_ENTRIES)",
+    def test_xboxlive_lobby_keeps_online_count_and_gives_build_stamp_separate_space(self) -> None:
+        from tests.test_gauntlet_hud_menus import SYNTHETIC_STOCK_XBOXLIVE_LOBBY_MENU
+
+        lobby_count = (
+            '\t\titemDef\n\t\t{\n'
+            '\t\t\trect 12 38 210 36 CHOICE_HORIZONTAL_ALIGN VERTICAL_ALIGN_TOP\n'
+            '\t\t\torigin ORIGIN_DESCRIPTION\n'
+            '\t\t\tdvar playlist_totalonline\n'
+            '\t\t\tvisible 1\n'
+            '\t\t}\n'
         )
+        find_game_count = (
+            '\t\titemDef\n\t\t{\n'
+            '\t\t\trect 4 10 230 14\n'
+            '\t\t\tdvar playlist_totalonline\n'
+            '\t\t\tvisible 1\n'
+            '\t\t}\n'
+        )
+        stock = SYNTHETIC_STOCK_XBOXLIVE_LOBBY_MENU.replace(
+            '\t\t#include "ui/safearea.menu"', lobby_count + '\t\t#include "ui/safearea.menu"'
+        )
+        stock = stock.replace(
+            '\tmenuDef\n\t{\n\t\tname\tleavelobbywarning',
+            '\tmenuDef\n\t{\n\t\tname\tpopup_findgame\n' + find_game_count + '\t}\n'
+            '\tmenuDef\n\t{\n\t\tname\tleavelobbywarning',
+        )
+        staged = self.vhm.patch_xboxlive_lobby_menu(stock)
+        patched = self.bm.patch_xboxlive_lobby_menu_bz(staged)
+
+        self.assertIn(lobby_count, patched)
+        self.assertIn(find_game_count, patched)
+        self.assertEqual(self.vhm.validate_menu_braces(patched, filename="xboxlive_lobby.menu"), [])
+        self.assertEqual(self.bm.patch_xboxlive_lobby_menu_bz(patched), patched)
+
+        bz_inc = (MOD_ROOT / "ui" / "bz_menus.inc").read_text(encoding="ascii")
+        build_item = re.search(r"name\s+bz_lobby_build_text\b.*?decoration", bz_inc, re.DOTALL)
+        self.assertIsNotNone(build_item)
+        assert build_item is not None
+        self.assertRegex(build_item.group(0), r"\bvisible\s+1\b")
+        self.assertNotIn("bz_enabled", build_item.group(0))
+        # Panel sits at y=178..222, queued BZ banner at y=226..248, stock online count at y=196..232.
+        # Build stamp sits below all three at py + ph + 34 (y=256).
+        self.assertIn("(py + ph + 34)", build_item.group(0))
+
+    def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
+        # Leave room for stock and Gauntlet scripts in WaW 1.7's 1,024-entry table.
+        sources = {}
+        for path in (MOD_ROOT / "maps").glob("_bz_*.gsc"):
+            source = path.read_text(encoding="latin1")
+            sources[path.name] = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        ref_pattern = r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+"
+        counts = {name: len(re.findall(ref_pattern, code)) for name, code in sources.items()}
+        for name, budget in (("_bz_hooks.gsc", 65), ("_bz_selftest.gsc", 80)):
+            self.assertIn(name, counts)
+            with self.subTest(module=name):
+                self.assertLessEqual(counts[name], budget)
+        self.assertLessEqual(sum(counts.values()), 700, counts)
+
+        selftest_path = MOD_ROOT / "maps" / "_bz_selftest.gsc"
+        selftest_code = sources[selftest_path.name]
+        self.assertTrue(selftest_path.read_bytes().isascii())
+        self.assertNotRegex(selftest_code, r"(?i)\b(?:foreach|NotifyOnCommand)\b")
+        # The harness teleports its local player p. AI positions are read-only.
+        without_player_teleports = re.sub(r"(?i)\bp\s+SetOrigin\s*\(", "", selftest_code)
+        self.assertNotRegex(without_player_teleports, r"(?i)\bSetOrigin\s*\(")
+
+        BzGscRuntime(MOD_ROOT, FakeDvarStore()).load_module(r"maps\_bz_selftest")
+        for name, body in re.findall(r"(?ms)^(\w+)\([^\n]*\)\n\{\n(.*?)^\}", selftest_code):
+            if not name.startswith("bz_run_"):
+                self.assertNotRegex(body, r"(?i)\b(?:endon|wait|waittill\w*|waitframe)\s*\(", name)
 
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory
@@ -2276,7 +2338,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             raw_csc.parent.mkdir(parents=True)
             raw_csc.write_bytes(stock_1arg)
             (stage / "maps").mkdir(parents=True)
-            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.5.0-dev\"; }\n", encoding="ascii")
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.6.0-dev\"; }\n", encoding="ascii")
 
             out_csc = build_mod.stage_bz_clientscript_callbacks(
                 tools, stage, steam_game=root / "steam"
@@ -2302,17 +2364,17 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Retail-visible client-package parity stamp across all 4 station menus
         for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
             raw_menu = menu_path.read_text(encoding="latin1")
-            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.5.0-abc1234")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.6.0-abc1234")
             self.assertEqual(
                 verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
                 [],
                 f"Brace imbalance in stamped {menu_path.name}",
             )
-            self.assertIn('"BUILD: 0.5.0-abc1234"', stamped)
-            self.assertIn('dvarString( "bz_host_build_id" ) != "0.5.0-abc1234"', stamped)
-            self.assertIn('BUILD MISMATCH! LOCAL 0.5.0-abc1234 != HOST ', stamped)
+            self.assertIn('"BUILD: 0.6.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.6.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.6.0-abc1234 != HOST ', stamped)
             # Idempotent
-            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.5.0-abc1234"), stamped)
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.6.0-abc1234"), stamped)
             # Tracked menu remains unstamped
             self.assertNotIn("bz_parity_mismatch", raw_menu)
 

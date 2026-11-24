@@ -6,6 +6,7 @@ import hashlib
 import re
 import sys
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -17,10 +18,20 @@ import verify_bz_coop_and_visuals as verifier  # noqa: E402
 from tests.gsc_runtime import FakeDvarStore  # noqa: E402
 from tests.test_bz_hooks_and_build import BZ_HOOKS_MOD, BzGscRuntime, FakeEntity  # noqa: E402
 
+BZ_SELFTEST_MOD = r"maps\_bz_selftest"
+FACTORY_VISUAL_PHASES = (
+    "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
+    *(f"{weapon}_{state}" for weapon in ("acid", "cryo", "crossbow", "boomerang")
+      for state in ("idle", "active", "post")),
+    "native_pap_prompt", "native_pap_ii_badge",
+    "war_club_active", "portal_active", "portal_post",
+    "menu_perks", "menu_class", "menu_arsenal", "menu_pap",
+)
+
 COOP_LOG = """Loading fastfile 'mod'
-dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.5.0-dev;player=Host;map=nazi_zombie_factory
+dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.6.0-dev;player=Host;map=nazi_zombie_factory
 dvar set bz_event BZ_EVENT|PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native
-dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.5.0-dev;dog_rate=0.55
+dvar set bz_event BZ_EVENT|BZ_COOP_SELFTEST_PASS|map=nazi_zombie_factory;checks=10;build_id=0.6.0-dev;dog_rate=0.55
 """
 
 
@@ -33,17 +44,17 @@ class TestCoopAnalyzer(unittest.TestCase):
         cases = (
             (COOP_LOG.replace("BUILD_PARITY", "IGNORED"), "BUILD_PARITY"),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.5.0-dev;client=0.5.0-old\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY_MISMATCH|host=0.6.0-dev;client=0.6.0-old\n",
                 "BUILD_PARITY_MISMATCH",
             ),
             (
-                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.5.0;player=Guest;map=nazi_zombie_factory\n",
+                COOP_LOG + "BZ_EVENT|BUILD_PARITY|version=0.6.0;player=Guest;map=nazi_zombie_factory\n",
                 "missing build_id",
             ),
-            (COOP_LOG.replace("checks=10;build_id=0.5.0-dev", "checks=10;build_id=0.5.0-different"), "Conflicting build_id"),
+            (COOP_LOG.replace("checks=10;build_id=0.6.0-dev", "checks=10;build_id=0.6.0-different"), "Conflicting build_id"),
             (
                 COOP_LOG
-                + "BZ_EVENT|BUILD_PARITY|build_id=0.5.0-other;player=Client;map=nazi_zombie_factory\n",
+                + "BZ_EVENT|BUILD_PARITY|build_id=0.6.0-other;player=Client;map=nazi_zombie_factory\n",
                 "Conflicting BUILD_PARITY",
             ),
             (COOP_LOG.replace("console=native", "console=station"), "console=native"),
@@ -59,11 +70,11 @@ class TestCoopAnalyzer(unittest.TestCase):
 GAUNTLET_LOG = """Loading fastfile 'mod'
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;run_id=run_10
 BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2
-BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-
+BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
 GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;next_map=nazi_zombie_asylum
 GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;run_id=run_10
-BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club
+BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
 """
 
 
@@ -77,6 +88,14 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=none"), "GAUNTLET_BZ_SAVED"),
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|-|knife"), "GAUNTLET_BZ_SAVED"),
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|wc|war_club"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:20,cr:0;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:2,cr:1;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace(";bz_weapons=2;bz_dpap=1\nGAUNTLET_EVENT|STAGE_CLEAR", "\nGAUNTLET_EVENT|STAGE_CLEAR"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0", "melee_slot=war_club;weapons=ac:0,cr:2"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=0"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=0"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("GAUNTLET_BZ_RESTORED|player=host", "GAUNTLET_BZ_RESTORED|player=guest"),
+             "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("t1=2", "t1=0"), "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("pap_war_club=1", "pap_war_club=0"), "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("melee_slot=war_club", "melee_slot=knife"), "GAUNTLET_BZ_RESTORED"),
@@ -119,25 +138,23 @@ class TestVisualTourAnalyzer(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.out_dir = Path(directory.name)
 
-    def make_tour(self, slug: str, phases: list[str], frozen: bool = False):
+    def make_tour(self, slug: str, phases: Sequence[str], frozen_phases: tuple[str, ...] = ()):
         log = ["Loading fastfile 'mod'"]
         frames = []
         for index, phase in enumerate(phases):
             game_time = 2000 + index * 1000
             log.append(f"dvar set bz_event BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={game_time}")
             path = self.out_dir / f"{phase}.png"
-            img = b"fixed screenshot" if frozen else phase.encode("ascii")
+            img = b"fixed screenshot" if phase in frozen_phases else phase.encode("ascii")
             path.write_bytes(img)
             frames.append(verifier.CapturedFrame(phase, path, hashlib.sha256(img).hexdigest(), game_time))
         log.append(f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_{slug};phases={len(phases)}")
         return "\n".join(log), frames
 
-    def test_accepts_all_seventeen_factory_capture_phases(self) -> None:
-        phases = ["factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt"]
-        phases += [f"{weapon}_{state}" for weapon in ("acid", "cryo", "crossbow", "boomerang")
-                   for state in ("idle", "active", "post")]
-        phases += ["native_pap_prompt", "native_pap_ii_badge"]
-        log, frames = self.make_tour("factory", phases)
+    def test_accepts_all_twenty_four_factory_capture_phases(self) -> None:
+        self.assertEqual(verifier.expected_visual_phases("factory"), FACTORY_VISUAL_PHASES)
+        self.assertEqual(sum(len(verifier.expected_visual_phases(slug)) for slug in verifier.MAP_SLUGS), 36)
+        log, frames = self.make_tour("factory", FACTORY_VISUAL_PHASES)
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertEqual(errors, [])
 
@@ -161,9 +178,55 @@ class TestVisualTourAnalyzer(unittest.TestCase):
             "asylum_arsenal_prompt",
             "asylum_pap_prompt",
         ]
-        log, frames = self.make_tour("asylum", phases, frozen=True)
+        log, frames = self.make_tour("asylum", phases, frozen_phases=tuple(phases))
         _, errors = verifier.analyze_visual_tour_result(log, frames)
         self.assertTrue(any("frozen" in error for error in errors), errors)
+
+    def test_rejects_frozen_portal_frames_or_station_menus_in_an_otherwise_moving_tour(self) -> None:
+        for frozen_phases, expected in (
+            (("portal_active", "portal_post"), "portal_active, portal_post"),
+            (("menu_perks", "menu_class"), "menu_perks, menu_class"),
+            (
+                ("menu_perks", "menu_class", "menu_arsenal", "menu_pap"),
+                "menu_perks, menu_class, menu_arsenal, menu_pap",
+            ),
+        ):
+            with self.subTest(frozen_phases=frozen_phases):
+                log, frames = self.make_tour("factory", FACTORY_VISUAL_PHASES, frozen_phases)
+                _, errors = verifier.analyze_visual_tour_result(log, frames)
+                self.assertTrue(any("frozen" in error and expected in error for error in errors), errors)
+
+    def test_rejects_pixel_identical_station_pngs_with_different_metadata_chunks(self) -> None:
+        import struct
+        import zlib
+
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+        def make_png(red: int, stamp: str) -> bytes:
+            ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+            return (
+                b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", ihdr)
+                + chunk(b"tEXt", f"date:create\x00{stamp}".encode("ascii"))
+                + chunk(b"IDAT", zlib.compress(bytes((0, red, 0, 0))))
+                + chunk(b"IEND", b"")
+            )
+
+        log = ["Loading fastfile 'mod'"]
+        frames = []
+        for idx, phase in enumerate(FACTORY_VISUAL_PHASES):
+            t_ms = 2000 + idx * 1000
+            log.append(f"dvar set bz_event BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={t_ms}")
+            red = 250 if phase in ("menu_perks", "menu_class") else idx
+            img = make_png(red, f"2026-11-24T12:00:{idx:02d}+00:00")
+            path = self.out_dir / f"meta_{phase}.png"
+            path.write_bytes(img)
+            frames.append(verifier.CapturedFrame(phase, path, hashlib.sha256(img).hexdigest(), t_ms))
+        log.append(f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_factory;phases={len(FACTORY_VISUAL_PHASES)}")
+
+        _, errors = verifier.analyze_visual_tour_result("\n".join(log), frames)
+        self.assertTrue(any("menu_perks, menu_class" in error for error in errors), errors)
 
     def test_rejects_missing_phase_empty_png_and_missing_done(self) -> None:
         phases = [
@@ -256,6 +319,8 @@ class TestVisualCapture(unittest.TestCase):
 
 class TestLiveHookGates(unittest.TestCase):
     HOOKS = {
+        "bz_test_selftest": "bz_run_p1_selftest",
+        "bz_test_p2_selftest": "bz_run_p2_selftest",
         "bz_test_coop_selftest": "bz_run_coop_selftest",
         "bz_test_visual_tour": "bz_run_visual_tour",
         "bz_test_gauntlet_seed": "bz_run_gauntlet_seed",
@@ -274,6 +339,16 @@ class TestLiveHookGates(unittest.TestCase):
                     runtime.call(BZ_HOOKS_MOD, "bz_init")
                     launched = [name for _, name, _ in runtime._threads if name in self.HOOKS.values()]
                     self.assertEqual(launched, [expected_thread] if (bz_enabled, value) == ("1", "1") else [])
+
+    def test_selftest_dispatcher_is_a_noop_in_classic_mode(self) -> None:
+        dvars = FakeDvarStore()
+        dvars.set("gauntlet_enabled", "1")
+        for dvar in self.HOOKS:
+            dvars.set(dvar, "1")
+        runtime = BzGscRuntime(REPO_ROOT / "mod", dvars)
+        runtime.level.set_field("script", "nazi_zombie_prototype")
+        runtime.call(BZ_SELFTEST_MOD, "bz_selftest_start_enabled")
+        self.assertEqual(runtime._threads, [])
 
     def test_seed_requires_enhanced_gauntlet_on_nacht(self) -> None:
         for slug, gauntlet in (("prototype", "0"), ("asylum", "1")):
@@ -299,11 +374,12 @@ class TestLiveHookGates(unittest.TestCase):
         runtime.players.append(host)
         runtime.call(BZ_HOOKS_MOD, "bz_init")
         runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", host)
-        runtime.call(BZ_HOOKS_MOD, "bz_run_gauntlet_seed")
+        runtime.call(BZ_SELFTEST_MOD, "bz_run_gauntlet_seed")
 
         bridge = r"maps\_bz_gauntlet_bridge"
         self.assertEqual(runtime.call(bridge, "encode_perm_record", host), "titan|wc,pwc|war_club")
         self.assertEqual(runtime.call(bridge, "encode_perks_record", host), "su,mk|-|-")
+        self.assertEqual(runtime.call(bridge, "encode_weapons_record", host), "ac:2,cr:0")
         self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_has_pap_war_club", host))
         self.assertTrue({"bz_acid_sprayer", "bz_cryo_cannon"}.issubset(host.weapons))
         self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_is_weapon_double_pap", host, "bz_acid_sprayer"))
@@ -326,12 +402,12 @@ class TestLiveHookGates(unittest.TestCase):
                 else:
                     self.assertNotIn("bz_test_coop_spawn_dog", patched)
 
-    def test_waw17_hooks_keep_waits_in_child_threads_and_teleport_only_players(self) -> None:
+    def test_waw17_selftests_keep_waits_in_child_threads_and_teleport_only_players(self) -> None:
         mod_root = REPO_ROOT / "mod"
-        path = mod_root / "maps" / "_bz_hooks.gsc"
+        path = mod_root / "maps" / "_bz_selftest.gsc"
         source = path.read_text(encoding="ascii")
         runtime = BzGscRuntime(mod_root)
-        runtime.load_module(BZ_HOOKS_MOD)
+        runtime.load_module(BZ_SELFTEST_MOD)
         code = re.sub(r"//[^\n]*", "", source)
         self.assertNotRegex(code, r"\b(?:foreach|NotifyOnCommand)\b")
         self.assertEqual(set(re.findall(r"\b(\w+)\s+SetOrigin\s*\(", code)), {"p"})
@@ -339,8 +415,10 @@ class TestLiveHookGates(unittest.TestCase):
         for match in re.finditer(r"^(bz_(?:test_\w+|run_\w+))\([^\n]*\)\n\{(.*?)^\}", code, re.M | re.S):
             name, body = match.groups()
             if name in self.HOOKS.values():
-                self.assertIn('level endon( "end_game" );', body)
                 self.assertRegex(code, rf"level thread {name}\(\);")
+                # P1 and P2 invoke end-game cleanup before emitting their final results.
+                if name in ("bz_run_coop_selftest", "bz_run_visual_tour", "bz_run_gauntlet_seed"):
+                    self.assertIn('level endon( "end_game" );', body)
             elif name.startswith("bz_test_"):
                 self.assertNotRegex(body, r"\b(?:wait|waittill|endon)\(")
 

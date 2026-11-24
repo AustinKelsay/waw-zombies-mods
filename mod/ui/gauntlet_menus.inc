@@ -9,38 +9,38 @@
 
 // Clears all persisted Gauntlet Run state dvars without altering gauntlet_enabled.
 #define GAUNTLET_CLEAR_RUN_STATE_EXEC \
-	exec "set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"";
+	exec "set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"";
 
 // Solo entry (Classic Gauntlet): enables Zombie Gauntlet, clears stale Run state,
 // disables Base Zombies, and launches Cycle 1, Stage 1 on Nacht der Untoten.
 #define GAUNTLET_SOLO_START_ACTION \
 	setdvar credits "0"; \
 	setdvar credits_active "0"; \
-	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
+	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
 
 // Solo entry (Enhanced Gauntlet): enables Zombie Gauntlet + full Phase 1 & Phase 2
 // Base Zombies Enhancements, clears stale Run state, and launches Nacht der Untoten.
 #define GAUNTLET_ENHANCED_SOLO_START_ACTION \
 	setdvar credits "0"; \
 	setdvar credits_active "0"; \
-	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
+	exec "set onlinegame 0; set systemlink 0; set splitscreen 0; set arcademode 0; set zombiemode 1; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0; set gauntlet_enabled 1; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\"; map nazi_zombie_prototype";
 
 // Classic Mode guard: disables Zombie Gauntlet and Base Zombies, clearing stale lobby status.
 #define GAUNTLET_CLASSIC_MODE_ACTION \
-	exec "set gauntlet_enabled 0; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0; set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
+	exec "set gauntlet_enabled 0; set bz_enabled 0; set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0; set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
 
 // Co-op fresh Run lock: forces Nazi Zombies gametype and Nacht der Untoten
 // whenever Gauntlet is enabled with no pending Stage Transition, while preserving
 // the host's Enhancements toggle (bz_enabled 0 = Classic Gauntlet, 1 = Enhanced Gauntlet).
 #define GAUNTLET_COOP_FRESH_LOCK_ACTION \
-	exec "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
+	exec "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
 	execOnDvarIntValue bz_enabled 1 "set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0"; \
 	execOnDvarIntValue bz_enabled 0 "set bz_perks_enabled 0; set bz_classes_enabled 0; set bz_pap_enabled 0; set bz_elements_enabled 0; set bz_companions_enabled 0";
 
 // Action fired when the host toggles gauntlet_enabled in pc_gamesetup_coop.menu.
 // Preserves bz_enabled so hosts can freely compose Classic or Enhanced Gauntlet.
 #define GAUNTLET_COOP_TOGGLE_ACTION \
-	execOnDvarIntValue gauntlet_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
+	execOnDvarIntValue gauntlet_enabled 1 "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set ui_mapname nazi_zombie_prototype; set gauntlet_active 0; set gauntlet_run_id \"\"; set gauntlet_pending_transition 0; set gauntlet_cycle 1; set gauntlet_stage 1; set gauntlet_total_rounds 0; set gauntlet_player_points \"\"; set gauntlet_player_perks \"\"; set gauntlet_bz_perm \"\"; set gauntlet_bz_perks \"\"; set gauntlet_bz_weapons \"\"; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_fresh_run 0; set gauntlet_disconnected_players \"\"; set gauntlet_spectators \"\"; set gauntlet_lobby_status \"\""; \
 	execOnDvarIntValue gauntlet_enabled 0 "set gauntlet_active 0; set gauntlet_pending_transition 0; set gauntlet_next_map \"\"; set gauntlet_next_display \"\"; set gauntlet_lobby_status \"\"";
 
 // Co-op Host Setup mode toggle (0 = Classic Mode, 1 = Zombie Gauntlet).
@@ -158,10 +158,10 @@
 	{ \
 		name			gauntlet_lobby_fresh_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
-		text			"ZOMBIE GAUNTLET - Cycle 1 Stage 1/4: Nacht der Untoten" \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
+		text			"ZOMBIE GAUNTLET - C1 S1/4: Nacht der Untoten" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.28 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		GAUNTLET_COLOR_GOLD \
@@ -173,10 +173,10 @@
 	{ \
 		name			gauntlet_lobby_fresh_enhanced_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
 		text			"ENHANCED GAUNTLET - C1 S1/4: Nacht (Perks + Classes + PaP)" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.27 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		BZ_COLOR_ACCENT \
@@ -188,10 +188,10 @@
 	{ \
 		name			gauntlet_lobby_queued_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
 		exp				text( dvarString( "gauntlet_lobby_status" ) ); \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.28 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		GAUNTLET_COLOR_GOLD \

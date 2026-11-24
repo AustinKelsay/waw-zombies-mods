@@ -544,6 +544,12 @@ monitor_player_score_cache( cache )
 			{
 				cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
 				cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
+				cache.bz_weapons = "";
+				if ( GetDvarInt( "bz_elements_enabled" ) == 1 )
+				{
+					cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
+				}
+				cache.bz_sampled = true;
 			}
 		}
 		wait( 0.5 );
@@ -564,10 +570,17 @@ watch_player_disconnect()
 	cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
 	cache.bz_perm = "";
 	cache.bz_perks = "";
-	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	cache.bz_weapons = "";
+	cache.bz_sampled = false;
+	if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
 	{
 		cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
 		cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
+		if ( GetDvarInt( "bz_elements_enabled" ) == 1 )
+		{
+			cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
+		}
+		cache.bz_sampled = true;
 	}
 
 	self thread monitor_player_score_cache( cache );
@@ -589,9 +602,9 @@ watch_player_disconnect()
 		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
 		maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
-		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( cache.bz_sampled ) && cache.bz_sampled )
 		{
-			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks );
+			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks, cache.bz_weapons );
 		}
 
 		fields = [];
@@ -997,11 +1010,8 @@ snapshot_all_players_points( current_map )
 		maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
 
 		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
-		if ( GetDvarInt( "bz_enabled" ) == 1 )
-		{
-			maps\_bz_gauntlet_bridge::snapshot_player_bz_state( player, current_map );
-		}
 	}
+	maps\_bz_gauntlet_bridge::save_all_players_bz_state( current_map );
 }
 
 handle_stage_clear( completed_round )

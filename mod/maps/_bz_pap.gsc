@@ -33,14 +33,14 @@ bz_pap_register()
 	}
 	level.bz_pap_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_pap_on_init, "pap" );
-	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_pap_on_player_connect, "pap" );
-	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_pap_on_player_spawned, "pap" );
-	maps\_bz_hooks::bz_register_hook( "player_downed", ::bz_pap_on_player_downed, "pap" );
-	maps\_bz_hooks::bz_register_hook( "round_start", ::bz_pap_on_round_start, "pap" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_pap_on_end_game, "pap" );
-	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_pap_on_item_purchased, "pap" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_pap_on_actor_damage, "pap" );
+	bz_register_hook( "init", ::bz_pap_on_init, "pap" );
+	bz_register_hook( "player_connect", ::bz_pap_on_player_connect, "pap" );
+	bz_register_hook( "player_spawned", ::bz_pap_on_player_spawned, "pap" );
+	bz_register_hook( "player_downed", ::bz_pap_on_player_downed, "pap" );
+	bz_register_hook( "round_start", ::bz_pap_on_round_start, "pap" );
+	bz_register_hook( "end_game", ::bz_pap_on_end_game, "pap" );
+	bz_register_hook( "item_purchased", ::bz_pap_on_item_purchased, "pap" );
+	bz_register_hook( "actor_damage", ::bz_pap_on_actor_damage, "pap" );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,14 +73,14 @@ bz_pap_ensure_player_tables( player )
 
 bz_pap_get_weapon_safe( player, weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm != "" && norm != "none" )
 	{
 		return norm;
 	}
 	if ( IsDefined( player ) )
 	{
-		cur = maps\_bz_rules::bz_normalize_id( player GetCurrentWeapon() );
+		cur = bz_normalize_id( player GetCurrentWeapon() );
 		if ( cur != "" && cur != "none" )
 		{
 			return cur;
@@ -91,7 +91,7 @@ bz_pap_get_weapon_safe( player, weapon_name )
 
 bz_pap_is_native_upgraded_name( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
 	{
 		return false;
@@ -101,7 +101,7 @@ bz_pap_is_native_upgraded_name( weapon_name )
 
 bz_pap_is_scripted_single_pap( player, weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" || bz_pap_is_native_upgraded_name( norm ) )
 	{
 		return false;
@@ -124,7 +124,7 @@ bz_pap_is_scripted_single_pap( player, weapon_name )
 // Public helper: recognizes both native *_upgraded weapons and scripted Tier 1 PaP weapons.
 bz_pap_is_weapon_papped( player, weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
 	{
 		return false;
@@ -141,13 +141,13 @@ bz_pap_is_weapon_papped( player, weapon_name )
 // safe scripted Tier 1 PaP fallback on Nacht, Verruckt, Shi No Numa, or custom guns.
 bz_pap_resolve_native_upgrade( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" || bz_pap_is_native_upgraded_name( norm ) )
 	{
 		return "";
 	}
 
-	map_name = maps\_bz_hooks::bz_get_map_name();
+	map_name = bz_get_map_name();
 	if ( map_name != "nazi_zombie_factory" )
 	{
 		return "";
@@ -161,7 +161,7 @@ bz_pap_resolve_native_upgrade( weapon_name )
 	entry = level.zombie_weapons[norm];
 	if ( IsDefined( entry ) && IsDefined( entry.upgrade_name ) && entry.upgrade_name != "" )
 	{
-		return maps\_bz_rules::bz_normalize_id( entry.upgrade_name );
+		return bz_normalize_id( entry.upgrade_name );
 	}
 
 	candidate = norm + "_upgraded";
@@ -212,7 +212,7 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 
 bz_pap_refresh_double_pap_ammo( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return;
 	}
@@ -222,7 +222,7 @@ bz_pap_refresh_double_pap_ammo( player )
 	{
 		for ( i = 0; i < primaries.size; i++ )
 		{
-			w = maps\_bz_rules::bz_normalize_id( primaries[i] );
+			w = bz_normalize_id( primaries[i] );
 			if ( w != "" && maps\_bz_state::bz_state_is_weapon_double_pap( player, w ) )
 			{
 				bz_pap_apply_reserve_ammo( player, w );
@@ -242,7 +242,7 @@ bz_pap_apply_single_pap( player, weapon_name )
 
 bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return "";
 	}
@@ -253,7 +253,7 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 		return "";
 	}
 
-	map_name = maps\_bz_hooks::bz_get_map_name();
+	map_name = bz_get_map_name();
 	native_weap = bz_pap_resolve_native_upgrade( weap );
 	final_weap = weap;
 	mode = "scripted";
@@ -285,16 +285,16 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "map", map_name );
-	fields[2] = maps\_bz_log::kv( "weapon", weap );
-	fields[3] = maps\_bz_log::kv( "upgraded", final_weap );
-	fields[4] = maps\_bz_log::kv( "mode", mode );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "map", map_name );
+	fields[2] = bz_log_kv( "weapon", weap );
+	fields[3] = bz_log_kv( "upgraded", final_weap );
+	fields[4] = bz_log_kv( "mode", mode );
 	if ( IsDefined( console_source ) && console_source != "" )
 	{
-		fields[fields.size] = maps\_bz_log::kv( "console", console_source );
+		fields[fields.size] = bz_log_kv( "console", console_source );
 	}
-	maps\_bz_log::emit( "PAP_SINGLE_UPGRADE", maps\_bz_log::join_fields( fields ) );
+	bz_log_emit( "PAP_SINGLE_UPGRADE", bz_log_join( fields ) );
 
 	bz_pap_update_hud( player );
 	return final_weap;
@@ -307,7 +307,7 @@ bz_pap_apply_double_pap( player, weapon_name )
 
 bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return false;
 	}
@@ -327,17 +327,17 @@ bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 	dmg_mult = maps\_bz_rules::bz_calc_bullet_damage_mult( false, false, false, true, "", false, false );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "map", maps\_bz_hooks::bz_get_map_name() );
-	fields[2] = maps\_bz_log::kv( "weapon", weap );
-	fields[3] = maps\_bz_log::kv( "dmg_mult", dmg_mult );
-	fields[4] = maps\_bz_log::kv( "ammo_mult", ammo_mult );
-	fields[5] = maps\_bz_log::kv( "stock", target_stock );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "map", bz_get_map_name() );
+	fields[2] = bz_log_kv( "weapon", weap );
+	fields[3] = bz_log_kv( "dmg_mult", dmg_mult );
+	fields[4] = bz_log_kv( "ammo_mult", ammo_mult );
+	fields[5] = bz_log_kv( "stock", target_stock );
 	if ( IsDefined( console_source ) && console_source != "" )
 	{
-		fields[fields.size] = maps\_bz_log::kv( "console", console_source );
+		fields[fields.size] = bz_log_kv( "console", console_source );
 	}
-	maps\_bz_log::emit( "PAP_DOUBLE_UPGRADE", maps\_bz_log::join_fields( fields ) );
+	bz_log_emit( "PAP_DOUBLE_UPGRADE", bz_log_join( fields ) );
 
 	bz_pap_update_hud( player );
 	return true;
@@ -362,7 +362,7 @@ bz_pap_get_single_pap_price()
 
 bz_pap_has_native_upgrade_entry( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" || bz_pap_is_native_upgraded_name( norm ) )
 	{
 		return false;
@@ -382,7 +382,7 @@ bz_pap_is_held_primary( player, weapon_name )
 		return false;
 	}
 
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
 	{
 		return false;
@@ -406,7 +406,7 @@ bz_pap_is_held_primary( player, weapon_name )
 	{
 		for ( i = 0; i < primaries.size; i++ )
 		{
-			if ( maps\_bz_rules::bz_normalize_id( primaries[i] ) == norm )
+			if ( bz_normalize_id( primaries[i] ) == norm )
 			{
 				return true;
 			}
@@ -469,7 +469,7 @@ bz_pap_play_console_upgrade_fx( trigger, perk_machine, packa_rollers )
 // Tier 1 bz_* PaP, deny, or debounce), or false to fall through to stock PaP.
 bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine, packa_rollers )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) || !IsPlayer( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsPlayer( player ) )
 	{
 		return false;
 	}
@@ -576,7 +576,7 @@ bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine
 // right after GiveMaxAmmo / GiveWeapon so reserve ammo & HUD refresh immediately.
 bz_pap_on_native_weapon_taken( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return;
 	}
@@ -621,7 +621,7 @@ bz_pap_is_regular_zombie( zombie )
 	}
 	if ( IsDefined( zombie.animname ) )
 	{
-		an = maps\_bz_rules::bz_normalize_id( zombie.animname );
+		an = bz_normalize_id( zombie.animname );
 		if ( an == "zombie_dog" || an == "dog" || IsSubStr( an, "boss" ) || IsSubStr( an, "dog" ) )
 		{
 			return false;
@@ -629,7 +629,7 @@ bz_pap_is_regular_zombie( zombie )
 	}
 	if ( IsDefined( zombie.classname ) )
 	{
-		cn = maps\_bz_rules::bz_normalize_id( zombie.classname );
+		cn = bz_normalize_id( zombie.classname );
 		if ( IsSubStr( cn, "boss" ) || IsSubStr( cn, "dog" ) )
 		{
 			return false;
@@ -644,7 +644,7 @@ bz_pap_is_bowie_melee( player, weapon_name )
 	{
 		return false;
 	}
-	weap = maps\_bz_rules::bz_normalize_id( weapon_name );
+	weap = bz_normalize_id( weapon_name );
 	if ( weap != "" && IsSubStr( weap, "bowie" ) )
 	{
 		return true;
@@ -662,12 +662,12 @@ bz_pap_is_bowie_melee( player, weapon_name )
 
 bz_pap_apply_melee_upgrade( player, upgrade_id )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return false;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( upgrade_id );
+	id = bz_normalize_id( upgrade_id );
 	effect = "";
 	if ( id == "pap_knife" )
 	{
@@ -685,10 +685,10 @@ bz_pap_apply_melee_upgrade( player, upgrade_id )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "upgrade", id );
-	fields[2] = maps\_bz_log::kv( "effect", effect );
-	maps\_bz_log::emit( "PAP_MELEE_UPGRADE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "upgrade", id );
+	fields[2] = bz_log_kv( "effect", effect );
+	bz_log_emit( "PAP_MELEE_UPGRADE", bz_log_join( fields ) );
 
 	bz_pap_update_hud( player );
 	return true;
@@ -700,7 +700,7 @@ bz_pap_apply_melee_upgrade( player, upgrade_id )
 
 bz_pap_is_frag_grenade( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" )
 	{
 		return true;
@@ -748,7 +748,7 @@ bz_pap_get_round_zombie_health( round_num )
 
 bz_pap_apply_cluster_upgrade( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	if ( !bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return false;
 	}
@@ -758,9 +758,9 @@ bz_pap_apply_cluster_upgrade( player )
 
 	max_nades = maps\_bz_state::bz_state_get_max_grenades( player );
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "max_grenades", max_nades );
-	maps\_bz_log::emit( "PAP_CLUSTER_UPGRADE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "max_grenades", max_nades );
+	bz_log_emit( "PAP_CLUSTER_UPGRADE", bz_log_join( fields ) );
 
 	bz_pap_update_hud( player );
 	return true;
@@ -820,7 +820,7 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 // Synchronous/testable detonation seam (zero endon() inside; called from child grenade tracker).
 bz_pap_detonate_cluster( player, origin, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) || !IsDefined( origin ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsDefined( origin ) )
 	{
 		return undefined;
 	}
@@ -869,16 +869,16 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "round", round_num );
-	fields[2] = maps\_bz_log::kv( "primary_dmg", spec.primary_damage );
-	fields[3] = maps\_bz_log::kv( "mini_dmg", spec.mini_damage );
-	fields[4] = maps\_bz_log::kv( "mini_count", count );
-	fields[5] = maps\_bz_log::kv( "primary_radius", primary_radius );
-	fields[6] = maps\_bz_log::kv( "mini_radius", mini_radius );
-	fields[7] = maps\_bz_log::kv( "hits", total_hits );
-	fields[8] = maps\_bz_log::kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
-	maps\_bz_log::emit( "PAP_CLUSTER_DETONATE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "round", round_num );
+	fields[2] = bz_log_kv( "primary_dmg", spec.primary_damage );
+	fields[3] = bz_log_kv( "mini_dmg", spec.mini_damage );
+	fields[4] = bz_log_kv( "mini_count", count );
+	fields[5] = bz_log_kv( "primary_radius", primary_radius );
+	fields[6] = bz_log_kv( "mini_radius", mini_radius );
+	fields[7] = bz_log_kv( "hits", total_hits );
+	fields[8] = bz_log_kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
+	bz_log_emit( "PAP_CLUSTER_DETONATE", bz_log_join( fields ) );
 
 	res = SpawnStruct();
 	res.round = round_num;
@@ -959,7 +959,7 @@ bz_pap_track_hud_elem( hud )
 
 bz_pap_update_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1055,11 +1055,11 @@ bz_pap_get_native_console_origin()
 
 bz_pap_format_native_prompt_text( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		return "";
 	}
-	if ( maps\_bz_hooks::bz_get_map_name() != "nazi_zombie_factory" )
+	if ( bz_get_map_name() != "nazi_zombie_factory" )
 	{
 		return "";
 	}
@@ -1163,12 +1163,12 @@ bz_pap_hide_native_prompt_hud( player )
 
 bz_pap_update_native_prompt_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		bz_pap_hide_native_prompt_hud( player );
 		return;
 	}
-	if ( maps\_bz_hooks::bz_get_map_name() != "nazi_zombie_factory" )
+	if ( bz_get_map_name() != "nazi_zombie_factory" )
 	{
 		bz_pap_hide_native_prompt_hud( player );
 		return;
@@ -1305,7 +1305,7 @@ bz_pap_ensure_player_watchers( player )
 	player thread bz_pap_watch_weapon_switch();
 	player thread bz_pap_watch_max_ammo();
 	player thread bz_pap_watch_player_disconnect();
-	if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+	if ( bz_get_map_name() == "nazi_zombie_factory" )
 	{
 		player thread bz_pap_watch_native_console_prompt();
 	}
@@ -1332,7 +1332,7 @@ bz_pap_watch_native_console_prompt()
 	for ( ;; )
 	{
 		wait( 0.15 );
-		if ( !maps\_bz_hooks::bz_pap_enabled() )
+		if ( !bz_pap_enabled() )
 		{
 			bz_pap_hide_native_prompt_hud( self );
 			continue;
@@ -1349,7 +1349,7 @@ bz_pap_watch_grenade_throws()
 	for ( ;; )
 	{
 		self waittill( "grenade_fire", grenade, weapon_name );
-		if ( !maps\_bz_hooks::bz_pap_enabled() )
+		if ( !bz_pap_enabled() )
 		{
 			continue;
 		}
@@ -1399,10 +1399,10 @@ bz_pap_watch_weapon_switch()
 	for ( ;; )
 	{
 		self waittill( "weapon_change" );
-		if ( maps\_bz_hooks::bz_pap_enabled() )
+		if ( bz_pap_enabled() )
 		{
 			bz_pap_update_hud( self );
-			if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+			if ( bz_get_map_name() == "nazi_zombie_factory" )
 			{
 				bz_pap_update_native_prompt_hud( self );
 			}
@@ -1419,7 +1419,7 @@ bz_pap_watch_max_ammo()
 	{
 		self waittill( "zmb_max_ammo" );
 		wait( 0.05 );
-		if ( maps\_bz_hooks::bz_pap_enabled() )
+		if ( bz_pap_enabled() )
 		{
 			bz_pap_refresh_double_pap_ammo( self );
 		}
@@ -1439,7 +1439,7 @@ bz_pap_watch_player_disconnect()
 
 bz_pap_on_init()
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() )
+	if ( !bz_pap_enabled() )
 	{
 		return;
 	}
@@ -1447,7 +1447,7 @@ bz_pap_on_init()
 	{
 		level.bz_pap_hud_elems = [];
 	}
-	if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+	if ( bz_get_map_name() == "nazi_zombie_factory" )
 	{
 		if ( !IsDefined( level.bz_pap_unlock_watcher_started ) || !level.bz_pap_unlock_watcher_started )
 		{
@@ -1459,7 +1459,7 @@ bz_pap_on_init()
 
 bz_pap_on_player_connect( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1470,7 +1470,7 @@ bz_pap_on_player_connect( player )
 
 bz_pap_on_player_spawned( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1481,7 +1481,7 @@ bz_pap_on_player_spawned( player )
 
 bz_pap_on_player_downed( player )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1493,7 +1493,7 @@ bz_pap_on_player_downed( player )
 
 bz_pap_on_round_start( round_num )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() )
+	if ( !bz_pap_enabled() )
 	{
 		return;
 	}
@@ -1505,7 +1505,7 @@ bz_pap_on_round_start( round_num )
 
 bz_pap_on_end_game()
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() )
+	if ( !bz_pap_enabled() )
 	{
 		return;
 	}
@@ -1514,13 +1514,13 @@ bz_pap_on_end_game()
 
 bz_pap_on_item_purchased( ctx )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
+	if ( !bz_pap_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
 	{
 		return;
 	}
 
-	cat = maps\_bz_rules::bz_normalize_id( ctx.category );
-	item_id = maps\_bz_rules::bz_normalize_id( ctx.item_id );
+	cat = bz_normalize_id( ctx.category );
+	item_id = bz_normalize_id( ctx.item_id );
 	player = ctx.player;
 	weap = bz_pap_get_weapon_safe( player, ctx.weapon_name );
 
@@ -1556,7 +1556,7 @@ bz_pap_on_item_purchased( ctx )
 
 bz_pap_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( ctx ) )
+	if ( !bz_pap_enabled() || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -1567,7 +1567,7 @@ bz_pap_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
+	mod = bz_normalize_id( ctx.mod );
 
 	// Melee path: PaP Knife (3x) and PaP Bowie Knife (1-hit kill regular zombies any round, 3x boss/dogs)
 	// Defers cleanly when the player currently has the Phase 2 War Club equipped in their melee slot.
@@ -1657,4 +1657,43 @@ bz_pap_on_actor_damage( zombie, ctx )
 		dpap_mult = maps\_bz_rules::bz_calc_bullet_damage_mult( false, false, false, true, "", false, false );
 		ctx.damage_mult = ctx.damage_mult * dpap_mult;
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_get_map_name()
+{
+	return maps\_bz_hooks::bz_get_map_name();
+}
+
+bz_pap_enabled()
+{
+	return maps\_bz_hooks::bz_pap_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }

@@ -26,15 +26,15 @@ bz_special_weapons_register()
 	}
 	level.bz_special_weapons_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "pre_init", ::bz_special_on_pre_init, "elements" );
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_special_on_init, "elements" );
-	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_special_on_player_connect, "elements" );
-	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_special_on_player_spawned, "elements" );
-	maps\_bz_hooks::bz_register_hook( "round_start", ::bz_special_on_round_start, "elements" );
-	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_special_on_item_purchased, "elements" );
-	maps\_bz_hooks::bz_register_hook( "weapon_fired", ::bz_special_on_weapon_fired, "elements" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_special_on_actor_damage, "elements" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_special_on_end_game, "elements" );
+	bz_register_hook( "pre_init", ::bz_special_on_pre_init, "elements" );
+	bz_register_hook( "init", ::bz_special_on_init, "elements" );
+	bz_register_hook( "player_connect", ::bz_special_on_player_connect, "elements" );
+	bz_register_hook( "player_spawned", ::bz_special_on_player_spawned, "elements" );
+	bz_register_hook( "round_start", ::bz_special_on_round_start, "elements" );
+	bz_register_hook( "item_purchased", ::bz_special_on_item_purchased, "elements" );
+	bz_register_hook( "weapon_fired", ::bz_special_on_weapon_fired, "elements" );
+	bz_register_hook( "actor_damage", ::bz_special_on_actor_damage, "elements" );
+	bz_register_hook( "end_game", ::bz_special_on_end_game, "elements" );
 }
 
 // ---------------------------------------------------------------------------
@@ -484,13 +484,13 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
-	fields[1] = maps\_bz_log::kv( "pap", maps\_bz_hooks::bz_bool_int( has_pap_wc ) );
-	fields[2] = maps\_bz_log::kv( "damage", smash_damage );
-	fields[3] = maps\_bz_log::kv( "radius", radius );
-	fields[4] = maps\_bz_log::kv( "cleave_hits", cleave_hits );
-	fields[5] = maps\_bz_log::kv( "knockbacks", knockbacks );
-	maps\_bz_log::emit( "SPECIAL_WAR_CLUB_SMASH", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
+	fields[1] = bz_log_kv( "pap", maps\_bz_hooks::bz_bool_int( has_pap_wc ) );
+	fields[2] = bz_log_kv( "damage", smash_damage );
+	fields[3] = bz_log_kv( "radius", radius );
+	fields[4] = bz_log_kv( "cleave_hits", cleave_hits );
+	fields[5] = bz_log_kv( "knockbacks", knockbacks );
+	bz_log_emit( "SPECIAL_WAR_CLUB_SMASH", bz_log_join( fields ) );
 
 	res = SpawnStruct();
 	res.pap = has_pap_wc;
@@ -507,7 +507,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 
 bz_special_fire_multi_crossbow( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
@@ -641,12 +641,12 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "bolts", bolts.size );
-	fields[2] = maps\_bz_log::kv( "stuck_zombies", stuck_zombies );
-	fields[3] = maps\_bz_log::kv( "stuck_world", stuck_world );
-	fields[4] = maps\_bz_log::kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	maps\_bz_log::emit( "SPECIAL_CROSSBOW_FIRE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "bolts", bolts.size );
+	fields[2] = bz_log_kv( "stuck_zombies", stuck_zombies );
+	fields[3] = bz_log_kv( "stuck_world", stuck_world );
+	fields[4] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	bz_log_emit( "SPECIAL_CROSSBOW_FIRE", bz_log_join( fields ) );
 
 	res = SpawnStruct();
 	res.bolts = bolts;
@@ -746,7 +746,7 @@ bz_special_crossbow_bolt_fuse( bolt, is_double_pap, round_num )
 
 bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( bolt ) )
+	if ( !bz_elements_enabled() || !IsDefined( bolt ) )
 	{
 		return undefined;
 	}
@@ -850,14 +850,14 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	// Emit telemetry BEFORE deleting bolt so bolt Delete() firing notify("death")
 	// inside bz_special_crossbow_bolt_fuse() cannot abort telemetry emission.
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "round", r );
-	fields[2] = maps\_bz_log::kv( "damage", bolt_dmg );
-	fields[3] = maps\_bz_log::kv( "radius", radius );
-	fields[4] = maps\_bz_log::kv( "hits", hits );
-	fields[5] = maps\_bz_log::kv( "double_pap", maps\_bz_hooks::bz_bool_int( dpap ) );
-	fields[6] = maps\_bz_log::kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
-	maps\_bz_log::emit( "SPECIAL_CROSSBOW_DETONATE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "round", r );
+	fields[2] = bz_log_kv( "damage", bolt_dmg );
+	fields[3] = bz_log_kv( "radius", radius );
+	fields[4] = bz_log_kv( "hits", hits );
+	fields[5] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( dpap ) );
+	fields[6] = bz_log_kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
+	bz_log_emit( "SPECIAL_CROSSBOW_DETONATE", bz_log_join( fields ) );
 
 	if ( IsDefined( bolt.bz_stuck_entity ) )
 	{
@@ -881,7 +881,7 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 
 bz_special_get_boomerang_model( map_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( map_name );
+	norm = bz_normalize_id( map_name );
 	if ( norm == "nazi_zombie_factory" )
 	{
 		return "viewmodel_knife_bowie";
@@ -959,7 +959,7 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 
 bz_special_fire_blade_boomerang( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
@@ -1017,13 +1017,13 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 
 	actual_range = Int( Distance( start_pos, apex ) );
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "model", model_name );
-	fields[2] = maps\_bz_log::kv( "range", actual_range );
-	fields[3] = maps\_bz_log::kv( "max_pierce", max_pierce );
-	fields[4] = maps\_bz_log::kv( "damage", dmg );
-	fields[5] = maps\_bz_log::kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	maps\_bz_log::emit( "SPECIAL_BOOMERANG_THROW", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "model", model_name );
+	fields[2] = bz_log_kv( "range", actual_range );
+	fields[3] = bz_log_kv( "max_pierce", max_pierce );
+	fields[4] = bz_log_kv( "damage", dmg );
+	fields[5] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	bz_log_emit( "SPECIAL_BOOMERANG_THROW", bz_log_join( fields ) );
 
 	player thread bz_special_boomerang_flight_thread( blade, start_pos, apex, dmg, max_pierce );
 
@@ -1256,7 +1256,7 @@ bz_special_resolve_spawn_destination( player, slot_index )
 
 bz_special_try_activate_portal( player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) )
 	{
 		return undefined;
 	}
@@ -1343,15 +1343,15 @@ bz_special_try_activate_portal( player )
 
 	charges_left = maps\_bz_state::bz_state_get_portal_charges( player );
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "map", maps\_bz_hooks::bz_get_map_name() );
-	fields[2] = maps\_bz_log::kv( "x", Int( land_pos[0] ) );
-	fields[3] = maps\_bz_log::kv( "y", Int( land_pos[1] ) );
-	fields[4] = maps\_bz_log::kv( "z", Int( land_pos[2] ) );
-	fields[5] = maps\_bz_log::kv( "duration", Int( duration ) );
-	fields[6] = maps\_bz_log::kv( "charges_left", charges_left );
-	fields[7] = maps\_bz_log::kv( "fx", fx_name );
-	maps\_bz_log::emit( "SPECIAL_PORTAL_OPEN", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "map", maps\_bz_hooks::bz_get_map_name() );
+	fields[2] = bz_log_kv( "x", Int( land_pos[0] ) );
+	fields[3] = bz_log_kv( "y", Int( land_pos[1] ) );
+	fields[4] = bz_log_kv( "z", Int( land_pos[2] ) );
+	fields[5] = bz_log_kv( "duration", Int( duration ) );
+	fields[6] = bz_log_kv( "charges_left", charges_left );
+	fields[7] = bz_log_kv( "fx", fx_name );
+	bz_log_emit( "SPECIAL_PORTAL_OPEN", bz_log_join( fields ) );
 
 	level thread bz_special_portal_think( portal, player );
 	return portal;
@@ -1411,12 +1411,12 @@ bz_special_portal_tick( portal, owner )
 			warped++;
 
 			fields = [];
-			fields[0] = maps\_bz_log::kv( "owner", maps\_bz_hooks::bz_get_player_label( owner ) );
-			fields[1] = maps\_bz_log::kv( "target", maps\_bz_hooks::bz_get_player_label( p ) );
-			fields[2] = maps\_bz_log::kv( "x", Int( dest.origin[0] ) );
-			fields[3] = maps\_bz_log::kv( "y", Int( dest.origin[1] ) );
-			fields[4] = maps\_bz_log::kv( "z", Int( dest.origin[2] ) );
-			maps\_bz_log::emit( "SPECIAL_PORTAL_TELEPORT", maps\_bz_log::join_fields( fields ) );
+			fields[0] = bz_log_kv( "owner", maps\_bz_hooks::bz_get_player_label( owner ) );
+			fields[1] = bz_log_kv( "target", maps\_bz_hooks::bz_get_player_label( p ) );
+			fields[2] = bz_log_kv( "x", Int( dest.origin[0] ) );
+			fields[3] = bz_log_kv( "y", Int( dest.origin[1] ) );
+			fields[4] = bz_log_kv( "z", Int( dest.origin[2] ) );
+			bz_log_emit( "SPECIAL_PORTAL_TELEPORT", bz_log_join( fields ) );
 		}
 	}
 
@@ -1534,7 +1534,7 @@ bz_special_track_hud_elem( hud )
 
 bz_special_update_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1671,7 +1671,7 @@ bz_special_watch_portal_command()
 
 	for ( ;; )
 	{
-		if ( maps\_bz_hooks::bz_elements_enabled() &&
+		if ( bz_elements_enabled() &&
 			IsAlive( self ) &&
 			( !IsDefined( self.bz_station_open ) || !self.bz_station_open ) &&
 			maps\_bz_state::bz_state_owns_portal_grenade( self ) &&
@@ -1696,7 +1696,7 @@ bz_special_watch_portal_notify()
 	for ( ;; )
 	{
 		self waittill( "bz_portal_throw" );
-		if ( maps\_bz_hooks::bz_elements_enabled() )
+		if ( bz_elements_enabled() )
 		{
 			bz_special_try_activate_portal( self );
 		}
@@ -1717,7 +1717,7 @@ bz_special_watch_player_disconnect()
 
 bz_special_on_pre_init()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -1732,7 +1732,7 @@ bz_special_on_pre_init()
 
 bz_special_on_init()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -1741,7 +1741,7 @@ bz_special_on_init()
 
 bz_special_on_player_connect( player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1753,7 +1753,7 @@ bz_special_on_player_connect( player )
 
 bz_special_on_player_spawned( player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1765,7 +1765,7 @@ bz_special_on_player_spawned( player )
 
 bz_special_on_round_start( round_num )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -1791,12 +1791,12 @@ bz_special_on_round_start( round_num )
 
 bz_special_on_item_purchased( ctx )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
+	if ( !bz_elements_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
 	{
 		return;
 	}
 
-	cat = maps\_bz_rules::bz_normalize_id( ctx.category );
+	cat = bz_normalize_id( ctx.category );
 	if ( cat == "special_gear" )
 	{
 		bz_special_sync_melee_slot_perk( ctx.player );
@@ -1806,12 +1806,12 @@ bz_special_on_item_purchased( ctx )
 
 bz_special_on_weapon_fired( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
 
-	weap = maps\_bz_rules::bz_normalize_id( weapon_name );
+	weap = bz_normalize_id( weapon_name );
 	if ( weap == "bz_multi_crossbow" )
 	{
 		bz_special_fire_multi_crossbow( player, weap );
@@ -1826,7 +1826,7 @@ bz_special_on_weapon_fired( player, weapon_name )
 
 bz_special_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( ctx ) )
+	if ( !bz_elements_enabled() || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -1837,7 +1837,7 @@ bz_special_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
+	mod = bz_normalize_id( ctx.mod );
 	if ( mod != "mod_melee" )
 	{
 		return;
@@ -1899,10 +1899,44 @@ bz_special_on_actor_damage( zombie, ctx )
 
 bz_special_on_end_game()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
 	bz_special_cleanup_all_entities();
 	bz_special_destroy_all_huds();
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_elements_enabled()
+{
+	return maps\_bz_hooks::bz_elements_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }

@@ -16,7 +16,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -90,7 +92,7 @@ def _has_seeded_perm_and_perks(perm: str, perks: str) -> bool:
 
 
 def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check the first enhanced Stage handoff (class, perks, war_club, pap_war_club)."""
+    """Check the first enhanced Stage handoff for class, perks, gear, and Elemental Weapons."""
     events = bz.parse_bz_events(log_text)
     gauntlet = parse_gauntlet_events(log_text)
     errors = engine_errors(log_text)
@@ -113,10 +115,16 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         if matches(e, "GAUNTLET_BZ_SAVED", map=source)
         and e.fields.get("player")
         and _has_seeded_perm_and_perks(e.fields.get("perm", ""), e.fields.get("perks", ""))
+        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
+        and all(
+            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
+            for key, minimum in (("bz_weapons", 2), ("bz_dpap", 1))
+        )
     }
     if not saved_players:
         errors.append(
-            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), and perks (su,mk)"
+            f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), "
+            "perks (su,mk), weapons ac:2 and cr:0, bz_weapons>=2, and bz_dpap>=1"
         )
     for event_type, fields in (
         ("STAGE_CLEAR", {"map": source, "next_map": destination}),
@@ -133,19 +141,25 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
             **{"class": "titan", "war_club": "1", "pap_war_club": "1", "melee_slot": "war_club"},
         )
         and e.fields.get("player") in saved_players
-        and e.fields.get("t1", "").isdecimal()
-        and int(e.fields["t1"]) >= 2
+        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
+        and all(
+            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
+            for key, minimum in (("t1", 2), ("bz_weapons", 2), ("bz_dpap", 1))
+        )
         for e in events
     ):
         errors.append(
             f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, "
-            "war_club=1, pap_war_club=1, melee_slot=war_club"
+            "war_club=1, pap_war_club=1, melee_slot=war_club, weapons ac:2 and cr:0, "
+            "bz_weapons>=2, bz_dpap>=1"
         )
     return events, errors
 
 
 MAP_SLUGS = ("factory", "prototype", "asylum", "sumpf")
 WEAPON_SLUGS = ("acid", "cryo", "crossbow", "boomerang")
+PORTAL_PHASES = ("portal_active", "portal_post")
+STATION_MENU_PHASES = ("menu_perks", "menu_class", "menu_arsenal", "menu_pap")
 
 
 def expected_visual_phases(slug: str) -> tuple[str, ...]:
@@ -160,7 +174,51 @@ def expected_visual_phases(slug: str) -> tuple[str, ...]:
         "factory_perks_prompt", "factory_class_prompt", "factory_arsenal_prompt",
         *(f"{weapon}_{state}" for weapon in WEAPON_SLUGS for state in ("idle", "active", "post")),
         "native_pap_prompt", "native_pap_ii_badge",
+        "war_club_active", *PORTAL_PHASES, *STATION_MENU_PHASES,
     )
+
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _png_content_digest(contents: bytes) -> str:
+    """Hash normalized PNG image data (IHDR/PLTE/tRNS + decompressed IDAT), ignoring metadata chunks."""
+    if not contents.startswith(_PNG_SIGNATURE):
+        return hashlib.sha256(contents).hexdigest()
+    hasher = hashlib.sha256()
+    offset = len(_PNG_SIGNATURE)
+    length = len(contents)
+    idat_parts: list[bytes] = []
+    saw_ihdr = False
+    while offset + 12 <= length:
+        chunk_len = struct.unpack(">I", contents[offset : offset + 4])[0]
+        chunk_type = contents[offset + 4 : offset + 8]
+        data_start = offset + 8
+        data_end = data_start + chunk_len
+        if data_end + 4 > length:
+            return hashlib.sha256(contents).hexdigest()
+        data = contents[data_start:data_end]
+        offset = data_end + 4
+        if chunk_type == b"IHDR":
+            saw_ihdr = True
+            hasher.update(b"IHDR")
+            hasher.update(data)
+        elif chunk_type in (b"PLTE", b"tRNS"):
+            hasher.update(chunk_type)
+            hasher.update(data)
+        elif chunk_type == b"IDAT":
+            idat_parts.append(data)
+        elif chunk_type == b"IEND":
+            break
+    if not saw_ihdr or not idat_parts:
+        return hashlib.sha256(contents).hexdigest()
+    try:
+        raw_pixels = zlib.decompress(b"".join(idat_parts))
+    except zlib.error:
+        return hashlib.sha256(contents).hexdigest()
+    hasher.update(b"PIXELS")
+    hasher.update(raw_pixels)
+    return hasher.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -195,7 +253,7 @@ def analyze_visual_tour_result(
         e.fields.get("phase"): e.fields.get("t") for e in events if e.event_type == "VISUAL_TOUR_PHASE"
     }
     frames = {frame.phase: frame for frame in captured_frames}
-    hashes: dict[str, str] = {}
+    content_hashes: dict[str, str] = {}
     for phase in expected:
         if phase not in phase_times:
             errors.append(f"Missing VISUAL_TOUR_PHASE for {phase}")
@@ -213,17 +271,31 @@ def analyze_visual_tour_result(
         if not contents:
             errors.append(f"PNG is empty for {phase}: {frame.path}")
             continue
-        hashes[phase] = hashlib.sha256(contents).hexdigest()
-        if hashes[phase] != frame.sha256:
+        file_sha256 = hashlib.sha256(contents).hexdigest()
+        if file_sha256 != frame.sha256:
             errors.append(f"PNG SHA-256 does not match capture for {phase}")
+        content_hashes[phase] = _png_content_digest(contents)
 
-    if len(hashes) > 1 and len(set(hashes.values())) == 1:
-        errors.append("Visual tour appears frozen: all captured frames have identical SHA-256")
+    if len(content_hashes) > 1 and len(set(content_hashes.values())) == 1:
+        errors.append("Visual tour appears frozen: all captured frames have identical image content")
     elif slug == "factory":
         for weapon in WEAPON_SLUGS:
-            group = [hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
+            group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
             if all(group) and len(set(group)) == 1:
                 errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
+        portal_group = [content_hashes.get(phase) for phase in PORTAL_PHASES]
+        if all(portal_group) and len(set(portal_group)) == 1:
+            errors.append(f"Visual tour appears frozen: {', '.join(PORTAL_PHASES)} match")
+        station_by_hash: dict[str, list[str]] = {}
+        for phase in STATION_MENU_PHASES:
+            digest = content_hashes.get(phase)
+            if digest:
+                station_by_hash.setdefault(digest, []).append(phase)
+        for duplicate_phases in station_by_hash.values():
+            if len(duplicate_phases) > 1:
+                errors.append(
+                    f"Visual tour appears frozen: duplicate station menu frames ({', '.join(duplicate_phases)})"
+                )
     return events, errors
 
 

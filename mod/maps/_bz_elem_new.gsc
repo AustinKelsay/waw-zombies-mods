@@ -25,11 +25,11 @@ bz_elem_new_register()
 	}
 	level.bz_elem_new_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "pre_init", ::bz_elem_new_on_pre_init, "elements" );
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_elem_new_on_init, "elements" );
-	maps\_bz_hooks::bz_register_hook( "weapon_fired", ::bz_elem_new_on_weapon_fired, "elements" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_elem_new_on_actor_damage, "elements" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_elem_new_on_end_game, "elements" );
+	bz_register_hook( "pre_init", ::bz_elem_new_on_pre_init, "elements" );
+	bz_register_hook( "init", ::bz_elem_new_on_init, "elements" );
+	bz_register_hook( "weapon_fired", ::bz_elem_new_on_weapon_fired, "elements" );
+	bz_register_hook( "actor_damage", ::bz_elem_new_on_actor_damage, "elements" );
+	bz_register_hook( "end_game", ::bz_elem_new_on_end_game, "elements" );
 }
 
 bz_elem_new_ensure_level_tables()
@@ -461,7 +461,7 @@ bz_elem_new_tick_acid_puddle( puddle )
 
 bz_elem_new_fire_acid_sprayer( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
@@ -525,16 +525,16 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	puddle thread bz_elem_new_acid_puddle_think();
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "radius", radius );
-	fields[2] = maps\_bz_log::kv( "duration", duration );
-	fields[3] = maps\_bz_log::kv( "tick_dmg", tick_dmg );
-	fields[4] = maps\_bz_log::kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
-	fields[5] = maps\_bz_log::kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	fields[6] = maps\_bz_log::kv( "hits", initial_hits );
-	fields[7] = maps\_bz_log::kv( "active", level.bz_acid_puddles.size );
-	fields[8] = maps\_bz_log::kv( "fx", acid_fx.puddle_fx_path );
-	maps\_bz_log::emit( "ELEM_ACID_PUDDLE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "radius", radius );
+	fields[2] = bz_log_kv( "duration", duration );
+	fields[3] = bz_log_kv( "tick_dmg", tick_dmg );
+	fields[4] = bz_log_kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
+	fields[5] = bz_log_kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	fields[6] = bz_log_kv( "hits", initial_hits );
+	fields[7] = bz_log_kv( "active", level.bz_acid_puddles.size );
+	fields[8] = bz_log_kv( "fx", acid_fx.puddle_fx_path );
+	bz_log_emit( "ELEM_ACID_PUDDLE", bz_log_join( fields ) );
 
 	return puddle;
 }
@@ -641,7 +641,7 @@ bz_elem_new_thaw_zombie( zombie )
 
 bz_elem_new_is_shatter_mod( mod )
 {
-	m = maps\_bz_rules::bz_normalize_id( mod );
+	m = bz_normalize_id( mod );
 	if ( m == "mod_pistol_bullet" || m == "mod_rifle_bullet" || m == "mod_head_shot" )
 	{
 		return true;
@@ -668,7 +668,7 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 		return false;
 	}
 
-	weap = maps\_bz_rules::bz_normalize_id( ctx.weapon );
+	weap = bz_normalize_id( ctx.weapon );
 	if ( weap == "bz_cryo_cannon" )
 	{
 		return false;
@@ -679,7 +679,7 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 
 bz_elem_new_fire_cryo_cannon( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return 0;
 	}
@@ -727,14 +727,14 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "radius", radius );
-	fields[2] = maps\_bz_log::kv( "duration", duration );
-	fields[3] = maps\_bz_log::kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
-	fields[4] = maps\_bz_log::kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	fields[5] = maps\_bz_log::kv( "frozen", frozen_count );
-	fields[6] = maps\_bz_log::kv( "fx", cryo_fx.freeze_fx_path );
-	maps\_bz_log::emit( "ELEM_CRYO_FREEZE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "radius", radius );
+	fields[2] = bz_log_kv( "duration", duration );
+	fields[3] = bz_log_kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
+	fields[4] = bz_log_kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	fields[5] = bz_log_kv( "frozen", frozen_count );
+	fields[6] = bz_log_kv( "fx", cryo_fx.freeze_fx_path );
+	bz_log_emit( "ELEM_CRYO_FREEZE", bz_log_join( fields ) );
 
 	return frozen_count;
 }
@@ -820,7 +820,7 @@ bz_elem_new_watch_cryo_thaw()
 // post-wait (WaW 1.7 engine requirement, 0 added FX slots).
 bz_elem_new_on_pre_init()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -849,7 +849,7 @@ bz_elem_new_on_pre_init()
 
 bz_elem_new_on_init()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -860,12 +860,12 @@ bz_elem_new_on_init()
 
 bz_elem_new_on_weapon_fired( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
 
-	weap = maps\_bz_rules::bz_normalize_id( weapon_name );
+	weap = bz_normalize_id( weapon_name );
 	if ( weap == "bz_acid_sprayer" )
 	{
 		bz_elem_new_fire_acid_sprayer( player, weap );
@@ -901,24 +901,24 @@ bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
 		}
 	}
 
-	weap_lbl = maps\_bz_rules::bz_normalize_id( weapon );
+	weap_lbl = bz_normalize_id( weapon );
 	if ( weap_lbl == "" )
 	{
 		weap_lbl = "unknown";
 	}
-	mod_lbl = maps\_bz_rules::bz_normalize_id( mod );
+	mod_lbl = bz_normalize_id( mod );
 	if ( mod_lbl == "" )
 	{
 		mod_lbl = "unknown";
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
-	fields[1] = maps\_bz_log::kv( "weapon", weap_lbl );
-	fields[2] = maps\_bz_log::kv( "mod", mod_lbl );
-	fields[3] = maps\_bz_log::kv( "mult", shatter_mult );
-	fields[4] = maps\_bz_log::kv( "fx", cryo_fx.shatter_fx_path );
-	maps\_bz_log::emit( "ELEM_CRYO_SHATTER", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
+	fields[1] = bz_log_kv( "weapon", weap_lbl );
+	fields[2] = bz_log_kv( "mod", mod_lbl );
+	fields[3] = bz_log_kv( "mult", shatter_mult );
+	fields[4] = bz_log_kv( "fx", cryo_fx.shatter_fx_path );
+	bz_log_emit( "ELEM_CRYO_SHATTER", bz_log_join( fields ) );
 	return shatter_mult;
 }
 
@@ -932,7 +932,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 		return 0;
 	}
 	base_dmg = Int( dmg );
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) )
+	if ( !bz_elements_enabled() || !IsDefined( zombie ) )
 	{
 		return base_dmg;
 	}
@@ -943,7 +943,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 		mult = mult * maps\_bz_rules::bz_get_acid_brittle_mult();
 	}
 
-	norm_weap = maps\_bz_rules::bz_normalize_id( weapon );
+	norm_weap = bz_normalize_id( weapon );
 	if ( bz_elem_new_is_cryo_frozen( zombie ) && norm_weap != "bz_cryo_cannon" && bz_elem_new_is_shatter_mod( mod ) )
 	{
 		shatter_mult = bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point );
@@ -955,7 +955,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 
 bz_elem_new_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
+	if ( !bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -977,7 +977,7 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 
 bz_elem_new_on_end_game()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -1005,4 +1005,38 @@ bz_elem_new_on_end_game()
 
 	level.bz_acid_puddles = [];
 	level.bz_elem_new_entities = [];
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_elements_enabled()
+{
+	return maps\_bz_hooks::bz_elements_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }
