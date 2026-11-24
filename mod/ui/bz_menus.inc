@@ -73,7 +73,7 @@
 	{ \
 		name			bz_lobby_status_text \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
+		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
 		text			"BASE ZOMBIES ENHANCEMENTS - Perks + Classes + PaP + Arsenal" \
 		textfont		UI_FONT_NORMAL \
 		textscale		0.24 \
@@ -88,7 +88,7 @@
 	{ \
 		name			bz_lobby_build_text \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 26) (pw - 16) 12 halign valign \
+		rect			(px + 8) (py + ph + 34) (pw - 16) 14 halign valign \
 		text			"BUILD: 0.6.0-dev" \
 		textfont		UI_FONT_NORMAL \
 		textscale		0.22 \

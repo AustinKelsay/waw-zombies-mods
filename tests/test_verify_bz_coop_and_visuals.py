@@ -196,6 +196,38 @@ class TestVisualTourAnalyzer(unittest.TestCase):
                 _, errors = verifier.analyze_visual_tour_result(log, frames)
                 self.assertTrue(any("frozen" in error and expected in error for error in errors), errors)
 
+    def test_rejects_pixel_identical_station_pngs_with_different_metadata_chunks(self) -> None:
+        import struct
+        import zlib
+
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+        def make_png(red: int, stamp: str) -> bytes:
+            ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+            return (
+                b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", ihdr)
+                + chunk(b"tEXt", f"date:create\x00{stamp}".encode("ascii"))
+                + chunk(b"IDAT", zlib.compress(bytes((0, red, 0, 0))))
+                + chunk(b"IEND", b"")
+            )
+
+        log = ["Loading fastfile 'mod'"]
+        frames = []
+        for idx, phase in enumerate(FACTORY_VISUAL_PHASES):
+            t_ms = 2000 + idx * 1000
+            log.append(f"dvar set bz_event BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={t_ms}")
+            red = 250 if phase in ("menu_perks", "menu_class") else idx
+            img = make_png(red, f"2026-11-24T12:00:{idx:02d}+00:00")
+            path = self.out_dir / f"meta_{phase}.png"
+            path.write_bytes(img)
+            frames.append(verifier.CapturedFrame(phase, path, hashlib.sha256(img).hexdigest(), t_ms))
+        log.append(f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_factory;phases={len(FACTORY_VISUAL_PHASES)}")
+
+        _, errors = verifier.analyze_visual_tour_result("\n".join(log), frames)
+        self.assertTrue(any("menu_perks, menu_class" in error for error in errors), errors)
+
     def test_rejects_missing_phase_empty_png_and_missing_done(self) -> None:
         phases = [
             "sumpf_perks_prompt",

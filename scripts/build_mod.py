@@ -1797,27 +1797,7 @@ def _patch_coop_lobby_menu_bz(source: str, filename: str) -> str:
 
 
 def patch_xboxlive_lobby_menu_bz(source: str) -> str:
-    text = _patch_coop_lobby_menu_bz(source, "ui/xboxlive_lobby.menu")
-    # Hide the legacy lobby playlist_totalonline readout so it never collides with
-    # the unconditionally visible build stamp or Gauntlet status panel for either
-    # hosts or guests. The find-game popup keeps its separate playlist count.
-    lobby = re.search(
-        r'(?ms)^[ \t]*name[ \t]+"?menu_xboxlive_lobby"?[ \t]*\r?$.*?(?=^[ \t]*menuDef\b|\Z)',
-        text,
-    )
-    if lobby is None:
-        return text
-    count_item = re.compile(
-        r'(?m)\bitemDef\s*\{[^{}]*?^[ \t]*dvar[ \t]+"?playlist_totalonline"?[ \t]*\r?$[^{}]*\}',
-    ).search(text, lobby.start(), lobby.end())
-    if count_item is None:
-        return text
-    item = re.sub(
-        r"(?m)^([ \t]*visible[ \t]+)1(?=[ \t]*\r?$)",
-        r"\g<1>0",
-        count_item.group(),
-    )
-    return text[:count_item.start()] + item + text[count_item.end():]
+    return _patch_coop_lobby_menu_bz(source, "ui/xboxlive_lobby.menu")
 
 
 def patch_systemlink_lobby_menu_bz(source: str) -> str:

@@ -16,7 +16,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -176,6 +178,49 @@ def expected_visual_phases(slug: str) -> tuple[str, ...]:
     )
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _png_content_digest(contents: bytes) -> str:
+    """Hash normalized PNG image data (IHDR/PLTE/tRNS + decompressed IDAT), ignoring metadata chunks."""
+    if not contents.startswith(_PNG_SIGNATURE):
+        return hashlib.sha256(contents).hexdigest()
+    hasher = hashlib.sha256()
+    offset = len(_PNG_SIGNATURE)
+    length = len(contents)
+    idat_parts: list[bytes] = []
+    saw_ihdr = False
+    while offset + 12 <= length:
+        chunk_len = struct.unpack(">I", contents[offset : offset + 4])[0]
+        chunk_type = contents[offset + 4 : offset + 8]
+        data_start = offset + 8
+        data_end = data_start + chunk_len
+        if data_end + 4 > length:
+            return hashlib.sha256(contents).hexdigest()
+        data = contents[data_start:data_end]
+        offset = data_end + 4
+        if chunk_type == b"IHDR":
+            saw_ihdr = True
+            hasher.update(b"IHDR")
+            hasher.update(data)
+        elif chunk_type in (b"PLTE", b"tRNS"):
+            hasher.update(chunk_type)
+            hasher.update(data)
+        elif chunk_type == b"IDAT":
+            idat_parts.append(data)
+        elif chunk_type == b"IEND":
+            break
+    if not saw_ihdr or not idat_parts:
+        return hashlib.sha256(contents).hexdigest()
+    try:
+        raw_pixels = zlib.decompress(b"".join(idat_parts))
+    except zlib.error:
+        return hashlib.sha256(contents).hexdigest()
+    hasher.update(b"PIXELS")
+    hasher.update(raw_pixels)
+    return hasher.hexdigest()
+
+
 @dataclass(frozen=True)
 class CapturedFrame:
     phase: str
@@ -208,7 +253,7 @@ def analyze_visual_tour_result(
         e.fields.get("phase"): e.fields.get("t") for e in events if e.event_type == "VISUAL_TOUR_PHASE"
     }
     frames = {frame.phase: frame for frame in captured_frames}
-    hashes: dict[str, str] = {}
+    content_hashes: dict[str, str] = {}
     for phase in expected:
         if phase not in phase_times:
             errors.append(f"Missing VISUAL_TOUR_PHASE for {phase}")
@@ -226,23 +271,24 @@ def analyze_visual_tour_result(
         if not contents:
             errors.append(f"PNG is empty for {phase}: {frame.path}")
             continue
-        hashes[phase] = hashlib.sha256(contents).hexdigest()
-        if hashes[phase] != frame.sha256:
+        file_sha256 = hashlib.sha256(contents).hexdigest()
+        if file_sha256 != frame.sha256:
             errors.append(f"PNG SHA-256 does not match capture for {phase}")
+        content_hashes[phase] = _png_content_digest(contents)
 
-    if len(hashes) > 1 and len(set(hashes.values())) == 1:
-        errors.append("Visual tour appears frozen: all captured frames have identical SHA-256")
+    if len(content_hashes) > 1 and len(set(content_hashes.values())) == 1:
+        errors.append("Visual tour appears frozen: all captured frames have identical image content")
     elif slug == "factory":
         for weapon in WEAPON_SLUGS:
-            group = [hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
+            group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
             if all(group) and len(set(group)) == 1:
                 errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
-        portal_group = [hashes.get(phase) for phase in PORTAL_PHASES]
+        portal_group = [content_hashes.get(phase) for phase in PORTAL_PHASES]
         if all(portal_group) and len(set(portal_group)) == 1:
             errors.append(f"Visual tour appears frozen: {', '.join(PORTAL_PHASES)} match")
         station_by_hash: dict[str, list[str]] = {}
         for phase in STATION_MENU_PHASES:
-            digest = hashes.get(phase)
+            digest = content_hashes.get(phase)
             if digest:
                 station_by_hash.setdefault(digest, []).append(phase)
         for duplicate_phases in station_by_hash.values():
