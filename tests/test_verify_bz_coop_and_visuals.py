@@ -17,6 +17,8 @@ import verify_bz_coop_and_visuals as verifier  # noqa: E402
 from tests.gsc_runtime import FakeDvarStore  # noqa: E402
 from tests.test_bz_hooks_and_build import BZ_HOOKS_MOD, BzGscRuntime, FakeEntity  # noqa: E402
 
+BZ_SELFTEST_MOD = r"maps\_bz_selftest"
+
 COOP_LOG = """Loading fastfile 'mod'
 dvar set bz_event BZ_EVENT|BUILD_PARITY|build_id=0.5.0-dev;player=Host;map=nazi_zombie_factory
 dvar set bz_event BZ_EVENT|PAP_DOUBLE_UPGRADE|map=nazi_zombie_factory;weapon=zombie_colt_upgraded;console=native
@@ -256,6 +258,8 @@ class TestVisualCapture(unittest.TestCase):
 
 class TestLiveHookGates(unittest.TestCase):
     HOOKS = {
+        "bz_test_selftest": "bz_run_p1_selftest",
+        "bz_test_p2_selftest": "bz_run_p2_selftest",
         "bz_test_coop_selftest": "bz_run_coop_selftest",
         "bz_test_visual_tour": "bz_run_visual_tour",
         "bz_test_gauntlet_seed": "bz_run_gauntlet_seed",
@@ -274,6 +278,16 @@ class TestLiveHookGates(unittest.TestCase):
                     runtime.call(BZ_HOOKS_MOD, "bz_init")
                     launched = [name for _, name, _ in runtime._threads if name in self.HOOKS.values()]
                     self.assertEqual(launched, [expected_thread] if (bz_enabled, value) == ("1", "1") else [])
+
+    def test_selftest_dispatcher_is_a_noop_in_classic_mode(self) -> None:
+        dvars = FakeDvarStore()
+        dvars.set("gauntlet_enabled", "1")
+        for dvar in self.HOOKS:
+            dvars.set(dvar, "1")
+        runtime = BzGscRuntime(REPO_ROOT / "mod", dvars)
+        runtime.level.set_field("script", "nazi_zombie_prototype")
+        runtime.call(BZ_SELFTEST_MOD, "bz_selftest_start_enabled")
+        self.assertEqual(runtime._threads, [])
 
     def test_seed_requires_enhanced_gauntlet_on_nacht(self) -> None:
         for slug, gauntlet in (("prototype", "0"), ("asylum", "1")):
@@ -299,7 +313,7 @@ class TestLiveHookGates(unittest.TestCase):
         runtime.players.append(host)
         runtime.call(BZ_HOOKS_MOD, "bz_init")
         runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", host)
-        runtime.call(BZ_HOOKS_MOD, "bz_run_gauntlet_seed")
+        runtime.call(BZ_SELFTEST_MOD, "bz_run_gauntlet_seed")
 
         bridge = r"maps\_bz_gauntlet_bridge"
         self.assertEqual(runtime.call(bridge, "encode_perm_record", host), "titan|wc,pwc|war_club")
@@ -326,12 +340,12 @@ class TestLiveHookGates(unittest.TestCase):
                 else:
                     self.assertNotIn("bz_test_coop_spawn_dog", patched)
 
-    def test_waw17_hooks_keep_waits_in_child_threads_and_teleport_only_players(self) -> None:
+    def test_waw17_selftests_keep_waits_in_child_threads_and_teleport_only_players(self) -> None:
         mod_root = REPO_ROOT / "mod"
-        path = mod_root / "maps" / "_bz_hooks.gsc"
+        path = mod_root / "maps" / "_bz_selftest.gsc"
         source = path.read_text(encoding="ascii")
         runtime = BzGscRuntime(mod_root)
-        runtime.load_module(BZ_HOOKS_MOD)
+        runtime.load_module(BZ_SELFTEST_MOD)
         code = re.sub(r"//[^\n]*", "", source)
         self.assertNotRegex(code, r"\b(?:foreach|NotifyOnCommand)\b")
         self.assertEqual(set(re.findall(r"\b(\w+)\s+SetOrigin\s*\(", code)), {"p"})
@@ -339,8 +353,10 @@ class TestLiveHookGates(unittest.TestCase):
         for match in re.finditer(r"^(bz_(?:test_\w+|run_\w+))\([^\n]*\)\n\{(.*?)^\}", code, re.M | re.S):
             name, body = match.groups()
             if name in self.HOOKS.values():
-                self.assertIn('level endon( "end_game" );', body)
                 self.assertRegex(code, rf"level thread {name}\(\);")
+                # P1 and P2 invoke end-game cleanup before emitting their final results.
+                if name in ("bz_run_coop_selftest", "bz_run_visual_tour", "bz_run_gauntlet_seed"):
+                    self.assertIn('level endon( "end_game" );', body)
             elif name.startswith("bz_test_"):
                 self.assertNotRegex(body, r"\b(?:wait|waittill|endon)\(")
 

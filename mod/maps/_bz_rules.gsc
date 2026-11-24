@@ -4,9 +4,9 @@
 // ASCII display names, and deterministic combat/economy stacking math across:
 //   - 7 Standard Perks (juggernog, speed_cola, double_tap, quick_revive, staminup, mule_kick, ap)
 //   - 7 Perk Tier 2 upgrades (5,000 pts each, requires matching Standard Perk)
-//   - 4 Apex Perks (20,000 pts each)
-//   - 6 Classes (10,000 pts each, permanent until swapped, never lost on down)
-//   - Pack-a-Punch Expansion (double_pap, pap_knife, pap_bowie, pap_cluster)
+//   - 4 Apex Perks (8,000 pts each under the current cap)
+//   - 6 Classes (5,000 pts each under the current cap, permanent until swapped, never lost on down)
+//   - Pack-a-Punch Expansion (5,000 pts each for double_pap, pap_knife, pap_bowie, pap_cluster)
 //
 // Strictly WaW 1.7 GSC compliant (indexed for-loops only; no foreach; no endon;
 // zero level or player runtime state side effects).

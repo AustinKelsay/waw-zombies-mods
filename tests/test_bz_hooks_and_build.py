@@ -1986,12 +1986,14 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
         self.assertIn("rawfile,maps/_bz_log.gsc", mod_csv)
         self.assertIn("rawfile,maps/_bz_hooks.gsc", mod_csv)
+        self.assertIn("rawfile,maps/_bz_selftest.gsc", mod_csv.splitlines())
 
         staged = self.bm.generate_staged_mod_csv(
             mod_csv,
             [
                 "maps/_bz_log.gsc",
                 "maps/_bz_hooks.gsc",
+                "maps/_bz_selftest.gsc",
                 "maps/_bz_rules.gsc",
                 "maps/_bz_state.gsc",
                 "maps/_zombiemode_weapons_bz_factory.gsc",
@@ -2000,6 +2002,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         )
         self.assertEqual(staged.count("rawfile,maps/_bz_log.gsc"), 1)
         self.assertEqual(staged.count("rawfile,maps/_bz_hooks.gsc"), 1)
+        self.assertEqual(staged.splitlines().count("rawfile,maps/_bz_selftest.gsc"), 1)
         self.assertIn("rawfile,maps/_bz_rules.gsc", staged)
         self.assertIn("rawfile,maps/_bz_state.gsc", staged)
         self.assertIn("rawfile,maps/_zombiemode_weapons_bz_factory.gsc", staged)
@@ -2236,16 +2239,31 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 
     def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
-        # WaW 1.7's GSC compiler enforces a 1,024-entry MAX_PRECACHE_ENTRIES table across
-        # the active compile chain (Der Riese & Shi No Numa overflowed at 205 refs in _bz_hooks.gsc).
-        source = (MOD_ROOT / "maps" / "_bz_hooks.gsc").read_text(encoding="latin1")
-        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
-        refs = re.findall(r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+", code_only)
-        self.assertLessEqual(
-            len(refs),
-            130,
-            f"_bz_hooks.gsc has {len(refs)} cross-file refs (budget <= 130 to stay safely under MAX_PRECACHE_ENTRIES)",
-        )
+        # Leave room for stock and Gauntlet scripts in WaW 1.7's 1,024-entry table.
+        sources = {}
+        for path in (MOD_ROOT / "maps").glob("_bz_*.gsc"):
+            source = path.read_text(encoding="latin1")
+            sources[path.name] = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        ref_pattern = r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+"
+        counts = {name: len(re.findall(ref_pattern, code)) for name, code in sources.items()}
+        for name, budget in (("_bz_hooks.gsc", 65), ("_bz_selftest.gsc", 80)):
+            self.assertIn(name, counts)
+            with self.subTest(module=name):
+                self.assertLessEqual(counts[name], budget)
+        self.assertLessEqual(sum(counts.values()), 700, counts)
+
+        selftest_path = MOD_ROOT / "maps" / "_bz_selftest.gsc"
+        selftest_code = sources[selftest_path.name]
+        self.assertTrue(selftest_path.read_bytes().isascii())
+        self.assertNotRegex(selftest_code, r"(?i)\b(?:foreach|NotifyOnCommand)\b")
+        # The harness teleports its local player p. AI positions are read-only.
+        without_player_teleports = re.sub(r"(?i)\bp\s+SetOrigin\s*\(", "", selftest_code)
+        self.assertNotRegex(without_player_teleports, r"(?i)\bSetOrigin\s*\(")
+
+        BzGscRuntime(MOD_ROOT, FakeDvarStore()).load_module(r"maps\_bz_selftest")
+        for name, body in re.findall(r"(?ms)^(\w+)\([^\n]*\)\n\{\n(.*?)^\}", selftest_code):
+            if not name.startswith("bz_run_"):
+                self.assertNotRegex(body, r"(?i)\b(?:endon|wait|waittill\w*|waitframe)\s*\(", name)
 
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory

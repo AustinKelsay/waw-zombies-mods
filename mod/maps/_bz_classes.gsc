@@ -24,19 +24,19 @@ bz_classes_register()
 	}
 	level.bz_classes_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_classes_init, "classes" );
-	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_classes_on_player_connect, "classes" );
-	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_classes_on_player_spawned, "classes" );
-	maps\_bz_hooks::bz_register_hook( "player_downed", ::bz_classes_on_player_downed, "classes" );
-	maps\_bz_hooks::bz_register_hook( "player_revived", ::bz_classes_on_player_revived, "classes" );
-	maps\_bz_hooks::bz_register_hook( "round_start", ::bz_classes_on_round_start, "classes" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_classes_on_end_game, "classes" );
-	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_classes_on_item_purchased, "classes" );
-	maps\_bz_hooks::bz_register_hook( "player_damage", ::bz_classes_on_player_damage, "classes" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_classes_on_actor_damage, "classes" );
-	maps\_bz_hooks::bz_register_hook( "points_modify", ::bz_classes_on_points_modify, "classes" );
-	maps\_bz_hooks::bz_register_hook( "box_cost_modify", ::bz_classes_on_box_cost_modify, "classes" );
-	maps\_bz_hooks::bz_register_hook( "wall_buy", ::bz_classes_on_wall_buy, "classes" );
+	bz_register_hook( "init", ::bz_classes_init, "classes" );
+	bz_register_hook( "player_connect", ::bz_classes_on_player_connect, "classes" );
+	bz_register_hook( "player_spawned", ::bz_classes_on_player_spawned, "classes" );
+	bz_register_hook( "player_downed", ::bz_classes_on_player_downed, "classes" );
+	bz_register_hook( "player_revived", ::bz_classes_on_player_revived, "classes" );
+	bz_register_hook( "round_start", ::bz_classes_on_round_start, "classes" );
+	bz_register_hook( "end_game", ::bz_classes_on_end_game, "classes" );
+	bz_register_hook( "item_purchased", ::bz_classes_on_item_purchased, "classes" );
+	bz_register_hook( "player_damage", ::bz_classes_on_player_damage, "classes" );
+	bz_register_hook( "actor_damage", ::bz_classes_on_actor_damage, "classes" );
+	bz_register_hook( "points_modify", ::bz_classes_on_points_modify, "classes" );
+	bz_register_hook( "box_cost_modify", ::bz_classes_on_box_cost_modify, "classes" );
+	bz_register_hook( "wall_buy", ::bz_classes_on_wall_buy, "classes" );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ bz_class_get_frag_weapon( player )
 
 bz_class_format_hud_text( class_id )
 {
-	id = maps\_bz_rules::bz_normalize_id( class_id );
+	id = bz_normalize_id( class_id );
 	if ( id == "medic" )
 	{
 		return "CLASS: FIELD MEDIC";
@@ -207,13 +207,13 @@ bz_class_format_hud_text( class_id )
 
 bz_class_update_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
 
 	bz_class_ensure_player_fields( player );
-	active_class = maps\_bz_state::bz_state_get_class( player );
+	active_class = bz_state_get_class( player );
 	if ( active_class == "" )
 	{
 		bz_class_destroy_hud( player );
@@ -295,7 +295,7 @@ bz_class_destroy_hud( player )
 
 bz_classes_init()
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() )
+	if ( !bz_classes_enabled() )
 	{
 		return;
 	}
@@ -313,7 +313,7 @@ bz_classes_init()
 
 bz_classes_on_player_connect( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -355,7 +355,7 @@ bz_class_on_disconnect( player )
 
 bz_classes_on_player_spawned( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -364,7 +364,7 @@ bz_classes_on_player_spawned( player )
 	player.bz_is_downed = false;
 
 	// NEVER clear active Class on spawn/revive; re-apply passives cleanly.
-	active_class = maps\_bz_state::bz_state_get_class( player );
+	active_class = bz_state_get_class( player );
 	if ( active_class != "" )
 	{
 		bz_class_apply( player, active_class );
@@ -374,7 +374,7 @@ bz_classes_on_player_spawned( player )
 
 bz_classes_on_player_downed( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -400,7 +400,7 @@ bz_classes_on_player_downed( player )
 
 bz_classes_on_player_revived( player, reviver )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -408,7 +408,7 @@ bz_classes_on_player_revived( player, reviver )
 	bz_class_ensure_player_fields( player );
 	player.bz_is_downed = false;
 
-	active_class = maps\_bz_state::bz_state_get_class( player );
+	active_class = bz_state_get_class( player );
 	if ( active_class != "" )
 	{
 		bz_class_apply( player, active_class );
@@ -418,7 +418,7 @@ bz_classes_on_player_revived( player, reviver )
 
 bz_classes_on_round_start( round_num )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() )
+	if ( !bz_classes_enabled() )
 	{
 		return;
 	}
@@ -444,7 +444,7 @@ bz_classes_on_round_start( round_num )
 		}
 		bz_class_ensure_player_fields( p );
 
-		if ( maps\_bz_state::bz_state_get_class( p ) == "sapper" )
+		if ( bz_state_get_class( p ) == "sapper" )
 		{
 			if ( ( !IsDefined( p.bz_sapper_grenade_refill_ready ) || !p.bz_sapper_grenade_refill_ready ) && p.bz_sapper_last_refill_round != r )
 			{
@@ -457,10 +457,10 @@ bz_classes_on_round_start( round_num )
 				bz_sapper_set_grenades( p, refill_count );
 
 				fields = [];
-				fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( p ) );
-				fields[1] = maps\_bz_log::kv( "count", refill_count );
-				fields[2] = maps\_bz_log::kv( "round", r );
-				maps\_bz_log::emit( "SAPPER_GRENADE_REFILL", maps\_bz_log::join_fields( fields ) );
+				fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( p ) );
+				fields[1] = bz_log_kv( "count", refill_count );
+				fields[2] = bz_log_kv( "round", r );
+				bz_log_emit( "SAPPER_GRENADE_REFILL", bz_log_join( fields ) );
 			}
 		}
 	}
@@ -526,12 +526,12 @@ bz_classes_on_end_game()
 
 bz_classes_on_item_purchased( ctx )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
+	if ( !bz_classes_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
 	{
 		return;
 	}
 
-	cat = maps\_bz_rules::bz_normalize_id( ctx.category );
+	cat = bz_normalize_id( ctx.category );
 	if ( cat != "class" )
 	{
 		return;
@@ -540,7 +540,7 @@ bz_classes_on_item_purchased( ctx )
 	player = ctx.player;
 	bz_class_ensure_player_fields( player );
 
-	new_class = maps\_bz_rules::bz_normalize_id( ctx.item_id );
+	new_class = bz_normalize_id( ctx.item_id );
 	if ( !maps\_bz_rules::bz_is_valid_class( new_class ) )
 	{
 		return;
@@ -549,7 +549,7 @@ bz_classes_on_item_purchased( ctx )
 	previous_class = "";
 	if ( IsDefined( ctx.result ) && IsDefined( ctx.result.previous_class ) )
 	{
-		previous_class = maps\_bz_rules::bz_normalize_id( ctx.result.previous_class );
+		previous_class = bz_normalize_id( ctx.result.previous_class );
 	}
 	if ( previous_class == "" && IsDefined( player.bz_active_class_applied ) && player.bz_active_class_applied != new_class )
 	{
@@ -566,11 +566,11 @@ bz_classes_on_item_purchased( ctx )
 
 	swapped = ( previous_class != "" );
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "class", new_class );
-	fields[2] = maps\_bz_log::kv( "previous", previous_class );
-	fields[3] = maps\_bz_log::kv( "swapped", maps\_bz_hooks::bz_bool_int( swapped ) );
-	maps\_bz_log::emit( "CLASS_EQUIPPED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "class", new_class );
+	fields[2] = bz_log_kv( "previous", previous_class );
+	fields[3] = bz_log_kv( "swapped", maps\_bz_hooks::bz_bool_int( swapped ) );
+	bz_log_emit( "CLASS_EQUIPPED", bz_log_join( fields ) );
 }
 
 bz_class_teardown( player, previous_class )
@@ -581,7 +581,7 @@ bz_class_teardown( player, previous_class )
 	}
 
 	bz_class_ensure_player_fields( player );
-	prev = maps\_bz_rules::bz_normalize_id( previous_class );
+	prev = bz_normalize_id( previous_class );
 
 	// Clean up all modifiers BEFORE notifying child threads to stop.
 	if ( prev == "medic" )
@@ -631,13 +631,13 @@ bz_class_teardown( player, previous_class )
 
 bz_class_apply( player, class_id )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
 
 	bz_class_ensure_player_fields( player );
-	id = maps\_bz_rules::bz_normalize_id( class_id );
+	id = bz_normalize_id( class_id );
 	if ( !maps\_bz_rules::bz_is_valid_class( id ) )
 	{
 		return false;
@@ -694,16 +694,16 @@ bz_class_apply( player, class_id )
 
 bz_classes_on_player_damage( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
 
-	class_id = maps\_bz_state::bz_state_get_class( player );
+	class_id = bz_state_get_class( player );
 	if ( class_id == "daredevil" )
 	{
-		mod_norm = maps\_bz_rules::bz_normalize_id( ctx.mod );
-		weap_norm = maps\_bz_rules::bz_normalize_id( ctx.weapon );
+		mod_norm = bz_normalize_id( ctx.mod );
+		weap_norm = bz_normalize_id( ctx.weapon );
 		dtype = "";
 
 		if ( mod_norm == "mod_falling" )
@@ -730,7 +730,7 @@ bz_classes_on_player_damage( player, ctx )
 
 bz_classes_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( ctx ) )
+	if ( !bz_classes_enabled() || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -741,7 +741,7 @@ bz_classes_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	class_id = maps\_bz_state::bz_state_get_class( attacker );
+	class_id = bz_state_get_class( attacker );
 	if ( class_id == "titan" )
 	{
 		if ( IsDefined( attacker.bz_titan_is_stationary ) && attacker.bz_titan_is_stationary && bz_class_is_weapon_damage_mod( ctx.mod ) )
@@ -760,7 +760,7 @@ bz_classes_on_actor_damage( zombie, ctx )
 
 bz_class_is_weapon_damage_mod( mod_str )
 {
-	m = maps\_bz_rules::bz_normalize_id( mod_str );
+	m = bz_normalize_id( mod_str );
 	if ( m == "" || m == "mod_falling" || m == "mod_suicide" || m == "mod_trigger_hurt" || m == "mod_unknown" )
 	{
 		return false;
@@ -795,7 +795,7 @@ bz_medic_is_instant_revive( player )
 	{
 		return false;
 	}
-	if ( maps\_bz_state::bz_state_get_class( player ) != "medic" )
+	if ( bz_state_get_class( player ) != "medic" )
 	{
 		return false;
 	}
@@ -819,7 +819,7 @@ bz_medic_sync_revive_state( player )
 
 bz_medic_is_primary_ammo_weapon( weapon_name )
 {
-	w = maps\_bz_rules::bz_normalize_id( weapon_name );
+	w = bz_normalize_id( weapon_name );
 	if ( w == "" || w == "none" || w == "fraggrenade" || w == "stielhandgranate" ||
 		w == "zombie_knuckles" || w == "knife" || w == "bowie_knife" || w == "syrette" )
 	{
@@ -891,7 +891,7 @@ bz_medic_ammo_regen_tick( medic )
 	summary.allies_helped = 0;
 	summary.ally_total_added = 0;
 
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( medic ) )
+	if ( !bz_classes_enabled() || !IsDefined( medic ) )
 	{
 		return summary;
 	}
@@ -899,7 +899,7 @@ bz_medic_ammo_regen_tick( medic )
 	{
 		return summary;
 	}
-	if ( maps\_bz_state::bz_state_get_class( medic ) != "medic" )
+	if ( bz_state_get_class( medic ) != "medic" )
 	{
 		return summary;
 	}
@@ -936,10 +936,10 @@ bz_medic_ammo_regen_tick( medic )
 	if ( summary.self_added > 0 || summary.allies_helped > 0 )
 	{
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( medic ) );
-		fields[1] = maps\_bz_log::kv( "added", summary.self_added );
-		fields[2] = maps\_bz_log::kv( "allies", summary.allies_helped );
-		maps\_bz_log::emit( "MEDIC_AMMO_REGEN", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( medic ) );
+		fields[1] = bz_log_kv( "added", summary.self_added );
+		fields[2] = bz_log_kv( "allies", summary.allies_helped );
+		bz_log_emit( "MEDIC_AMMO_REGEN", bz_log_join( fields ) );
 	}
 
 	return summary;
@@ -955,7 +955,7 @@ bz_medic_ammo_regen_loop()
 	for ( ;; )
 	{
 		wait( interval );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "medic" )
+		if ( bz_state_get_class( self ) != "medic" )
 		{
 			return;
 		}
@@ -972,7 +972,7 @@ bz_medic_revive_watch()
 	for ( ;; )
 	{
 		wait( 0.1 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "medic" )
+		if ( bz_state_get_class( self ) != "medic" )
 		{
 			return;
 		}
@@ -992,7 +992,7 @@ bz_titan_update_stationary_state( player, dt )
 	}
 	bz_class_ensure_player_fields( player );
 
-	if ( maps\_bz_state::bz_state_get_class( player ) != "titan" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
+	if ( bz_state_get_class( player ) != "titan" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
 	{
 		player.bz_titan_stationary_time = 0.0;
 		player.bz_titan_is_stationary = false;
@@ -1036,7 +1036,7 @@ bz_titan_update_stationary_state( player, dt )
 
 bz_titan_apply_aggro_bias( titan )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( titan ) )
+	if ( !bz_classes_enabled() || !IsDefined( titan ) )
 	{
 		return 0;
 	}
@@ -1044,7 +1044,7 @@ bz_titan_apply_aggro_bias( titan )
 	{
 		return 0;
 	}
-	if ( maps\_bz_state::bz_state_get_class( titan ) != "titan" )
+	if ( bz_state_get_class( titan ) != "titan" )
 	{
 		return 0;
 	}
@@ -1147,7 +1147,7 @@ bz_titan_stationary_loop()
 	for ( ;; )
 	{
 		wait( 0.05 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "titan" )
+		if ( bz_state_get_class( self ) != "titan" )
 		{
 			return;
 		}
@@ -1164,7 +1164,7 @@ bz_titan_aggro_loop()
 	for ( ;; )
 	{
 		wait( 0.5 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "titan" )
+		if ( bz_state_get_class( self ) != "titan" )
 		{
 			return;
 		}
@@ -1174,12 +1174,12 @@ bz_titan_aggro_loop()
 
 bz_classes_on_points_modify( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
 
-	class_id = maps\_bz_state::bz_state_get_class( player );
+	class_id = bz_state_get_class( player );
 	near_broker = bz_broker_is_near_ally( player );
 	mult = maps\_bz_rules::bz_calc_points_mult( class_id, near_broker );
 	ctx.multiplier = ctx.multiplier * mult;
@@ -1187,12 +1187,12 @@ bz_classes_on_points_modify( player, ctx )
 
 bz_classes_on_box_cost_modify( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
 
-	class_id = maps\_bz_state::bz_state_get_class( player );
+	class_id = bz_state_get_class( player );
 	if ( class_id == "broker" )
 	{
 		ctx.cost = maps\_bz_rules::bz_calc_box_cost( ctx.cost, class_id );
@@ -1208,7 +1208,7 @@ bz_sapper_get_grenade_radius( player, base_radius )
 	class_id = "";
 	if ( IsDefined( player ) )
 	{
-		class_id = maps\_bz_state::bz_state_get_class( player );
+		class_id = bz_state_get_class( player );
 	}
 	return maps\_bz_rules::bz_calc_grenade_radius( base_radius, class_id );
 }
@@ -1225,11 +1225,11 @@ bz_sapper_on_grenade_detonate( player, origin, base_radius, base_damage )
 	res.expanded_radius = bz_sapper_get_grenade_radius( player, base_r );
 	res.hits = 0;
 
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) || !IsDefined( origin ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) || !IsDefined( origin ) )
 	{
 		return res;
 	}
-	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	if ( bz_state_get_class( player ) != "sapper" )
 	{
 		return res;
 	}
@@ -1343,7 +1343,7 @@ bz_sapper_on_grenade_thrown( player, weap_name )
 		return 0;
 	}
 	bz_class_ensure_player_fields( player );
-	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	if ( bz_state_get_class( player ) != "sapper" )
 	{
 		return 0;
 	}
@@ -1351,7 +1351,7 @@ bz_sapper_on_grenade_thrown( player, weap_name )
 	frag = bz_class_get_frag_weapon( player );
 	if ( IsDefined( weap_name ) && weap_name != "" )
 	{
-		wn = maps\_bz_rules::bz_normalize_id( weap_name );
+		wn = bz_normalize_id( weap_name );
 		if ( wn != frag && !IsSubStr( wn, "stielhandgranate" ) && !IsSubStr( wn, "frag" ) )
 		{
 			return bz_sapper_get_total_grenades( player );
@@ -1376,7 +1376,7 @@ bz_sapper_grenade_watch()
 	for ( ;; )
 	{
 		self waittill( "grenade_fire", grenade, weap_name );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "sapper" )
+		if ( bz_state_get_class( self ) != "sapper" )
 		{
 			return;
 		}
@@ -1390,11 +1390,11 @@ bz_sapper_grenade_watch()
 
 bz_sapper_on_max_ammo( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return 0;
 	}
-	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	if ( bz_state_get_class( player ) != "sapper" )
 	{
 		return 0;
 	}
@@ -1411,7 +1411,7 @@ bz_sapper_max_ammo_watch()
 	for ( ;; )
 	{
 		self waittill( "zmb_max_ammo" );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "sapper" )
+		if ( bz_state_get_class( self ) != "sapper" )
 		{
 			return;
 		}
@@ -1434,7 +1434,7 @@ bz_sapper_track_thrown_grenade( grenade )
 		wait( 0.05 );
 	}
 
-	if ( maps\_bz_state::bz_state_get_class( self ) == "sapper" )
+	if ( bz_state_get_class( self ) == "sapper" )
 	{
 		bz_sapper_on_grenade_detonate( self, last_origin, 256, 300 );
 	}
@@ -1455,11 +1455,11 @@ bz_classes_get_round_safe()
 
 bz_classes_on_wall_buy( player, weapon_name, origin, is_ammo )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
-	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	if ( bz_state_get_class( player ) != "sapper" )
 	{
 		return undefined;
 	}
@@ -1468,17 +1468,17 @@ bz_classes_on_wall_buy( player, weapon_name, origin, is_ammo )
 
 bz_sapper_on_wall_buy( player, wall_id, origin )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
 	bz_class_ensure_player_fields( player );
-	if ( maps\_bz_state::bz_state_get_class( player ) != "sapper" )
+	if ( bz_state_get_class( player ) != "sapper" )
 	{
 		return undefined;
 	}
 
-	wid = maps\_bz_rules::bz_normalize_id( wall_id );
+	wid = bz_normalize_id( wall_id );
 	if ( wid == "" )
 	{
 		wid = "wall_default";
@@ -1554,13 +1554,13 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "wall", wid );
-	fields[2] = maps\_bz_log::kv( "type", trap_type );
-	fields[3] = maps\_bz_log::kv( "x", Int( pos[0] ) );
-	fields[4] = maps\_bz_log::kv( "y", Int( pos[1] ) );
-	fields[5] = maps\_bz_log::kv( "z", Int( pos[2] ) );
-	maps\_bz_log::emit( "SAPPER_TRAP_PLANTED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "wall", wid );
+	fields[2] = bz_log_kv( "type", trap_type );
+	fields[3] = bz_log_kv( "x", Int( pos[0] ) );
+	fields[4] = bz_log_kv( "y", Int( pos[1] ) );
+	fields[5] = bz_log_kv( "z", Int( pos[2] ) );
+	bz_log_emit( "SAPPER_TRAP_PLANTED", bz_log_join( fields ) );
 
 	if ( trap_type == "fire" )
 	{
@@ -1713,7 +1713,7 @@ bz_sapper_wall_buy_watch()
 	for ( ;; )
 	{
 		wait( 0.1 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "sapper" )
+		if ( bz_state_get_class( self ) != "sapper" )
 		{
 			return;
 		}
@@ -1754,13 +1754,13 @@ bz_sapper_wall_buy_watch()
 
 bz_daredevil_movement_tick( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
 	bz_class_ensure_player_fields( player );
 
-	if ( maps\_bz_state::bz_state_get_class( player ) != "daredevil" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
+	if ( bz_state_get_class( player ) != "daredevil" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
 	{
 		player.bz_daredevil_in_air = false;
 		player.bz_daredevil_boosted = false;
@@ -1835,7 +1835,7 @@ bz_daredevil_movement_tick( player )
 
 bz_daredevil_execute_slam( player, fall_height, origin )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return undefined;
 	}
@@ -1884,12 +1884,12 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 	bz_daredevil_start_burst( player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "height", Int( fall_height ) );
-	fields[2] = maps\_bz_log::kv( "damage", slam_dmg );
-	fields[3] = maps\_bz_log::kv( "radius", slam_radius );
-	fields[4] = maps\_bz_log::kv( "hits", hits );
-	maps\_bz_log::emit( "DAREDEVIL_SLAM", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "height", Int( fall_height ) );
+	fields[2] = bz_log_kv( "damage", slam_dmg );
+	fields[3] = bz_log_kv( "radius", slam_radius );
+	fields[4] = bz_log_kv( "hits", hits );
+	bz_log_emit( "DAREDEVIL_SLAM", bz_log_join( fields ) );
 
 	res = SpawnStruct();
 	res.height = Int( fall_height );
@@ -1952,7 +1952,7 @@ bz_daredevil_movement_loop()
 	for ( ;; )
 	{
 		wait( 0.05 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "daredevil" )
+		if ( bz_state_get_class( self ) != "daredevil" )
 		{
 			return;
 		}
@@ -1966,12 +1966,12 @@ bz_daredevil_movement_loop()
 
 bz_assassin_is_headshot_hit( hit_loc, mod_str )
 {
-	loc = maps\_bz_rules::bz_normalize_id( hit_loc );
+	loc = bz_normalize_id( hit_loc );
 	if ( loc == "head" || loc == "helmet" || loc == "neck" )
 	{
 		return true;
 	}
-	m = maps\_bz_rules::bz_normalize_id( mod_str );
+	m = bz_normalize_id( mod_str );
 	if ( m == "mod_head_shot" )
 	{
 		return true;
@@ -2068,13 +2068,13 @@ bz_assassin_restore_all_zombies( player )
 
 bz_assassin_ghost_tick( player )
 {
-	if ( !maps\_bz_hooks::bz_classes_enabled() || !IsDefined( player ) )
+	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
 		return 0;
 	}
 	bz_class_ensure_player_fields( player );
 
-	if ( maps\_bz_state::bz_state_get_class( player ) != "assassin" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
+	if ( bz_state_get_class( player ) != "assassin" || !IsAlive( player ) || bz_class_player_is_downed( player ) )
 	{
 		bz_assassin_restore_all_zombies( player );
 		return 0;
@@ -2172,7 +2172,7 @@ bz_assassin_ghost_loop()
 	for ( ;; )
 	{
 		wait( 0.05 );
-		if ( maps\_bz_state::bz_state_get_class( self ) != "assassin" )
+		if ( bz_state_get_class( self ) != "assassin" )
 		{
 			bz_assassin_restore_all_zombies( self );
 			return;
@@ -2210,7 +2210,7 @@ bz_broker_is_near_ally( player )
 		{
 			continue;
 		}
-		if ( maps\_bz_state::bz_state_get_class( other ) != "broker" )
+		if ( bz_state_get_class( other ) != "broker" )
 		{
 			continue;
 		}
@@ -2221,4 +2221,43 @@ bz_broker_is_near_ally( player )
 	}
 
 	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_classes_enabled()
+{
+	return maps\_bz_hooks::bz_classes_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_state_get_class( player )
+{
+	return maps\_bz_state::bz_state_get_class( player );
 }

@@ -27,19 +27,19 @@ bz_perks_register()
 	}
 	level.bz_perks_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_perks_init, "perks" );
-	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_perks_on_player_connect, "perks" );
-	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_perks_on_player_spawned, "perks" );
-	maps\_bz_hooks::bz_register_hook( "player_downed", ::bz_perks_on_player_downed, "perks" );
-	maps\_bz_hooks::bz_register_hook( "round_start", ::bz_perks_on_round_start, "perks" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_perks_on_end_game, "perks" );
-	maps\_bz_hooks::bz_register_hook( "max_primary_weapons", ::bz_perks_on_max_primary_weapons, "perks" );
-	maps\_bz_hooks::bz_register_hook( "player_damage", ::bz_perks_on_player_damage, "perks" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_perks_on_actor_damage, "perks" );
-	maps\_bz_hooks::bz_register_hook( "item_purchased", ::bz_perks_on_item_purchased, "perks" );
-	maps\_bz_hooks::bz_register_hook( "speed_scale", ::bz_perks_on_speed_scale, "perks" );
-	maps\_bz_hooks::bz_register_hook( "max_health", ::bz_perks_on_max_health, "perks" );
-	maps\_bz_hooks::bz_register_hook( "wall_buy", ::bz_perks_on_wall_buy, "perks" );
+	bz_register_hook( "init", ::bz_perks_init, "perks" );
+	bz_register_hook( "player_connect", ::bz_perks_on_player_connect, "perks" );
+	bz_register_hook( "player_spawned", ::bz_perks_on_player_spawned, "perks" );
+	bz_register_hook( "player_downed", ::bz_perks_on_player_downed, "perks" );
+	bz_register_hook( "round_start", ::bz_perks_on_round_start, "perks" );
+	bz_register_hook( "end_game", ::bz_perks_on_end_game, "perks" );
+	bz_register_hook( "max_primary_weapons", ::bz_perks_on_max_primary_weapons, "perks" );
+	bz_register_hook( "player_damage", ::bz_perks_on_player_damage, "perks" );
+	bz_register_hook( "actor_damage", ::bz_perks_on_actor_damage, "perks" );
+	bz_register_hook( "item_purchased", ::bz_perks_on_item_purchased, "perks" );
+	bz_register_hook( "speed_scale", ::bz_perks_on_speed_scale, "perks" );
+	bz_register_hook( "max_health", ::bz_perks_on_max_health, "perks" );
+	bz_register_hook( "wall_buy", ::bz_perks_on_wall_buy, "perks" );
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ bz_perks_register()
 
 bz_perks_is_bullet_mod( mod )
 {
-	m = maps\_bz_rules::bz_normalize_id( mod );
+	m = bz_normalize_id( mod );
 	if ( m == "mod_pistol_bullet" || m == "mod_rifle_bullet" || m == "mod_head_shot" )
 	{
 		return true;
@@ -58,7 +58,7 @@ bz_perks_is_bullet_mod( mod )
 
 bz_perks_map_mod_to_self_damage_type( mod )
 {
-	m = maps\_bz_rules::bz_normalize_id( mod );
+	m = bz_normalize_id( mod );
 	if ( m == "mod_grenade_splash" || m == "mod_projectile_splash" )
 	{
 		return "splash";
@@ -111,7 +111,7 @@ bz_perks_join_csv( arr )
 // Canonical WaW 1.7 weapon movement speed scales (supports base & _upgraded/_zm variants).
 bz_perks_get_weapon_move_scale( weapon_name )
 {
-	w = maps\_bz_rules::bz_normalize_id( weapon_name );
+	w = bz_normalize_id( weapon_name );
 	if ( w == "" || w == "none" )
 	{
 		return 1.0;
@@ -187,7 +187,7 @@ bz_perks_is_invulnerable( player )
 
 bz_perks_init()
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() )
+	if ( !bz_perks_enabled() )
 	{
 		return;
 	}
@@ -202,7 +202,7 @@ bz_perks_init()
 
 bz_perks_on_player_connect( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -238,7 +238,7 @@ bz_perks_on_player_connect( player )
 
 bz_perks_on_player_spawned( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -252,7 +252,7 @@ bz_perks_on_player_spawned( player )
 
 bz_perks_on_player_downed( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -298,18 +298,18 @@ bz_perks_on_player_downed( player )
 	maps\_bz_stations::bz_stations_sync_player_ui( player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "cleared_perks", summary.cleared_perks.size );
-	fields[2] = maps\_bz_log::kv( "cleared_t2", summary.cleared_perks_t2.size );
-	fields[3] = maps\_bz_log::kv( "cleared_apex", summary.cleared_apex.size );
-	fields[4] = maps\_bz_log::kv( "stripped_weapons", bz_perks_join_csv( stripped ) );
-	fields[5] = maps\_bz_log::kv( "max_weapons", summary.new_max_weapons );
-	maps\_bz_log::emit( "PERK_DOWN_RESET", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "cleared_perks", summary.cleared_perks.size );
+	fields[2] = bz_log_kv( "cleared_t2", summary.cleared_perks_t2.size );
+	fields[3] = bz_log_kv( "cleared_apex", summary.cleared_apex.size );
+	fields[4] = bz_log_kv( "stripped_weapons", bz_perks_join_csv( stripped ) );
+	fields[5] = bz_log_kv( "max_weapons", summary.new_max_weapons );
+	bz_log_emit( "PERK_DOWN_RESET", bz_log_join( fields ) );
 }
 
 bz_perks_on_round_start( round_num )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() )
+	if ( !bz_perks_enabled() )
 	{
 		return;
 	}
@@ -333,16 +333,16 @@ bz_perks_on_round_start( round_num )
 		{
 			continue;
 		}
-		had_sc = maps\_bz_state::bz_state_has_apex( p, "second_chance" );
+		had_sc = bz_state_has_apex( p, "second_chance" );
 		was_ready = ( IsDefined( p.bz_second_chance_ready ) && p.bz_second_chance_ready );
 		summary = maps\_bz_state::bz_state_on_round_start( p );
 		if ( had_sc && summary.second_chance_recharged )
 		{
 			fields = [];
-			fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( p ) );
-			fields[1] = maps\_bz_log::kv( "round", r );
-			fields[2] = maps\_bz_log::kv( "was_ready", maps\_bz_hooks::bz_bool_int( was_ready ) );
-			maps\_bz_log::emit( "PERK_SECOND_CHANCE_RECHARGE", maps\_bz_log::join_fields( fields ) );
+			fields[0] = bz_log_kv( "player", bz_get_player_label( p ) );
+			fields[1] = bz_log_kv( "round", r );
+			fields[2] = bz_log_kv( "was_ready", maps\_bz_hooks::bz_bool_int( was_ready ) );
+			bz_log_emit( "PERK_SECOND_CHANCE_RECHARGE", bz_log_join( fields ) );
 			bz_perks_update_hud( p );
 		}
 	}
@@ -380,7 +380,7 @@ bz_perks_on_end_game()
 
 bz_perks_on_max_primary_weapons( player, current_cap )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return current_cap;
 	}
@@ -395,7 +395,7 @@ bz_perks_on_max_primary_weapons( player, current_cap )
 
 bz_perks_on_player_damage( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -408,9 +408,9 @@ bz_perks_on_player_damage( player, ctx )
 	}
 
 	// 2. Blast Shield self-damage immunity (checked BEFORE Second Chance so self-damage never wastes it)
-	if ( maps\_bz_state::bz_state_has_apex( player, "blast_shield" ) )
+	if ( bz_state_has_apex( player, "blast_shield" ) )
 	{
-		norm_mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
+		norm_mod = bz_normalize_id( ctx.mod );
 		dmg_type = bz_perks_map_mod_to_self_damage_type( norm_mod );
 		is_self = ( norm_mod == "mod_falling" ) ||
 			( IsDefined( ctx.attacker ) && ctx.attacker == player ) ||
@@ -420,10 +420,10 @@ bz_perks_on_player_damage( player, ctx )
 		{
 			ctx.cancelled = true;
 			bfields = [];
-			bfields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-			bfields[1] = maps\_bz_log::kv( "mod", norm_mod );
-			bfields[2] = maps\_bz_log::kv( "blocked", Int( ctx.damage ) );
-			maps\_bz_log::emit( "PERK_BLAST_SHIELD", maps\_bz_log::join_fields( bfields ) );
+			bfields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+			bfields[1] = bz_log_kv( "mod", norm_mod );
+			bfields[2] = bz_log_kv( "blocked", Int( ctx.damage ) );
+			bz_log_emit( "PERK_BLAST_SHIELD", bz_log_join( bfields ) );
 			return;
 		}
 	}
@@ -457,13 +457,13 @@ bz_perks_on_player_damage( player, ctx )
 		stunned_count = bz_perks_second_chance_push_and_stun( player, 256, stun_sec );
 
 		sfields = [];
-		sfields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-		sfields[1] = maps\_bz_log::kv( "radius", 256 );
-		sfields[2] = maps\_bz_log::kv( "stunned", stunned_count );
-		sfields[3] = maps\_bz_log::kv( "stun_sec", Int( stun_sec ) );
-		sfields[4] = maps\_bz_log::kv( "invuln_sec", Int( invuln_sec ) );
-		sfields[5] = maps\_bz_log::kv( "health", max_hp );
-		maps\_bz_log::emit( "PERK_SECOND_CHANCE", maps\_bz_log::join_fields( sfields ) );
+		sfields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+		sfields[1] = bz_log_kv( "radius", 256 );
+		sfields[2] = bz_log_kv( "stunned", stunned_count );
+		sfields[3] = bz_log_kv( "stun_sec", Int( stun_sec ) );
+		sfields[4] = bz_log_kv( "invuln_sec", Int( invuln_sec ) );
+		sfields[5] = bz_log_kv( "health", max_hp );
+		bz_log_emit( "PERK_SECOND_CHANCE", bz_log_join( sfields ) );
 
 		bz_perks_update_hud( player );
 		return;
@@ -490,7 +490,7 @@ bz_perks_on_player_damage( player, ctx )
 
 bz_perks_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( ctx ) )
+	if ( !bz_perks_enabled() || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -506,10 +506,10 @@ bz_perks_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	has_ap = maps\_bz_state::bz_state_has_perk( attacker, "ap" );
-	has_ap_t2 = maps\_bz_state::bz_state_has_perk_t2( attacker, "ap" );
-	has_dt2 = maps\_bz_state::bz_state_has_perk( attacker, "double_tap" ) &&
-		maps\_bz_state::bz_state_has_perk_t2( attacker, "double_tap" );
+	has_ap = bz_state_has_perk( attacker, "ap" );
+	has_ap_t2 = bz_state_has_perk_t2( attacker, "ap" );
+	has_dt2 = bz_state_has_perk( attacker, "double_tap" ) &&
+		bz_state_has_perk_t2( attacker, "double_tap" );
 
 	bullet_mult = maps\_bz_rules::bz_calc_bullet_damage_mult(
 		has_ap,
@@ -531,13 +531,13 @@ bz_perks_on_actor_damage( zombie, ctx )
 
 bz_perks_on_speed_scale( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
 
-	if ( maps\_bz_state::bz_state_has_perk( player, "staminup" ) &&
-		maps\_bz_state::bz_state_has_perk_t2( player, "staminup" ) )
+	if ( bz_state_has_perk( player, "staminup" ) &&
+		bz_state_has_perk_t2( player, "staminup" ) )
 	{
 		if ( player PlayerADS() > 0.2 )
 		{
@@ -548,14 +548,14 @@ bz_perks_on_speed_scale( player, ctx )
 
 bz_perks_on_max_health( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
 
-	if ( maps\_bz_state::bz_state_has_perk( player, "juggernog" ) )
+	if ( bz_state_has_perk( player, "juggernog" ) )
 	{
-		if ( maps\_bz_state::bz_state_has_perk_t2( player, "juggernog" ) )
+		if ( bz_state_has_perk_t2( player, "juggernog" ) )
 		{
 			if ( ctx.base_hp < 220 )
 			{
@@ -575,13 +575,13 @@ bz_perks_on_max_health( player, ctx )
 
 bz_perks_on_item_purchased( ctx )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
+	if ( !bz_perks_enabled() || !IsDefined( ctx ) || !IsDefined( ctx.player ) )
 	{
 		return;
 	}
 
-	cat = maps\_bz_rules::bz_normalize_id( ctx.category );
-	item_id = maps\_bz_rules::bz_normalize_id( ctx.item_id );
+	cat = bz_normalize_id( ctx.category );
+	item_id = bz_normalize_id( ctx.item_id );
 	player = ctx.player;
 
 	if ( cat == "perk" )
@@ -605,7 +605,7 @@ bz_perks_apply_standard_perk( player, perk_id )
 		return;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_normalize_id( perk_id );
 	if ( id == "juggernog" )
 	{
 		if ( !player HasPerk( "specialty_armorvest" ) )
@@ -658,10 +658,10 @@ bz_perks_apply_standard_perk( player, perk_id )
 	bz_perks_update_hud( player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "tier", "1" );
-	fields[2] = maps\_bz_log::kv( "perk", id );
-	maps\_bz_log::emit( "PERK_APPLIED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "tier", "1" );
+	fields[2] = bz_log_kv( "perk", id );
+	bz_log_emit( "PERK_APPLIED", bz_log_join( fields ) );
 }
 
 bz_perks_apply_perk_t2( player, perk_id )
@@ -671,7 +671,7 @@ bz_perks_apply_perk_t2( player, perk_id )
 		return;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_normalize_id( perk_id );
 	if ( id == "juggernog" )
 	{
 		if ( !player HasPerk( "specialty_armorvest" ) )
@@ -741,10 +741,10 @@ bz_perks_apply_perk_t2( player, perk_id )
 	bz_perks_update_hud( player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "tier", "2" );
-	fields[2] = maps\_bz_log::kv( "perk", id );
-	maps\_bz_log::emit( "PERK_APPLIED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "tier", "2" );
+	fields[2] = bz_log_kv( "perk", id );
+	bz_log_emit( "PERK_APPLIED", bz_log_join( fields ) );
 }
 
 bz_perks_apply_apex_perk( player, apex_id )
@@ -754,7 +754,7 @@ bz_perks_apply_apex_perk( player, apex_id )
 		return;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( apex_id );
+	id = bz_normalize_id( apex_id );
 	if ( id == "double_ammo" )
 	{
 		bz_perks_apply_double_ammo_to_player( player );
@@ -775,10 +775,10 @@ bz_perks_apply_apex_perk( player, apex_id )
 	bz_perks_update_hud( player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "tier", "apex" );
-	fields[2] = maps\_bz_log::kv( "perk", id );
-	maps\_bz_log::emit( "PERK_APPLIED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "tier", "apex" );
+	fields[2] = bz_log_kv( "perk", id );
+	bz_log_emit( "PERK_APPLIED", bz_log_join( fields ) );
 }
 
 // ---------------------------------------------------------------------------
@@ -848,7 +848,7 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 		return stripped;
 	}
 
-	cur_weap = maps\_bz_rules::bz_normalize_id( player GetCurrentWeapon() );
+	cur_weap = bz_normalize_id( player GetCurrentWeapon() );
 	cur_was_stripped = false;
 
 	// Strip excess weapons starting from the most recently acquired slot (3rd, 4th)
@@ -862,7 +862,7 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 		}
 		else
 		{
-			if ( maps\_bz_rules::bz_normalize_id( w ) == cur_weap )
+			if ( bz_normalize_id( w ) == cur_weap )
 			{
 				cur_was_stripped = true;
 			}
@@ -886,7 +886,7 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 
 bz_perks_calc_weapon_max_reserve( player, weapon_name )
 {
-	w = maps\_bz_rules::bz_normalize_id( weapon_name );
+	w = bz_normalize_id( weapon_name );
 	if ( w == "" || w == "none" )
 	{
 		return 0;
@@ -898,7 +898,7 @@ bz_perks_calc_weapon_max_reserve( player, weapon_name )
 		return 0;
 	}
 
-	has_double_ammo = maps\_bz_state::bz_state_has_apex( player, "double_ammo" );
+	has_double_ammo = bz_state_has_apex( player, "double_ammo" );
 	is_double_pap = maps\_bz_state::bz_state_is_weapon_double_pap( player, w );
 	mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_double_pap );
 	return Int( base_max * mult );
@@ -941,7 +941,7 @@ bz_perks_apply_double_ammo_to_player( player )
 // Pass weapon_name="" or undefined for Max Ammo (all primaries), or a specific weapon for wall-buy refills.
 bz_perks_refill_ammo_for_player( player, weapon_name )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return 0;
 	}
@@ -951,7 +951,7 @@ bz_perks_refill_ammo_for_player( player, weapon_name )
 		player.bz_weapon_max_reserve = [];
 	}
 
-	norm_w = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm_w = bz_normalize_id( weapon_name );
 	updated = 0;
 	mode = "max_ammo";
 
@@ -974,10 +974,10 @@ bz_perks_refill_ammo_for_player( player, weapon_name )
 	if ( updated > 0 )
 	{
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-		fields[1] = maps\_bz_log::kv( "mode", mode );
-		fields[2] = maps\_bz_log::kv( "weapons", updated );
-		maps\_bz_log::emit( "PERK_DOUBLE_AMMO_REFILL", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+		fields[1] = bz_log_kv( "mode", mode );
+		fields[2] = bz_log_kv( "weapons", updated );
+		bz_log_emit( "PERK_DOUBLE_AMMO_REFILL", bz_log_join( fields ) );
 	}
 
 	return updated;
@@ -985,16 +985,16 @@ bz_perks_refill_ammo_for_player( player, weapon_name )
 
 bz_perks_on_wall_buy( player, weapon_name, origin, is_ammo )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
-	if ( !maps\_bz_state::bz_state_has_apex( player, "double_ammo" ) )
+	if ( !bz_state_has_apex( player, "double_ammo" ) )
 	{
 		return;
 	}
 
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
 	{
 		return;
@@ -1011,7 +1011,7 @@ bz_perks_on_wall_buy( player, weapon_name, origin, is_ammo )
 	}
 	for ( i = 0; i < primaries.size; i++ )
 	{
-		held = maps\_bz_rules::bz_normalize_id( primaries[i] );
+		held = bz_normalize_id( primaries[i] );
 		if ( held == norm || held == upg )
 		{
 			bz_perks_refill_ammo_for_player( player, primaries[i] );
@@ -1021,12 +1021,12 @@ bz_perks_on_wall_buy( player, weapon_name, origin, is_ammo )
 
 bz_perks_update_lightweight_heavy( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return 1.0;
 	}
 
-	if ( maps\_bz_state::bz_state_has_apex( player, "lightweight_heavy" ) )
+	if ( bz_state_has_apex( player, "lightweight_heavy" ) )
 	{
 		weap = player GetCurrentWeapon();
 		wms = bz_perks_get_weapon_move_scale( weap );
@@ -1184,13 +1184,13 @@ bz_perks_try_consume_solo_revive( player )
 
 bz_perks_apply_revive_completed( reviver, revived )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( reviver ) )
+	if ( !bz_perks_enabled() || !IsDefined( reviver ) )
 	{
 		return false;
 	}
 
-	has_qr = maps\_bz_state::bz_state_has_perk( reviver, "quick_revive" );
-	has_qr2 = maps\_bz_state::bz_state_has_perk_t2( reviver, "quick_revive" );
+	has_qr = bz_state_has_perk( reviver, "quick_revive" );
+	has_qr2 = bz_state_has_perk_t2( reviver, "quick_revive" );
 	dur = maps\_bz_rules::bz_get_post_revive_invuln_duration( has_qr, has_qr2 );
 	if ( dur <= 0.0 )
 	{
@@ -1216,17 +1216,17 @@ bz_perks_apply_revive_completed( reviver, revived )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "reviver", maps\_bz_hooks::bz_get_player_label( reviver ) );
+	fields[0] = bz_log_kv( "reviver", bz_get_player_label( reviver ) );
 	if ( IsDefined( revived ) )
 	{
-		fields[1] = maps\_bz_log::kv( "revived", maps\_bz_hooks::bz_get_player_label( revived ) );
+		fields[1] = bz_log_kv( "revived", bz_get_player_label( revived ) );
 	}
 	else
 	{
-		fields[1] = maps\_bz_log::kv( "revived", "self" );
+		fields[1] = bz_log_kv( "revived", "self" );
 	}
-	fields[2] = maps\_bz_log::kv( "invuln_sec", Int( dur ) );
-	maps\_bz_log::emit( "PERK_QR2_REVIVE", maps\_bz_log::join_fields( fields ) );
+	fields[2] = bz_log_kv( "invuln_sec", Int( dur ) );
+	bz_log_emit( "PERK_QR2_REVIVE", bz_log_join( fields ) );
 	return true;
 }
 
@@ -1236,7 +1236,7 @@ bz_perks_apply_revive_completed( reviver, revived )
 
 bz_perks_sync_stock_perks( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
@@ -1248,22 +1248,22 @@ bz_perks_sync_stock_perks( player )
 	maps\_bz_state::bz_state_ensure_init( player );
 	changed = false;
 
-	if ( player HasPerk( "specialty_armorvest" ) && !maps\_bz_state::bz_state_has_perk( player, "juggernog" ) )
+	if ( player HasPerk( "specialty_armorvest" ) && !bz_state_has_perk( player, "juggernog" ) )
 	{
 		player.bz_perks["juggernog"] = true;
 		changed = true;
 	}
-	if ( player HasPerk( "specialty_fastreload" ) && !maps\_bz_state::bz_state_has_perk( player, "speed_cola" ) )
+	if ( player HasPerk( "specialty_fastreload" ) && !bz_state_has_perk( player, "speed_cola" ) )
 	{
 		player.bz_perks["speed_cola"] = true;
 		changed = true;
 	}
-	if ( player HasPerk( "specialty_rof" ) && !maps\_bz_state::bz_state_has_perk( player, "double_tap" ) )
+	if ( player HasPerk( "specialty_rof" ) && !bz_state_has_perk( player, "double_tap" ) )
 	{
 		player.bz_perks["double_tap"] = true;
 		changed = true;
 	}
-	if ( player HasPerk( "specialty_quickrevive" ) && !maps\_bz_state::bz_state_has_perk( player, "quick_revive" ) )
+	if ( player HasPerk( "specialty_quickrevive" ) && !bz_state_has_perk( player, "quick_revive" ) )
 	{
 		player.bz_perks["quick_revive"] = true;
 		bz_perks_update_revive_state( player );
@@ -1294,27 +1294,27 @@ bz_perks_format_hud_text( player )
 	tokens = [];
 
 	// Tier 2 upgrades on stock perks
-	if ( maps\_bz_state::bz_state_has_perk_t2( player, "juggernog" ) )
+	if ( bz_state_has_perk_t2( player, "juggernog" ) )
 	{
 		tokens[tokens.size] = "JUG II";
 	}
-	if ( maps\_bz_state::bz_state_has_perk_t2( player, "speed_cola" ) )
+	if ( bz_state_has_perk_t2( player, "speed_cola" ) )
 	{
 		tokens[tokens.size] = "SPD II";
 	}
-	if ( maps\_bz_state::bz_state_has_perk_t2( player, "double_tap" ) )
+	if ( bz_state_has_perk_t2( player, "double_tap" ) )
 	{
 		tokens[tokens.size] = "DT II";
 	}
-	if ( maps\_bz_state::bz_state_has_perk_t2( player, "quick_revive" ) )
+	if ( bz_state_has_perk_t2( player, "quick_revive" ) )
 	{
 		tokens[tokens.size] = "QR II";
 	}
 
 	// Custom Standard Perks & their Tier 2 upgrades
-	if ( maps\_bz_state::bz_state_has_perk( player, "staminup" ) )
+	if ( bz_state_has_perk( player, "staminup" ) )
 	{
-		if ( maps\_bz_state::bz_state_has_perk_t2( player, "staminup" ) )
+		if ( bz_state_has_perk_t2( player, "staminup" ) )
 		{
 			tokens[tokens.size] = "STAM II";
 		}
@@ -1323,9 +1323,9 @@ bz_perks_format_hud_text( player )
 			tokens[tokens.size] = "STAM";
 		}
 	}
-	if ( maps\_bz_state::bz_state_has_perk( player, "mule_kick" ) )
+	if ( bz_state_has_perk( player, "mule_kick" ) )
 	{
-		if ( maps\_bz_state::bz_state_has_perk_t2( player, "mule_kick" ) )
+		if ( bz_state_has_perk_t2( player, "mule_kick" ) )
 		{
 			tokens[tokens.size] = "MULE II";
 		}
@@ -1334,9 +1334,9 @@ bz_perks_format_hud_text( player )
 			tokens[tokens.size] = "MULE";
 		}
 	}
-	if ( maps\_bz_state::bz_state_has_perk( player, "ap" ) )
+	if ( bz_state_has_perk( player, "ap" ) )
 	{
-		if ( maps\_bz_state::bz_state_has_perk_t2( player, "ap" ) )
+		if ( bz_state_has_perk_t2( player, "ap" ) )
 		{
 			tokens[tokens.size] = "AP II";
 		}
@@ -1347,15 +1347,15 @@ bz_perks_format_hud_text( player )
 	}
 
 	// Apex Perks
-	if ( maps\_bz_state::bz_state_has_apex( player, "double_ammo" ) )
+	if ( bz_state_has_apex( player, "double_ammo" ) )
 	{
 		tokens[tokens.size] = "2X AMMO";
 	}
-	if ( maps\_bz_state::bz_state_has_apex( player, "lightweight_heavy" ) )
+	if ( bz_state_has_apex( player, "lightweight_heavy" ) )
 	{
 		tokens[tokens.size] = "LW HVY";
 	}
-	if ( maps\_bz_state::bz_state_has_apex( player, "second_chance" ) )
+	if ( bz_state_has_apex( player, "second_chance" ) )
 	{
 		if ( IsDefined( player.bz_second_chance_ready ) && player.bz_second_chance_ready )
 		{
@@ -1366,7 +1366,7 @@ bz_perks_format_hud_text( player )
 			tokens[tokens.size] = "2ND CH[USED]";
 		}
 	}
-	if ( maps\_bz_state::bz_state_has_apex( player, "blast_shield" ) )
+	if ( bz_state_has_apex( player, "blast_shield" ) )
 	{
 		tokens[tokens.size] = "BLAST";
 	}
@@ -1386,7 +1386,7 @@ bz_perks_format_hud_text( player )
 
 bz_perks_update_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_perks_enabled() || !IsDefined( player ) )
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
@@ -1482,7 +1482,7 @@ bz_perks_player_monitor()
 	for ( ;; )
 	{
 		wait( 0.15 );
-		if ( !maps\_bz_hooks::bz_perks_enabled() )
+		if ( !bz_perks_enabled() )
 		{
 			continue;
 		}
@@ -1491,7 +1491,7 @@ bz_perks_player_monitor()
 
 		prev_order = self.bz_primary_weapon_order;
 		new_order = bz_perks_sync_weapon_order( self );
-		if ( maps\_bz_state::bz_state_has_apex( self, "double_ammo" ) && IsDefined( prev_order ) && prev_order.size > 0 )
+		if ( bz_state_has_apex( self, "double_ammo" ) && IsDefined( prev_order ) && prev_order.size > 0 )
 		{
 			for ( wi = 0; wi < new_order.size; wi++ )
 			{
@@ -1503,18 +1503,18 @@ bz_perks_player_monitor()
 			}
 		}
 
-		cur_weap = maps\_bz_rules::bz_normalize_id( self GetCurrentWeapon() );
+		cur_weap = bz_normalize_id( self GetCurrentWeapon() );
 		if ( cur_weap != last_weapon )
 		{
 			last_weapon = cur_weap;
-			if ( maps\_bz_state::bz_state_has_apex( self, "lightweight_heavy" ) )
+			if ( bz_state_has_apex( self, "lightweight_heavy" ) )
 			{
 				bz_perks_update_lightweight_heavy( self );
 			}
 		}
 
-		if ( maps\_bz_state::bz_state_has_perk( self, "staminup" ) &&
-			maps\_bz_state::bz_state_has_perk_t2( self, "staminup" ) )
+		if ( bz_state_has_perk( self, "staminup" ) &&
+			bz_state_has_perk_t2( self, "staminup" ) )
 		{
 			is_ads = ( self PlayerADS() > 0.2 );
 			if ( is_ads != last_ads )
@@ -1546,7 +1546,7 @@ bz_perks_watch_max_ammo()
 	for ( ;; )
 	{
 		self waittill( "zmb_max_ammo" );
-		if ( maps\_bz_hooks::bz_perks_enabled() && maps\_bz_state::bz_state_has_apex( self, "double_ammo" ) )
+		if ( bz_perks_enabled() && bz_state_has_apex( self, "double_ammo" ) )
 		{
 			bz_perks_refill_ammo_for_player( self, "" );
 		}
@@ -1561,9 +1561,63 @@ bz_perks_watch_revived()
 	for ( ;; )
 	{
 		self waittill( "player_revived", reviver );
-		if ( maps\_bz_hooks::bz_perks_enabled() && IsDefined( reviver ) )
+		if ( bz_perks_enabled() && IsDefined( reviver ) )
 		{
 			bz_perks_apply_revive_completed( reviver, self );
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_get_player_label( player )
+{
+	return maps\_bz_hooks::bz_get_player_label( player );
+}
+
+bz_perks_enabled()
+{
+	return maps\_bz_hooks::bz_perks_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_state_has_apex( player, apex_id )
+{
+	return maps\_bz_state::bz_state_has_apex( player, apex_id );
+}
+
+bz_state_has_perk( player, perk_id )
+{
+	return maps\_bz_state::bz_state_has_perk( player, perk_id );
+}
+
+bz_state_has_perk_t2( player, perk_id )
+{
+	return maps\_bz_state::bz_state_has_perk_t2( player, perk_id );
 }

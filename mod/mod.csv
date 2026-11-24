@@ -16,6 +16,7 @@ rawfile,maps/_gauntlet_bootstrap.gsc
 rawfile,maps/_bz_log.gsc
 rawfile,maps/_bz_version.gsc
 rawfile,maps/_bz_hooks.gsc
+rawfile,maps/_bz_selftest.gsc
 rawfile,maps/_bz_rules.gsc
 rawfile,maps/_bz_state.gsc
 rawfile,maps/_bz_stations.gsc

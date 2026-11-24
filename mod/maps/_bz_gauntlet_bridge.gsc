@@ -26,7 +26,7 @@ clear_bz_gauntlet_dvars()
 
 bz_gauntlet_perk_to_code( perk_id )
 {
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_normalize_id( perk_id );
 	if ( id == "juggernog" )
 	{
 		return "jg";
@@ -60,7 +60,7 @@ bz_gauntlet_perk_to_code( perk_id )
 
 bz_gauntlet_code_to_perk( code )
 {
-	c = maps\_bz_rules::bz_normalize_id( code );
+	c = bz_normalize_id( code );
 	if ( c == "jg" )
 	{
 		return "juggernog";
@@ -94,7 +94,7 @@ bz_gauntlet_code_to_perk( code )
 
 bz_gauntlet_apex_to_code( apex_id )
 {
-	id = maps\_bz_rules::bz_normalize_id( apex_id );
+	id = bz_normalize_id( apex_id );
 	if ( id == "double_ammo" )
 	{
 		return "da";
@@ -116,7 +116,7 @@ bz_gauntlet_apex_to_code( apex_id )
 
 bz_gauntlet_code_to_apex( code )
 {
-	c = maps\_bz_rules::bz_normalize_id( code );
+	c = bz_normalize_id( code );
 	if ( c == "da" )
 	{
 		return "double_ammo";
@@ -277,7 +277,7 @@ parse_perm_record( raw )
 		return rec;
 	}
 
-	cls = maps\_bz_rules::bz_normalize_id( parts[0] );
+	cls = bz_normalize_id( parts[0] );
 	if ( cls != "-" && maps\_bz_rules::bz_is_valid_class( cls ) )
 	{
 		rec.class_id = cls;
@@ -288,7 +288,7 @@ parse_perm_record( raw )
 		ftoks = StrTok( parts[1], "," );
 		for ( i = 0; i < ftoks.size; i++ )
 		{
-			tok = maps\_bz_rules::bz_normalize_id( ftoks[i] );
+			tok = bz_normalize_id( ftoks[i] );
 			if ( tok == "pk" )
 			{
 				rec.pap_knife = true;
@@ -320,7 +320,7 @@ parse_perm_record( raw )
 		}
 	}
 
-	slot = maps\_bz_rules::bz_normalize_id( parts[2] );
+	slot = bz_normalize_id( parts[2] );
 	if ( slot == "bowie" || slot == "war_club" || slot == "knife" )
 	{
 		rec.melee_slot = slot;
@@ -603,11 +603,11 @@ snapshot_player_bz_state( player, current_map )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", player_key );
-	fields[1] = maps\_bz_log::kv( "map", map_label );
-	fields[2] = maps\_bz_log::kv( "perm", perm_log );
-	fields[3] = maps\_bz_log::kv( "perks", perks_log );
-	maps\_bz_log::emit( "GAUNTLET_BZ_SAVED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", player_key );
+	fields[1] = bz_log_kv( "map", map_label );
+	fields[2] = bz_log_kv( "perm", perm_log );
+	fields[3] = bz_log_kv( "perks", perks_log );
+	bz_log_emit( "GAUNTLET_BZ_SAVED", bz_log_join( fields ) );
 	return true;
 }
 
@@ -779,16 +779,16 @@ restore_player_bz_state( player, current_map )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", player_key );
-	fields[1] = maps\_bz_log::kv( "map", map_label );
-	fields[2] = maps\_bz_log::kv( "class", cls_label );
-	fields[3] = maps\_bz_log::kv( "t1", t1_restored );
-	fields[4] = maps\_bz_log::kv( "t2", t2_restored );
-	fields[5] = maps\_bz_log::kv( "apex", apex_restored );
-	fields[6] = maps\_bz_log::kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
-	fields[7] = maps\_bz_log::kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
-	fields[8] = maps\_bz_log::kv( "melee_slot", applied_melee );
-	maps\_bz_log::emit( "GAUNTLET_BZ_RESTORED", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", player_key );
+	fields[1] = bz_log_kv( "map", map_label );
+	fields[2] = bz_log_kv( "class", cls_label );
+	fields[3] = bz_log_kv( "t1", t1_restored );
+	fields[4] = bz_log_kv( "t2", t2_restored );
+	fields[5] = bz_log_kv( "apex", apex_restored );
+	fields[6] = bz_log_kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
+	fields[7] = bz_log_kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
+	fields[8] = bz_log_kv( "melee_slot", applied_melee );
+	bz_log_emit( "GAUNTLET_BZ_RESTORED", bz_log_join( fields ) );
 	return true;
 }
 
@@ -819,4 +819,28 @@ close_all_bz_station_menus()
 		}
 	}
 	return closed;
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }

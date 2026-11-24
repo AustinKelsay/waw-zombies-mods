@@ -29,10 +29,10 @@ bz_elem_stock_register()
 	}
 	level.bz_elem_stock_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_elem_stock_on_init, "elements" );
-	maps\_bz_hooks::bz_register_hook( "player_damage", ::bz_elem_stock_on_player_damage, "elements" );
-	maps\_bz_hooks::bz_register_hook( "actor_damage", ::bz_elem_stock_on_actor_damage, "elements" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_elem_stock_on_end_game, "elements" );
+	bz_register_hook( "init", ::bz_elem_stock_on_init, "elements" );
+	bz_register_hook( "player_damage", ::bz_elem_stock_on_player_damage, "elements" );
+	bz_register_hook( "actor_damage", ::bz_elem_stock_on_actor_damage, "elements" );
+	bz_register_hook( "end_game", ::bz_elem_stock_on_end_game, "elements" );
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ bz_get_flame_dot_ticks()
 
 bz_is_wunderwaffe_weapon( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "tesla_gun" || norm == "tesla_gun_upgraded" )
 	{
 		return true;
@@ -76,7 +76,7 @@ bz_is_wunderwaffe_weapon( weapon_name )
 
 bz_is_flamethrower_weapon( weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "m2_flamethrower_zombie" || norm == "m2_flamethrower_zombie_upgraded" )
 	{
 		return true;
@@ -86,7 +86,7 @@ bz_is_flamethrower_weapon( weapon_name )
 
 bz_is_flamethrower_upgraded( player, weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "m2_flamethrower_zombie_upgraded" )
 	{
 		return true;
@@ -144,7 +144,7 @@ bz_elem_stock_resolve_zombie_hp( zombie, round_num )
 
 bz_elem_stock_on_init()
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return;
 	}
@@ -169,7 +169,7 @@ bz_elem_stock_on_end_game()
 
 bz_tesla_is_self_shock_immune( player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
@@ -181,7 +181,7 @@ bz_tesla_is_self_shock_immune( player )
 
 bz_tesla_on_self_shock( player, damage, blocked_by_immunity )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -205,18 +205,18 @@ bz_tesla_on_self_shock( player, damage, blocked_by_immunity )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "damage", dmg_val );
-	fields[2] = maps\_bz_log::kv( "blocked", maps\_bz_hooks::bz_bool_int( blocked_by_immunity ) );
-	fields[3] = maps\_bz_log::kv( "maxhealth", max_hp );
-	fields[4] = maps\_bz_log::kv( "health", cur_hp );
-	fields[5] = maps\_bz_log::kv( "source", "pvp_thread" );
-	maps\_bz_log::emit( "ELEM_TESLA_SELF_GUARD", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "damage", dmg_val );
+	fields[2] = bz_log_kv( "blocked", maps\_bz_hooks::bz_bool_int( blocked_by_immunity ) );
+	fields[3] = bz_log_kv( "maxhealth", max_hp );
+	fields[4] = bz_log_kv( "health", cur_hp );
+	fields[5] = bz_log_kv( "source", "pvp_thread" );
+	bz_log_emit( "ELEM_TESLA_SELF_GUARD", bz_log_join( fields ) );
 }
 
 bz_elem_stock_on_player_damage( player, ctx )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -242,13 +242,13 @@ bz_elem_stock_on_player_damage( player, ctx )
 			max_hp = Int( player.maxhealth );
 		}
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-		fields[1] = maps\_bz_log::kv( "weapon", maps\_bz_rules::bz_normalize_id( ctx.weapon ) );
-		fields[2] = maps\_bz_log::kv( "damage", Int( ctx.damage ) );
-		fields[3] = maps\_bz_log::kv( "blocked", 1 );
-		fields[4] = maps\_bz_log::kv( "maxhealth", max_hp );
-		fields[5] = maps\_bz_log::kv( "source", "player_damage" );
-		maps\_bz_log::emit( "ELEM_TESLA_SELF_GUARD", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+		fields[1] = bz_log_kv( "weapon", bz_normalize_id( ctx.weapon ) );
+		fields[2] = bz_log_kv( "damage", Int( ctx.damage ) );
+		fields[3] = bz_log_kv( "blocked", 1 );
+		fields[4] = bz_log_kv( "maxhealth", max_hp );
+		fields[5] = bz_log_kv( "source", "player_damage" );
+		bz_log_emit( "ELEM_TESLA_SELF_GUARD", bz_log_join( fields ) );
 		return;
 	}
 }
@@ -279,7 +279,7 @@ bz_elem_stock_apply_tesla_stun_to_zombie( zombie, stun_sec, stun_until )
 // (zero endon() inside; spawns dedicated per-zombie child timers).
 bz_tesla_on_chain_hit( zombie, player )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) )
+	if ( !bz_elements_enabled() || !IsDefined( zombie ) )
 	{
 		return 0;
 	}
@@ -340,12 +340,12 @@ bz_tesla_on_chain_hit( zombie, player )
 	if ( stunned_count > 0 )
 	{
 		fields = [];
-		fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-		fields[1] = maps\_bz_log::kv( "stunned", stunned_count );
-		fields[2] = maps\_bz_log::kv( "duration", stun_sec );
-		fields[3] = maps\_bz_log::kv( "radius", radius );
-		fields[4] = maps\_bz_log::kv( "map", maps\_bz_hooks::bz_get_map_name() );
-		maps\_bz_log::emit( "ELEM_TESLA_STUN", maps\_bz_log::join_fields( fields ) );
+		fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+		fields[1] = bz_log_kv( "stunned", stunned_count );
+		fields[2] = bz_log_kv( "duration", stun_sec );
+		fields[3] = bz_log_kv( "radius", radius );
+		fields[4] = bz_log_kv( "map", maps\_bz_hooks::bz_get_map_name() );
+		bz_log_emit( "ELEM_TESLA_STUN", bz_log_join( fields ) );
 	}
 
 	return stunned_count;
@@ -384,13 +384,13 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 		return false;
 	}
 
-	norm_mod = maps\_bz_rules::bz_normalize_id( ctx.mod );
+	norm_mod = bz_normalize_id( ctx.mod );
 	if ( norm_mod == "mod_melee" )
 	{
 		return false;
 	}
 
-	norm_weap = maps\_bz_rules::bz_normalize_id( ctx.weapon );
+	norm_weap = bz_normalize_id( ctx.weapon );
 	if ( bz_is_flamethrower_weapon( norm_weap ) )
 	{
 		if ( norm_mod == "" || norm_mod == "mod_burned" )
@@ -410,7 +410,7 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 
 bz_elem_stock_on_actor_damage( zombie, ctx )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
+	if ( !bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
 	{
 		return;
 	}
@@ -468,7 +468,7 @@ bz_elem_stock_on_actor_damage( zombie, ctx )
 // Synchronous/testable single burn DOT tick (zero endon(), zero custom FX).
 bz_flame_apply_dot_tick( zombie, player, tick_dmg, is_close_range, is_upgraded, tick_index )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() )
+	if ( !bz_elements_enabled() )
 	{
 		return false;
 	}
@@ -497,20 +497,20 @@ bz_flame_apply_dot_tick( zombie, player, tick_dmg, is_close_range, is_upgraded, 
 	zombie DoDamage( final_tick_dmg, origin, player );
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "damage", final_tick_dmg );
-	fields[2] = maps\_bz_log::kv( "close", maps\_bz_hooks::bz_bool_int( is_close_range ) );
-	fields[3] = maps\_bz_log::kv( "upgraded", maps\_bz_hooks::bz_bool_int( is_upgraded ) );
-	fields[4] = maps\_bz_log::kv( "tick", tick_index );
-	fields[5] = maps\_bz_log::kv( "map", maps\_bz_hooks::bz_get_map_name() );
-	maps\_bz_log::emit( "ELEM_FLAME_DOT", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "damage", final_tick_dmg );
+	fields[2] = bz_log_kv( "close", maps\_bz_hooks::bz_bool_int( is_close_range ) );
+	fields[3] = bz_log_kv( "upgraded", maps\_bz_hooks::bz_bool_int( is_upgraded ) );
+	fields[4] = bz_log_kv( "tick", tick_index );
+	fields[5] = bz_log_kv( "map", maps\_bz_hooks::bz_get_map_name() );
+	bz_log_emit( "ELEM_FLAME_DOT", bz_log_join( fields ) );
 	return true;
 }
 
 // Starts/refreshes per-zombie burn DOT and spreads 1 hop to nearby zombies (0 new FX).
 bz_flame_start_burn_dot( zombie, player, round_num, zombie_hp, is_close_range, is_upgraded, allow_spread )
 {
-	if ( !maps\_bz_hooks::bz_elements_enabled() || !IsDefined( zombie ) || !IsAlive( zombie ) )
+	if ( !bz_elements_enabled() || !IsDefined( zombie ) || !IsAlive( zombie ) )
 	{
 		return false;
 	}
@@ -611,7 +611,7 @@ bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgra
 	{
 		wait( 1.0 );
 
-		if ( !maps\_bz_hooks::bz_elements_enabled() )
+		if ( !bz_elements_enabled() )
 		{
 			break;
 		}
@@ -635,4 +635,38 @@ bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgra
 			maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_elements_enabled()
+{
+	return maps\_bz_hooks::bz_elements_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }

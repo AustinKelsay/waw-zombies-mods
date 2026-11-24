@@ -28,7 +28,7 @@ bz_stations_get_menu_names()
 
 bz_stations_is_station_menu( menu_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( menu_name );
+	norm = bz_normalize_id( menu_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -47,7 +47,7 @@ bz_stations_is_station_menu( menu_name )
 
 bz_stations_get_menu_for_station( station_id )
 {
-	sid = maps\_bz_rules::bz_normalize_id( station_id );
+	sid = bz_normalize_id( station_id );
 	if ( sid == "perks" )
 	{
 		return "bz_station_perks";
@@ -69,12 +69,12 @@ bz_stations_get_menu_for_station( station_id )
 
 bz_stations_is_station_enabled( station_id )
 {
-	if ( !maps\_bz_hooks::bz_enabled() )
+	if ( !bz_enabled() )
 	{
 		return false;
 	}
 
-	sid = maps\_bz_rules::bz_normalize_id( station_id );
+	sid = bz_normalize_id( station_id );
 	if ( sid == "perks" )
 	{
 		return maps\_bz_hooks::bz_perks_enabled();
@@ -133,7 +133,7 @@ bz_stations_get_fallback_anchor()
 
 bz_stations_get_map_specs( map_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( map_name );
+	norm = bz_normalize_id( map_name );
 	specs = [];
 
 	if ( norm == "nazi_zombie_factory" )
@@ -372,18 +372,18 @@ bz_stations_register()
 	}
 	level.bz_stations_registered = true;
 
-	maps\_bz_hooks::bz_register_hook( "pre_init", ::bz_stations_pre_init, "core" );
-	maps\_bz_hooks::bz_register_hook( "init", ::bz_stations_init, "core" );
-	maps\_bz_hooks::bz_register_hook( "player_connect", ::bz_stations_on_player_connect, "core" );
-	maps\_bz_hooks::bz_register_hook( "player_spawned", ::bz_stations_on_player_spawned, "core" );
-	maps\_bz_hooks::bz_register_hook( "player_downed", ::bz_stations_on_player_downed, "core" );
-	maps\_bz_hooks::bz_register_hook( "menu_response", ::bz_stations_on_menu_response, "core" );
-	maps\_bz_hooks::bz_register_hook( "end_game", ::bz_stations_cleanup, "core" );
+	bz_register_hook( "pre_init", ::bz_stations_pre_init, "core" );
+	bz_register_hook( "init", ::bz_stations_init, "core" );
+	bz_register_hook( "player_connect", ::bz_stations_on_player_connect, "core" );
+	bz_register_hook( "player_spawned", ::bz_stations_on_player_spawned, "core" );
+	bz_register_hook( "player_downed", ::bz_stations_on_player_downed, "core" );
+	bz_register_hook( "menu_response", ::bz_stations_on_menu_response, "core" );
+	bz_register_hook( "end_game", ::bz_stations_cleanup, "core" );
 }
 
 bz_stations_pre_init()
 {
-	if ( !maps\_bz_hooks::bz_enabled() )
+	if ( !bz_enabled() )
 	{
 		return;
 	}
@@ -397,7 +397,7 @@ bz_stations_pre_init()
 
 bz_stations_init()
 {
-	if ( !maps\_bz_hooks::bz_enabled() )
+	if ( !bz_enabled() )
 	{
 		return;
 	}
@@ -426,8 +426,8 @@ bz_stations_init()
 
 bz_stations_get_model_for_station( map_name, station_id )
 {
-	norm_map = maps\_bz_rules::bz_normalize_id( map_name );
-	sid = maps\_bz_rules::bz_normalize_id( station_id );
+	norm_map = bz_normalize_id( map_name );
+	sid = bz_normalize_id( station_id );
 
 	// Per-map models verified precached inside each stock map's .ff fastfile
 	// (zero new FX or custom model assets added to mod.csv).
@@ -565,15 +565,15 @@ bz_stations_spawn_one( map_name, spec )
 	}
 
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "map", map_name );
-	fields[1] = maps\_bz_log::kv( "station", spec.id );
-	fields[2] = maps\_bz_log::kv( "menu", spec.menu_name );
-	fields[3] = maps\_bz_log::kv( "x", Int( pos[0] ) );
-	fields[4] = maps\_bz_log::kv( "y", Int( pos[1] ) );
-	fields[5] = maps\_bz_log::kv( "z", Int( pos[2] ) );
-	fields[6] = maps\_bz_log::kv( "paired_native", maps\_bz_hooks::bz_bool_int( spec.paired_with_native_pap ) );
-	fields[7] = maps\_bz_log::kv( "model", model_label );
-	maps\_bz_log::emit( "STATION_SPAWN", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "map", map_name );
+	fields[1] = bz_log_kv( "station", spec.id );
+	fields[2] = bz_log_kv( "menu", spec.menu_name );
+	fields[3] = bz_log_kv( "x", Int( pos[0] ) );
+	fields[4] = bz_log_kv( "y", Int( pos[1] ) );
+	fields[5] = bz_log_kv( "z", Int( pos[2] ) );
+	fields[6] = bz_log_kv( "paired_native", maps\_bz_hooks::bz_bool_int( spec.paired_with_native_pap ) );
+	fields[7] = bz_log_kv( "model", model_label );
+	bz_log_emit( "STATION_SPAWN", bz_log_join( fields ) );
 
 	station thread bz_station_trigger_think();
 	return station;
@@ -661,7 +661,7 @@ bz_stations_format_prompt_text( station_id, display_name )
 
 bz_stations_ensure_prompt_hud( player )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) || !IsDefined( level.bz_station_prompt_huds ) )
+	if ( !bz_enabled() || !IsDefined( player ) || !IsDefined( level.bz_station_prompt_huds ) )
 	{
 		return undefined;
 	}
@@ -811,7 +811,7 @@ bz_stations_update_prompt_hud( player )
 	{
 		return;
 	}
-	if ( !maps\_bz_hooks::bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
+	if ( !bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
 		!IsDefined( level.bz_stations ) ||
 		IsDefined( player.revivetrigger ) ||
 		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
@@ -948,7 +948,7 @@ bz_stations_get_player_weapon_safe( player )
 	{
 		return "";
 	}
-	weap = maps\_bz_rules::bz_normalize_id( player GetCurrentWeapon() );
+	weap = bz_normalize_id( player GetCurrentWeapon() );
 	if ( weap == "" || weap == "none" )
 	{
 		return "";
@@ -958,7 +958,7 @@ bz_stations_get_player_weapon_safe( player )
 
 bz_stations_is_weapon_pap( player, weapon_name )
 {
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 	if ( norm == "" || norm == "none" )
 	{
 		return false;
@@ -1003,7 +1003,7 @@ bz_stations_player_has_bowie( player )
 // Uses per-player SetClientDvar exclusively so Co-op teammates are never affected.
 bz_stations_sync_player_ui( player, feedback )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1375,7 +1375,7 @@ bz_stations_sync_player_ui( player, feedback )
 
 bz_stations_on_player_connect( player )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1388,7 +1388,7 @@ bz_stations_on_player_connect( player )
 
 bz_stations_on_player_spawned( player )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1404,7 +1404,7 @@ bz_stations_on_player_spawned( player )
 
 bz_stations_on_player_downed( player )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return;
 	}
@@ -1421,12 +1421,12 @@ bz_stations_on_player_downed( player )
 
 bz_stations_open_for_player( player, station_id )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
 
-	sid = maps\_bz_rules::bz_normalize_id( station_id );
+	sid = bz_normalize_id( station_id );
 	if ( !bz_stations_is_station_enabled( sid ) )
 	{
 		return false;
@@ -1447,11 +1447,11 @@ bz_stations_open_for_player( player, station_id )
 
 	score = maps\_bz_state::bz_state_get_score_safe( player );
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "station", sid );
-	fields[2] = maps\_bz_log::kv( "menu", menu_name );
-	fields[3] = maps\_bz_log::kv( "score", score );
-	maps\_bz_log::emit( "STATION_OPEN", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "station", sid );
+	fields[2] = bz_log_kv( "menu", menu_name );
+	fields[3] = bz_log_kv( "score", score );
+	bz_log_emit( "STATION_OPEN", bz_log_join( fields ) );
 	return true;
 }
 
@@ -1460,7 +1460,7 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 	maps\_bz_state::bz_state_ensure_init( player );
 	score = maps\_bz_state::bz_state_get_score_safe( player );
 	cost = 5000;
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_normalize_id( weapon_name );
 
 	if ( norm == "" || norm == "none" )
 	{
@@ -1560,24 +1560,24 @@ bz_stations_format_feedback( category, item_id, res )
 bz_stations_emit_purchase_event( player, menu, category, item_id, status, cost, score )
 {
 	fields = [];
-	fields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-	fields[1] = maps\_bz_log::kv( "menu", menu );
-	fields[2] = maps\_bz_log::kv( "category", category );
-	fields[3] = maps\_bz_log::kv( "item", item_id );
-	fields[4] = maps\_bz_log::kv( "status", status );
-	fields[5] = maps\_bz_log::kv( "cost", cost );
-	fields[6] = maps\_bz_log::kv( "score", score );
-	maps\_bz_log::emit( "STATION_PURCHASE", maps\_bz_log::join_fields( fields ) );
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "menu", menu );
+	fields[2] = bz_log_kv( "category", category );
+	fields[3] = bz_log_kv( "item", item_id );
+	fields[4] = bz_log_kv( "status", status );
+	fields[5] = bz_log_kv( "cost", cost );
+	fields[6] = bz_log_kv( "score", score );
+	bz_log_emit( "STATION_PURCHASE", bz_log_join( fields ) );
 }
 
 bz_stations_on_menu_response( player, menu, response )
 {
-	if ( !maps\_bz_hooks::bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) )
 	{
 		return false;
 	}
 
-	norm_menu = maps\_bz_rules::bz_normalize_id( menu );
+	norm_menu = bz_normalize_id( menu );
 	if ( !bz_stations_is_station_menu( norm_menu ) )
 	{
 		// WaW 1.7 may deliver a scriptmenu path (ui/scriptmenus/bz_station_*.menu) or "-1"
@@ -1598,14 +1598,14 @@ bz_stations_on_menu_response( player, menu, response )
 		IsDefined( player.bz_active_station_menu ) &&
 		bz_stations_is_station_menu( player.bz_active_station_menu ) )
 	{
-		norm_menu = maps\_bz_rules::bz_normalize_id( player.bz_active_station_menu );
+		norm_menu = bz_normalize_id( player.bz_active_station_menu );
 	}
 	if ( !bz_stations_is_station_menu( norm_menu ) )
 	{
 		return false;
 	}
 
-	resp = maps\_bz_rules::bz_normalize_id( response );
+	resp = bz_normalize_id( response );
 	if ( resp == "close" || resp == "back" )
 	{
 		player.bz_station_open = false;
@@ -1614,9 +1614,9 @@ bz_stations_on_menu_response( player, menu, response )
 		player closeMenu();
 
 		cfields = [];
-		cfields[0] = maps\_bz_log::kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
-		cfields[1] = maps\_bz_log::kv( "menu", norm_menu );
-		maps\_bz_log::emit( "STATION_CLOSE", maps\_bz_log::join_fields( cfields ) );
+		cfields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+		cfields[1] = bz_log_kv( "menu", norm_menu );
+		bz_log_emit( "STATION_CLOSE", bz_log_join( cfields ) );
 		return true;
 	}
 
@@ -1768,4 +1768,38 @@ bz_stations_on_menu_response( player, menu, response )
 
 	bz_stations_sync_player_ui( player, feedback );
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
+// ---------------------------------------------------------------------------
+
+bz_enabled()
+{
+	return maps\_bz_hooks::bz_enabled();
+}
+
+bz_register_hook( hook_name, fn, gate )
+{
+	maps\_bz_hooks::bz_register_hook( hook_name, fn, gate );
+}
+
+bz_log_emit( event_type, payload )
+{
+	maps\_bz_log::emit( event_type, payload );
+}
+
+bz_log_join( fields )
+{
+	return maps\_bz_log::join_fields( fields );
+}
+
+bz_log_kv( key, value )
+{
+	return maps\_bz_log::kv( key, value );
+}
+
+bz_normalize_id( raw_id )
+{
+	return maps\_bz_rules::bz_normalize_id( raw_id );
 }
