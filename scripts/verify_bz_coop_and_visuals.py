@@ -114,11 +114,15 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
         and e.fields.get("player")
         and _has_seeded_perm_and_perks(e.fields.get("perm", ""), e.fields.get("perks", ""))
         and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
+        and all(
+            e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
+            for key, minimum in (("bz_weapons", 2), ("bz_dpap", 1))
+        )
     }
     if not saved_players:
         errors.append(
             f"Missing GAUNTLET_BZ_SAVED on {source} with titan, war_club+pap_war_club (wc,pwc), "
-            "perks (su,mk), and weapons ac:2 and cr:0"
+            "perks (su,mk), weapons ac:2 and cr:0, bz_weapons>=2, and bz_dpap>=1"
         )
     for event_type, fields in (
         ("STAGE_CLEAR", {"map": source, "next_map": destination}),
@@ -135,6 +139,7 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
             **{"class": "titan", "war_club": "1", "pap_war_club": "1", "melee_slot": "war_club"},
         )
         and e.fields.get("player") in saved_players
+        and {"ac:2", "cr:0"} <= set(e.fields.get("weapons", "").split(","))
         and all(
             e.fields.get(key, "").isdecimal() and int(e.fields[key]) >= minimum
             for key, minimum in (("t1", 2), ("bz_weapons", 2), ("bz_dpap", 1))
@@ -143,7 +148,8 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
     ):
         errors.append(
             f"Missing GAUNTLET_BZ_RESTORED on {destination} with class=titan, t1>=2, "
-            "war_club=1, pap_war_club=1, melee_slot=war_club, bz_weapons>=2, bz_dpap>=1"
+            "war_club=1, pap_war_club=1, melee_slot=war_club, weapons ac:2 and cr:0, "
+            "bz_weapons>=2, bz_dpap>=1"
         )
     return events, errors
 
@@ -231,10 +237,19 @@ def analyze_visual_tour_result(
             group = [hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
             if all(group) and len(set(group)) == 1:
                 errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
-        for phases in (PORTAL_PHASES, STATION_MENU_PHASES):
-            group = [hashes.get(phase) for phase in phases]
-            if all(group) and len(set(group)) == 1:
-                errors.append(f"Visual tour appears frozen: {', '.join(phases)} match")
+        portal_group = [hashes.get(phase) for phase in PORTAL_PHASES]
+        if all(portal_group) and len(set(portal_group)) == 1:
+            errors.append(f"Visual tour appears frozen: {', '.join(PORTAL_PHASES)} match")
+        station_by_hash: dict[str, list[str]] = {}
+        for phase in STATION_MENU_PHASES:
+            digest = hashes.get(phase)
+            if digest:
+                station_by_hash.setdefault(digest, []).append(phase)
+        for duplicate_phases in station_by_hash.values():
+            if len(duplicate_phases) > 1:
+                errors.append(
+                    f"Visual tour appears frozen: duplicate station menu frames ({', '.join(duplicate_phases)})"
+                )
     return events, errors
 
 

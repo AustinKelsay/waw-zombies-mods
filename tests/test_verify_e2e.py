@@ -472,33 +472,23 @@ class TestReportingAndCLI(unittest.TestCase):
                     self.assertNotIn("--capture-visuals", seen["bz-coop"])
                     self.assertNotIn("--capture-visuals", seen["enhanced-gauntlet"])
 
-    def test_cli_only_selects_new_stages_and_forwards_path_overrides(self) -> None:
+    def test_cli_only_selects_new_stages_in_canonical_order(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fake_repo = _make_fake_repo(Path(tmp))
             seen: dict[str, tuple[str, ...]] = {}
-            path_args = [
-                "--tools-root", "/test/tools",
-                "--steam-root", "/test/steam",
-                "--dev-root", "/test/dev",
-                "--steam-game", "/test/steam/game files",
-                "--playtest-prefix", "/test/prefix",
-                "--proton", "/test/proton",
-            ]
 
             def fake_runner(stage: verify_e2e.StageSpec, cwd: Path) -> verify_e2e.CommandResult:
                 seen[stage.stage_id] = stage.args
                 return verify_e2e.CommandResult(exit_code=0)
 
             rc = verify_e2e.main(
-                ["--only", "bz-visual-tour", "enhanced-gauntlet", "bz-coop", *path_args],
+                ["--only", "bz-visual-tour", "enhanced-gauntlet", "bz-coop"],
                 repo_root=fake_repo,
                 runner=fake_runner,
                 stream=io.StringIO(),
             )
             self.assertEqual(rc, 0)
             self.assertEqual(list(seen), ["bz-coop", "enhanced-gauntlet", "bz-visual-tour"])
-            for args in seen.values():
-                self.assertEqual(args[-len(path_args):], tuple(path_args))
             self.assertEqual(
                 seen["bz-visual-tour"][4:6],
                 ("--capture-visuals", ".smoke_logs/bz_coop_and_visuals"),

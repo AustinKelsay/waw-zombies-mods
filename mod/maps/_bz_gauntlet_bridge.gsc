@@ -730,9 +730,20 @@ snapshot_player_bz_state( player, current_map )
 		perks_log = perks_str;
 	}
 	weapons_log = "none";
+	saved_weapons = 0;
+	saved_dpap = 0;
 	if ( weapons_str != "" )
 	{
 		weapons_log = weapons_str;
+		saved_records = parse_weapons_record( weapons_str );
+		saved_weapons = saved_records.size;
+		for ( i = 0; i < saved_records.size; i++ )
+		{
+			if ( saved_records[i].pap_tier >= 2 )
+			{
+				saved_dpap++;
+			}
+		}
 	}
 
 	fields = [];
@@ -741,6 +752,8 @@ snapshot_player_bz_state( player, current_map )
 	fields[2] = bz_log_kv( "perm", perm_log );
 	fields[3] = bz_log_kv( "perks", perks_log );
 	fields[4] = bz_log_kv( "weapons", weapons_log );
+	fields[5] = bz_log_kv( "bz_weapons", saved_weapons );
+	fields[6] = bz_log_kv( "bz_dpap", saved_dpap );
 	bz_log_emit( "GAUNTLET_BZ_SAVED", bz_log_join( fields ) );
 	return true;
 }
@@ -877,7 +890,6 @@ restore_player_bz_state( player, current_map )
 	{
 		return false;
 	}
-	player.gauntlet_bz_restored = true;
 
 	maps\_bz_hooks::bz_on_player_connect( player );
 	maps\_bz_state::bz_state_ensure_init( player );
@@ -1017,6 +1029,7 @@ restore_player_bz_state( player, current_map )
 		player.health = Int( player.maxhealth );
 	}
 	maps\_bz_stations::bz_stations_sync_player_ui( player );
+	player.gauntlet_bz_restored = true;
 
 	map_label = "";
 	if ( IsDefined( current_map ) )
@@ -1036,6 +1049,15 @@ restore_player_bz_state( player, current_map )
 	{
 		applied_melee = "knife";
 	}
+	applied_weapons_log = "none";
+	if ( bz_elements_enabled() )
+	{
+		applied_weapons_str = encode_weapons_record( player );
+		if ( applied_weapons_str != "" )
+		{
+			applied_weapons_log = applied_weapons_str;
+		}
+	}
 
 	fields = [];
 	fields[0] = bz_log_kv( "player", player_key );
@@ -1047,8 +1069,9 @@ restore_player_bz_state( player, current_map )
 	fields[6] = bz_log_kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
 	fields[7] = bz_log_kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
 	fields[8] = bz_log_kv( "melee_slot", applied_melee );
-	fields[9] = bz_log_kv( "bz_weapons", applied_loadout.weapons );
-	fields[10] = bz_log_kv( "bz_dpap", applied_loadout.dpap );
+	fields[9] = bz_log_kv( "weapons", applied_weapons_log );
+	fields[10] = bz_log_kv( "bz_weapons", applied_loadout.weapons );
+	fields[11] = bz_log_kv( "bz_dpap", applied_loadout.dpap );
 	bz_log_emit( "GAUNTLET_BZ_RESTORED", bz_log_join( fields ) );
 	return true;
 }

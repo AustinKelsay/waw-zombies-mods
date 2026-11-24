@@ -2238,7 +2238,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_xbox)
             self.assertIn("BZ_COOP_LOBBY_STATUS_PANEL", patched_sys)
 
-    def test_xboxlive_lobby_hides_online_count_when_enhancements_are_enabled(self) -> None:
+    def test_xboxlive_lobby_hides_online_count_and_keeps_build_stamp_visible_for_guests(self) -> None:
         from tests.test_gauntlet_hud_menus import SYNTHETIC_STOCK_XBOXLIVE_LOBBY_MENU
 
         lobby_count = (
@@ -2267,11 +2267,18 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         staged = self.vhm.patch_xboxlive_lobby_menu(stock)
         patched = self.bm.patch_xboxlive_lobby_menu_bz(staged)
 
-        self.assertIn(lobby_count.replace("visible 1", "visible when( dvarInt( bz_enabled ) != 1 );"), patched)
+        self.assertIn(lobby_count.replace("visible 1", "visible 0"), patched)
         self.assertIn(find_game_count, patched)
         self.assertEqual(self.vhm.validate_menu_braces(patched, filename="xboxlive_lobby.menu"), [])
         self.assertEqual(self.bm.patch_xboxlive_lobby_menu_bz(patched), patched)
         self.assertIn(find_game_count, self.bm.patch_xboxlive_lobby_menu_bz(staged.replace(lobby_count, "")))
+
+        bz_inc = (MOD_ROOT / "ui" / "bz_menus.inc").read_text(encoding="ascii")
+        build_item = re.search(r"name\s+bz_lobby_build_text\b.*?decoration", bz_inc, re.DOTALL)
+        self.assertIsNotNone(build_item)
+        assert build_item is not None
+        self.assertRegex(build_item.group(0), r"\bvisible\s+1\b")
+        self.assertNotIn("bz_enabled", build_item.group(0))
 
     def test_bz_hooks_cross_file_ref_budget_prevents_max_precache_entries(self) -> None:
         # Leave room for stock and Gauntlet scripts in WaW 1.7's 1,024-entry table.

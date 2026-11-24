@@ -70,11 +70,11 @@ class TestCoopAnalyzer(unittest.TestCase):
 GAUNTLET_LOG = """Loading fastfile 'mod'
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;run_id=run_10
 BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2
-BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-;weapons=ac:2,cr:0
+BZ_EVENT|GAUNTLET_BZ_SAVED|player=host;map=nazi_zombie_prototype;perm=titan|wc,pwc|war_club;perks=su,mk|-|-;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
 GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;next_map=nazi_zombie_asylum
 GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2
 GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;run_id=run_10
-BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;bz_weapons=2;bz_dpap=1
+BZ_EVENT|GAUNTLET_BZ_RESTORED|player=host;map=nazi_zombie_asylum;class=titan;t1=2;t2=0;apex=0;war_club=1;pap_war_club=1;melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1
 """
 
 
@@ -88,10 +88,12 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=none"), "GAUNTLET_BZ_SAVED"),
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|-|knife"), "GAUNTLET_BZ_SAVED"),
             (GAUNTLET_LOG.replace("perm=titan|wc,pwc|war_club", "perm=titan|wc|war_club"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("ac:2,cr:0", "ac:20,cr:0"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("ac:2,cr:0", "ac:2,cr:1"), "GAUNTLET_BZ_SAVED"),
-            (GAUNTLET_LOG.replace("bz_weapons=2", "bz_weapons=0"), "GAUNTLET_BZ_RESTORED"),
-            (GAUNTLET_LOG.replace("bz_dpap=1", "bz_dpap=0"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:20,cr:0;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("weapons=ac:2,cr:0;bz_weapons=2", "weapons=ac:2,cr:1;bz_weapons=2", 1), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace(";bz_weapons=2;bz_dpap=1\nGAUNTLET_EVENT|STAGE_CLEAR", "\nGAUNTLET_EVENT|STAGE_CLEAR"), "GAUNTLET_BZ_SAVED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0", "melee_slot=war_club;weapons=ac:0,cr:2"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=0"), "GAUNTLET_BZ_RESTORED"),
+            (GAUNTLET_LOG.replace("melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1", "melee_slot=war_club;weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=0"), "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("GAUNTLET_BZ_RESTORED|player=host", "GAUNTLET_BZ_RESTORED|player=guest"),
              "GAUNTLET_BZ_RESTORED"),
             (GAUNTLET_LOG.replace("t1=2", "t1=0"), "GAUNTLET_BZ_RESTORED"),
@@ -183,6 +185,7 @@ class TestVisualTourAnalyzer(unittest.TestCase):
     def test_rejects_frozen_portal_frames_or_station_menus_in_an_otherwise_moving_tour(self) -> None:
         for frozen_phases, expected in (
             (("portal_active", "portal_post"), "portal_active, portal_post"),
+            (("menu_perks", "menu_class"), "menu_perks, menu_class"),
             (
                 ("menu_perks", "menu_class", "menu_arsenal", "menu_pap"),
                 "menu_perks, menu_class, menu_arsenal, menu_pap",

@@ -549,6 +549,7 @@ monitor_player_score_cache( cache )
 				{
 					cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
 				}
+				cache.bz_sampled = true;
 			}
 		}
 		wait( 0.5 );
@@ -570,7 +571,8 @@ watch_player_disconnect()
 	cache.bz_perm = "";
 	cache.bz_perks = "";
 	cache.bz_weapons = "";
-	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	cache.bz_sampled = false;
+	if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
 	{
 		cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
 		cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
@@ -578,6 +580,7 @@ watch_player_disconnect()
 		{
 			cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
 		}
+		cache.bz_sampled = true;
 	}
 
 	self thread monitor_player_score_cache( cache );
@@ -599,7 +602,7 @@ watch_player_disconnect()
 		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
 		maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
-		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( cache.bz_sampled ) && cache.bz_sampled )
 		{
 			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks, cache.bz_weapons );
 		}

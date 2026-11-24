@@ -158,10 +158,10 @@
 	{ \
 		name			gauntlet_lobby_fresh_status \
 		type			ITEM_TYPE_TEXT \
-		rect			(px + 8) (py + 6) (pw - 16) (ph - 12) halign valign \
-		text			"ZOMBIE GAUNTLET - Cycle 1 Stage 1/4: Nacht der Untoten" \
+		rect			(px + 8) (py + 6) (pw - 16) 18 halign valign \
+		text			"ZOMBIE GAUNTLET - C1 S1/4: Nacht der Untoten" \
 		textfont		UI_FONT_NORMAL \
-		textscale		0.28 \
+		textscale		0.24 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		GAUNTLET_COLOR_GOLD \

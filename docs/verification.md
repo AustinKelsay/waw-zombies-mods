@@ -29,6 +29,8 @@ python3 scripts/verify_e2e.py --offline-only
 | `python3 scripts/verify_e2e.py --list-stages` | Print all configured gate stages, commands, and script presence, then exit `0`. |
 | `python3 scripts/verify_e2e.py --skip-build` | Skip `build-deploy` and reuse already-built `dist/waw_gauntlet/` artifacts. |
 | `python3 scripts/verify_e2e.py --only solo-cycle1 solo-cycle2` | Run only the named stage IDs (always executed in canonical gate order). |
+| `python3 scripts/verify_e2e.py --include-visual-tour` | Append the optional 14th stage (`bz-visual-tour`, 4-map screenshot capture; requires ImageMagick `import`). |
+| `python3 scripts/verify_e2e.py --visual-out-dir /tmp/bz_visuals --include-visual-tour` | Redirect visual tour PNG captures and manifest output (default: `.smoke_logs/bz_coop_and_visuals`). |
 | `python3 scripts/verify_e2e.py --continue-on-error` | Keep running remaining stages after a failure so every broken scenario surfaces in one pass (still exits `1`). |
 | `python3 scripts/verify_e2e.py --allow-missing-scripts` | Mark not-yet-merged stage scripts as `SKIPPED` instead of failing strict gate mode. |
 | `python3 scripts/verify_e2e.py --json-report .smoke_logs/e2e_report.json` | Emit a structured JSON summary with timestamps, durations, exit codes, and diagnostics. |
@@ -53,6 +55,9 @@ python3 scripts/verify_e2e.py --offline-only
 | 9 | `perk-carryover` | `python3 scripts/verify_perks.py --skip-build` | Cross-map Perk Carryover (Der Riese → Cycle 2 Nacht der Untoten with Juggernog `160` HP and stock perk HUD icons) plus Classic Mode isolation. | ADR-0004 |
 | 10 | `base-zombies-p1` | `python3 scripts/verify_base_zombies_p1.py --skip-build` | Der Riese Base Zombies Phase 1 live self-test (4 Stations, Perks + Tier 2 + Apex, 6 Classes, Pack-a-Punch Expansion, down-reset persistence boundary, HUD cleanup) plus Classic Mode (`bz_enabled 0`) isolation. | Issue #18 (P1-T7) |
 | 11 | `base-zombies-p2` | `python3 scripts/verify_base_zombies_p2.py --skip-build` | Der Riese Base Zombies Phase 2 live self-test (4 zero-FX cloned primaries in Mystery Box + Arsenal + Mule Kick II 4-slot, Wunderwaffe DG-2 Juggernog/Titan 440 HP fix & 3.5s stun, Enhanced Flamethrower melt + % burn DOT, Acid Sprayer slow + 1.5x brittle, Cryo Cannon freeze + 2.5x shatter, War Club Bowie swap + PaP AOE smash, Multi-Crossbow 3 sticky bolts, Blade Boomerang flight/return, Portal Grenade spawn warp & zombie exclusion) plus Classic Mode (`bz_enabled 0`, `bz_elements_enabled 0`) isolation. | Issue #27 (P2-T5) |
+| 12 | `bz-coop` | `python3 scripts/verify_bz_coop_and_visuals.py --skip-build --mode coop` | Base Zombies Co-op self-test on Der Riese (build parity telemetry, native Pack-a-Punch console Double PaP, Hellhound scaling/floor checks; requires `xdotool` or `python-xlib`). | Issues #45, #53 |
+| 13 | `enhanced-gauntlet` | `python3 scripts/verify_bz_coop_and_visuals.py --skip-build --mode enhanced-gauntlet` | Enhanced Gauntlet stage handoff from Nacht der Untoten to Verrückt verifying Class, War Club + PaP War Club, Perks, and `bz_*` Elemental Weapons + PaP tier carryover. | Issues #51, #53 |
+| 14 | `bz-visual-tour` *(optional)* | `python3 scripts/verify_bz_coop_and_visuals.py --skip-build --mode visual-tour --capture-visuals <dir>` | Optional 4-map visual tour (36 PNGs: stations, Elemental Weapons, native PaP II, War Club smash, Portal Grenade, and all 4 open Station menus; enabled via `--include-visual-tour` or `--only bz-visual-tour`; requires ImageMagick `import`). | Issues #52, #53 |
 
 ---
 

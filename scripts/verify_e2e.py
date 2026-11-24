@@ -26,8 +26,6 @@ OUTPUT_TAIL_MAX_LINES = 40
 OUTPUT_TAIL_MAX_CHARS = 4000
 BZ_COOP_VISUALS_SCRIPT = "scripts/verify_bz_coop_and_visuals.py"
 DEFAULT_VISUAL_OUT_DIR = Path(".smoke_logs/bz_coop_and_visuals")
-BUILD_PATH_OPTIONS = ("tools_root", "steam_root", "dev_root", "steam_game")
-ENGINE_PATH_OPTIONS = (*BUILD_PATH_OPTIONS, "playtest_prefix", "proton")
 
 
 @dataclass(frozen=True)
@@ -97,12 +95,6 @@ class GateConfig:
     python_executable: str = sys.executable
     include_visual_tour: bool = False
     visual_out_dir: Path = DEFAULT_VISUAL_OUT_DIR
-    tools_root: Path | None = None
-    steam_root: Path | None = None
-    dev_root: Path | None = None
-    steam_game: Path | None = None
-    playtest_prefix: Path | None = None
-    proton: Path | None = None
 
 
 @dataclass
@@ -365,20 +357,9 @@ def _tail_output(output: str) -> str:
 
 
 def _configure_stage(stage: StageSpec, config: GateConfig) -> StageSpec:
-    extra_args: list[str] = []
     if stage.stage_id == "bz-visual-tour":
-        extra_args.extend(("--capture-visuals", str(config.visual_out_dir)))
-
-    path_options = {
-        "build": BUILD_PATH_OPTIONS,
-        "engine": ENGINE_PATH_OPTIONS,
-    }.get(stage.category, ())
-    for option in path_options:
-        path = getattr(config, option)
-        if path is not None:
-            extra_args.extend(("--" + option.replace("_", "-"), str(path)))
-
-    return replace(stage, args=(*stage.args, *extra_args)) if extra_args else stage
+        return replace(stage, args=(*stage.args, "--capture-visuals", str(config.visual_out_dir)))
+    return stage
 
 
 def plan_stages(
@@ -743,14 +724,6 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=f"Write visual tour captures to PATH (default: {DEFAULT_VISUAL_OUT_DIR}).",
     )
-    for option in ENGINE_PATH_OPTIONS:
-        scope = "build and engine stages" if option in BUILD_PATH_OPTIONS else "engine stages"
-        parser.add_argument(
-            "--" + option.replace("_", "-"),
-            type=Path,
-            metavar="PATH",
-            help=f"Override the {option.replace('_', ' ')} path for {scope}.",
-        )
     parser.add_argument(
         "--continue-on-error",
         action="store_true",
@@ -803,7 +776,6 @@ def main(
         python_executable=sys.executable,
         include_visual_tour=args.include_visual_tour,
         visual_out_dir=args.visual_out_dir,
-        **{option: getattr(args, option) for option in ENGINE_PATH_OPTIONS},
     )
 
     try:

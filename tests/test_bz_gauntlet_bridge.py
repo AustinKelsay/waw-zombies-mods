@@ -42,9 +42,13 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
         runtime.call(BZ_HOOKS_MOD, "bz_on_player_connect", player)
         return player
 
-    def assert_restored_counts(self, runtime: PapGscRuntime, weapons: int, dpap: int) -> None:
+    def assert_restored_counts(
+        self, runtime: PapGscRuntime, weapons: int, dpap: int, weapons_record: str | None = None
+    ) -> None:
         events = [event for event in runtime.emitted_events if event.startswith("BZ_EVENT|GAUNTLET_BZ_RESTORED|")]
         self.assertEqual(len(events), 1)
+        if weapons_record is not None:
+            self.assertIn(f";weapons={weapons_record};", events[0])
         self.assertTrue(events[0].endswith(f";bz_weapons={weapons};bz_dpap={dpap}"), events[0])
 
     def test_encode_and_parse_all_four_primaries_with_all_tiers(self) -> None:
@@ -127,7 +131,13 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                     self.assertTrue(result.get_field("ok"))
                 source.call(GAUNTLET_MODE_MOD, "snapshot_all_players_points", NACHT)
                 self.assertEqual(dvars.get(LEDGER), "g_1=ac:2,cr:0")
-                self.assertTrue(any(event.endswith(";weapons=ac:2,cr:0") for event in source.emitted_events))
+                self.assertTrue(
+                    any(
+                        event.endswith(";weapons=ac:2,cr:0;bz_weapons=2;bz_dpap=1")
+                        for event in source.emitted_events
+                    ),
+                    source.emitted_events,
+                )
 
                 destination = self.make_stage(dvars, VERRUCKT)
                 returning = self.add_player(destination)
@@ -141,7 +151,7 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 self.assertTrue(returning.get_field("bz_single_pap_weapons")[ACID])
                 self.assertTrue(returning.get_field("bz_pap_weapons")[ACID])
                 self.assertEqual(destination.call(BRIDGE_MOD, "encode_weapons_record", returning), "ac:2,cr:0")
-                self.assert_restored_counts(destination, 2, 1)
+                self.assert_restored_counts(destination, 2, 1, "ac:2,cr:0")
 
     def test_mule_kick_tiers_set_restore_cap_and_telemetry_counts_applied_weapons(self) -> None:
         for perks, expected in (
@@ -218,4 +228,43 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
         dvars.set("bz_elements_enabled", "0")
         runtime.call(BRIDGE_MOD, "save_all_players_bz_state", NACHT)
         self.assertEqual(dvars.get(LEDGER), "")
-        self.assertTrue(runtime.emitted_events[-1].endswith(";weapons=none"))
+        self.assertTrue(runtime.emitted_events[-1].endswith(";weapons=none;bz_weapons=0;bz_dpap=0"))
+
+    def test_disconnect_before_restore_preserves_ledgers_and_after_restore_checkpoints(self) -> None:
+        class DisconnectRuntime(PapGscRuntime):
+            def _exec_method(self, receiver, method, args, line):
+                if method == "waittill" and args == ["disconnect"]:
+                    self._current_self = UNDEFINED
+                    return UNDEFINED
+                return super()._exec_method(receiver, method, args, line)
+
+        dvars = _make_enhanced_dvars()
+        dvars.set("gauntlet_bz_perm", "g_7=titan|wc,pwc|war_club")
+        dvars.set("gauntlet_bz_perks", "g_7=su,mk|-|-")
+        dvars.set(LEDGER, "g_7=ac:2,cr:0")
+
+        runtime = DisconnectRuntime(MOD_ROOT, dvars)
+        runtime.level.set_field("script", VERRUCKT)
+        runtime.call(BZ_HOOKS_MOD, "bz_init")
+
+        guest = PapFakeEntity("Guest", ent_num=1)
+        guest.set_field("guid", "7")
+        guest.set_field("sessionstate", "spectator")
+        guest.set_field("score", 0)
+        runtime.players.append(guest)
+
+        # Disconnect while still loading before restore must preserve all BZ ledgers.
+        runtime.call_on(guest, GAUNTLET_MODE_MOD, "watch_player_disconnect")
+        self.assertEqual(dvars.get("gauntlet_bz_perm"), "g_7=titan|wc,pwc|war_club")
+        self.assertEqual(dvars.get("gauntlet_bz_perks"), "g_7=su,mk|-|-")
+        self.assertEqual(dvars.get(LEDGER), "g_7=ac:2,cr:0")
+
+        # After spawning and restoring, a subsequent disconnect checkpoints current state.
+        guest.set_field("sessionstate", "playing")
+        guest.set_field("initialized", True)
+        guest.give_weapon("colt", make_current=True)
+        runtime.call(BRIDGE_MOD, "restore_player_bz_state", guest, VERRUCKT)
+        self.assertTrue(guest.get_field("gauntlet_bz_restored"))
+        guest.weapons.discard(CRYO)
+        runtime.call_on(guest, GAUNTLET_MODE_MOD, "watch_player_disconnect")
+        self.assertEqual(dvars.get(LEDGER), "g_7=ac:2")

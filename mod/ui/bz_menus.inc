@@ -54,7 +54,8 @@
 #define BZ_COOP_SETUP_TOGGLE( itemIndex ) \
 	CHOICE_DVARFLOATLIST_VIS( itemIndex, "ENHANCEMENTS", bz_enabled, { "Off (Classic)" 0 "Base Zombies" 1 }, BZ_COOP_TOGGLE_ACTION, 1 )
 
-// Single-map Enhancements status and the local build ID for both Co-op modes.
+// Single-map Enhancements status and the local build ID for all Co-op lobbies
+// (visible to both hosts and clean-profile guests regardless of local bz_enabled).
 #define BZ_COOP_LOBBY_STATUS_PANEL( px, py, pw, ph, halign, valign ) \
 	itemDef \
 	{ \
@@ -94,7 +95,7 @@
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
 		textalign		ITEM_ALIGN_TOP_LEFT \
 		forecolor		BZ_COLOR_SUBTEXT \
-		visible			when( dvarInt( bz_enabled ) == 1 ); \
+		visible			1 \
 		decoration \
 	}
 

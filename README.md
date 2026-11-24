@@ -14,7 +14,7 @@ See [GLOSSARY.md](GLOSSARY.md) for canonical terminology and [docs/adr/](docs/ad
   - `~/Games/waw-zombies-dev/game` (Mod Tools + `bin/linker_pc.exe`)
   - `~/Games/waw-zombies-dev/compatdata` (linker/converter Proton prefix)
   - `~/Games/waw-zombies-dev/playtest` (isolated CoD:WaW playtest Proton prefix with an initialized profile)
-- **Headless X11 tooling** for automated verification: `Xvfb` and `xfwm4` (`python3` standard library only; no extra pip packages required).
+- **Headless X11 tooling** for automated verification: `Xvfb`, `xfwm4`, and `xdotool` (or `python-xlib`) for the default 13-stage E2E gate (`bz-coop` / `enhanced-gauntlet`), plus ImageMagick's `import` when running the optional `--include-visual-tour` / `bz-visual-tour` screenshot stage (`python3` standard library otherwise; no extra pip packages required).
 
 Environment overrides supported by `scripts/open_tool.sh`, `scripts/build_mod.py`, and `scripts/smoke_verify.py`:
 `WAW_STEAM_ROOT`, `WAW_DEV_ROOT`, `WAW_PROTON`.
@@ -49,10 +49,16 @@ Per-map engine console logs are saved under `.smoke_logs/` (gitignored). The com
 
 ### 3. Full end-to-end verification gate
 
-Run the complete quality gate (offline contract tests, `mod.ff` + `waw_gauntlet.iwd` build/deploy, Classic & Gauntlet 4-map smoke, Solo Cycle 1/2+, Co-op transition, team wipe, and HUD/menu checks):
+Run the complete 13-stage default quality gate (offline contract tests, `mod.ff` + `waw_gauntlet.iwd` build/deploy, Classic & Gauntlet 4-map smoke, Solo Cycle 1/2+, Co-op transition, team wipe, HUD/menu checks, Perk Carryover, Base Zombies Phase 1 & Phase 2, Base Zombies Co-op self-test, and Enhanced Gauntlet carryover):
 
 ```sh
 python3 scripts/verify_e2e.py
+```
+
+Add `--include-visual-tour` (requires ImageMagick `import`) to also run the optional 14th stage capturing the 4-map visual tour:
+
+```sh
+python3 scripts/verify_e2e.py --include-visual-tour
 ```
 
 On dev laptops without Steam/Proton/WaW, run the offline suite only:
@@ -61,7 +67,7 @@ On dev laptops without Steam/Proton/WaW, run the offline suite only:
 python3 scripts/verify_e2e.py --offline-only
 ```
 
-See [docs/verification.md](docs/verification.md) for stage details, flags (`--skip-build`, `--only`, `--continue-on-error`, `--json-report`), log locations, and `plebdev-ultra` troubleshooting.
+See [docs/verification.md](docs/verification.md) for stage details, flags (`--skip-build`, `--only`, `--include-visual-tour`, `--visual-out-dir`, `--continue-on-error`, `--json-report`), log locations, and `plebdev-ultra` troubleshooting.
 
 ### 4. Manual Steam launch
 
