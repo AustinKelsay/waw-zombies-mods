@@ -3,7 +3,8 @@
 //   - Specialty Perk Station (`perks` -> `bz_station_perks`)
 //   - Class Altar (`class` -> `bz_station_class`)
 //   - Arsenal & Squad Station (`arsenal` -> `bz_station_arsenal`)
-//   - Pack-a-Punch Station (`pap` -> `bz_station_pap`, paired beside native PaP on Der Riese)
+//   - Pack-a-Punch Station (`pap` -> `bz_station_pap` on Nacht, Verruckt, and Shi No Numa;
+//     Der Riese integrates Double PaP + scripted bz_* Tier 1 directly into native PaP)
 //
 // Zero extra FX or model assets required (stays safely within Der Riese's 400-FX cap).
 // Strictly WaW 1.7 GSC compliant:
@@ -137,12 +138,14 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_factory" )
 	{
-		// Der Riese: courtyard / mainframe hub + paired Double PaP beside native PaP alcove
+		// Der Riese: 3 BSP-verified courtyard perimeter stations out of the center training lane.
+		// No duplicate 4th standalone PaP station: Double PaP & scripted bz_* Tier 1 live inside
+		// Der Riese's real native Pack-a-Punch console (vending_pack_a_punch).
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( -240, -220, 64 ),
+			( -310, -240, 20 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -151,7 +154,7 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 120, -220, 32 ),
+			( 230, -200, 20 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -160,18 +163,9 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 210, 90, 64 ),
+			( 180, 120, 20 ),
 			( 0, 225, 0 ),
 			false,
-			false
-		);
-		specs[3] = bz_make_station_spec(
-			"pap",
-			"Double Pack-a-Punch Station",
-			"Press &&1 to open Double Pack-a-Punch Station",
-			( -130, -490, 64 ),
-			( 0, 90, 0 ),
-			true,
 			false
 		);
 		return specs;
@@ -244,7 +238,7 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 1060, 370, 96 ),
+			( 1060, 310, 96 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -286,8 +280,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 10020, 410, -492 ),
-			( 0, 0, 0 ),
+			( 10150, 610, -492 ),
+			( 0, 270, 0 ),
 			false,
 			false
 		);
@@ -444,7 +438,7 @@ bz_stations_get_model_for_station( map_name, station_id )
 		}
 		if ( sid == "class" )
 		{
-			return "zombie_zapper_tesla_coil";
+			return "zombie_vending_revive_on";
 		}
 		if ( sid == "arsenal" )
 		{
@@ -537,6 +531,8 @@ bz_stations_spawn_one( map_name, spec )
 		vis = Spawn( "script_model", pos );
 		vis.angles = spec.angles;
 		vis SetModel( model_name );
+		vis SetContents( 0 );
+		vis NotSolid();
 		vis.bz_station_id = spec.id;
 	}
 

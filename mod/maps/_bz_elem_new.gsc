@@ -103,17 +103,11 @@ bz_elem_new_resolve_acid_fx()
 bz_elem_new_resolve_cryo_fx()
 {
 	bz_elem_new_ensure_level_tables();
-	map_name = maps\_bz_hooks::bz_get_map_name();
 	res = SpawnStruct();
 
-	// Freeze aura/burst: Der Riese prefers zombie_mainframe_steam -> tesla_shock_secondary -> all-4-map cached fallback.
-	if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["zombie_mainframe_steam"] ) )
-	{
-		res.freeze_fx = level._effect["zombie_mainframe_steam"];
-		res.freeze_fx_path = "maps/zombie/fx_zombie_mainframe_steam";
-		res.freeze_fx_source = "level_effect:zombie_mainframe_steam";
-	}
-	else if ( IsDefined( level._effect ) && IsDefined( level._effect["tesla_shock_secondary"] ) )
+	// Freeze burst: prefer finite blue-white frost arcs (Sumpf/Der Riese) ->
+	// all-4-map cached short electrical burst. Never use roaring steam clouds.
+	if ( IsDefined( level._effect ) && IsDefined( level._effect["tesla_shock_secondary"] ) )
 	{
 		res.freeze_fx = level._effect["tesla_shock_secondary"];
 		res.freeze_fx_path = "maps/zombie/fx_zombie_tesla_shock_secondary";
@@ -126,27 +120,37 @@ bz_elem_new_resolve_cryo_fx()
 		res.freeze_fx_source = "stock_fallback";
 	}
 
-	// Shatter burst: Der Riese prefers tesla_shock_secondary -> zombie_mainframe_steam -> all-4-map cached water/ice burst.
-	if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["tesla_shock_secondary"] ) )
+	// Crisp 0.8s ice spray played on Cryo impact and shatter across all 4 maps.
+	res.spray_fx = bz_elem_new_get_cached_fx( "bio/player/fx_footstep_water" );
+	res.spray_fx_path = "bio/player/fx_footstep_water";
+	res.spray_fx_source = "stock_fallback";
+
+	// Shatter burst: prefer 0.4s shockwave ring -> cached ice spray -> cached short arc.
+	if ( IsDefined( level._effect ) && IsDefined( level._effect["powerup_grabbed_wave"] ) )
 	{
-		res.shatter_fx = level._effect["tesla_shock_secondary"];
-		res.shatter_fx_path = "maps/zombie/fx_zombie_tesla_shock_secondary";
-		res.shatter_fx_source = "level_effect:tesla_shock_secondary";
+		res.shatter_fx = level._effect["powerup_grabbed_wave"];
+		res.shatter_fx_path = "misc/fx_zombie_powerup_wave";
+		res.shatter_fx_source = "level_effect:powerup_grabbed_wave";
 	}
-	else if ( map_name == "nazi_zombie_factory" && IsDefined( level._effect ) && IsDefined( level._effect["zombie_mainframe_steam"] ) )
+	else if ( IsDefined( res.spray_fx ) )
 	{
-		res.shatter_fx = level._effect["zombie_mainframe_steam"];
-		res.shatter_fx_path = "maps/zombie/fx_zombie_mainframe_steam";
-		res.shatter_fx_source = "level_effect:zombie_mainframe_steam";
+		res.shatter_fx = res.spray_fx;
+		res.shatter_fx_path = "bio/player/fx_footstep_water";
+		res.shatter_fx_source = "stock_fallback";
 	}
 	else
 	{
-		res.shatter_fx = bz_elem_new_get_cached_fx( "bio/player/fx_footstep_water" );
-		res.shatter_fx_path = "bio/player/fx_footstep_water";
+		res.shatter_fx = bz_elem_new_get_cached_fx( "env/electrical/fx_elec_short_oneshot" );
+		res.shatter_fx_path = "env/electrical/fx_elec_short_oneshot";
 		res.shatter_fx_source = "stock_fallback";
 	}
 
 	return res;
+}
+
+bz_elem_new_is_hidden_spawning_dog( ent )
+{
+	return maps\_bz_hooks::bz_is_spawning_dog( ent );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +404,7 @@ bz_elem_new_cleanup_puddle( puddle )
 
 bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 {
-	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( puddle ) )
+	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( puddle ) || bz_elem_new_is_hidden_spawning_dog( zombie ) )
 	{
 		return;
 	}
@@ -441,7 +445,7 @@ bz_elem_new_tick_acid_puddle( puddle )
 		for ( i = 0; i < zombies.size; i++ )
 		{
 			z = zombies[i];
-			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
 			{
 				continue;
 			}
@@ -592,7 +596,7 @@ bz_elem_new_is_point_in_cryo_beam_or_cone( point, start, fwd, impact, cone_radiu
 
 bz_elem_new_freeze_zombie( zombie, player, duration_sec, freeze_fx )
 {
-	if ( !IsDefined( zombie ) || !IsAlive( zombie ) )
+	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || bz_elem_new_is_hidden_spawning_dog( zombie ) )
 	{
 		return false;
 	}
@@ -689,9 +693,16 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 	duration = maps\_bz_rules::bz_get_cryo_freeze_duration();
 	cryo_fx = bz_elem_new_resolve_cryo_fx();
 
-	if ( IsDefined( cryo_fx.freeze_fx ) && IsDefined( trace_info.impact ) )
+	if ( IsDefined( trace_info.impact ) )
 	{
-		PlayFX( cryo_fx.freeze_fx, trace_info.impact );
+		if ( IsDefined( cryo_fx.freeze_fx ) )
+		{
+			PlayFX( cryo_fx.freeze_fx, trace_info.impact );
+		}
+		if ( IsDefined( cryo_fx.spray_fx ) )
+		{
+			PlayFX( cryo_fx.spray_fx, trace_info.impact );
+		}
 	}
 
 	frozen_count = 0;
@@ -701,7 +712,7 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 		for ( i = 0; i < zombies.size; i++ )
 		{
 			z = zombies[i];
-			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
 			{
 				continue;
 			}
@@ -804,7 +815,7 @@ bz_elem_new_watch_cryo_thaw()
 // Lifecycle Hooks (Synchronous - Zero endon() Allowed Here)
 // ---------------------------------------------------------------------------
 
-// Pre-loads the 4 verified all-4-map fallback stock FX handles strictly during pre_init
+// Pre-loads the 5 verified all-4-map fallback stock FX handles strictly during pre_init
 // (before first wait / maps\_load::main()) so runtime firing and shatter never call LoadFX()
 // post-wait (WaW 1.7 engine requirement, 0 added FX slots).
 bz_elem_new_on_pre_init()
@@ -829,6 +840,10 @@ bz_elem_new_on_pre_init()
 	if ( !IsDefined( level.bz_elem_new_fx["bio/player/fx_footstep_water"] ) )
 	{
 		level.bz_elem_new_fx["bio/player/fx_footstep_water"] = LoadFX( "bio/player/fx_footstep_water" );
+	}
+	if ( !IsDefined( level.bz_elem_new_fx["misc/fx_zombie_bloodsplat"] ) )
+	{
+		level.bz_elem_new_fx["misc/fx_zombie_bloodsplat"] = LoadFX( "misc/fx_zombie_bloodsplat" );
 	}
 }
 
@@ -874,9 +889,16 @@ bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
 	{
 		shatter_pos = ( zombie.origin[0], zombie.origin[1], zombie.origin[2] + 36 );
 	}
-	if ( IsDefined( cryo_fx.shatter_fx ) && IsDefined( shatter_pos ) )
+	if ( IsDefined( shatter_pos ) )
 	{
-		PlayFX( cryo_fx.shatter_fx, shatter_pos );
+		if ( IsDefined( cryo_fx.shatter_fx ) )
+		{
+			PlayFX( cryo_fx.shatter_fx, shatter_pos );
+		}
+		if ( IsDefined( cryo_fx.spray_fx ) && ( !IsDefined( cryo_fx.shatter_fx ) || cryo_fx.shatter_fx != cryo_fx.spray_fx ) )
+		{
+			PlayFX( cryo_fx.spray_fx, shatter_pos );
+		}
 	}
 
 	weap_lbl = maps\_bz_rules::bz_normalize_id( weapon );

@@ -164,24 +164,24 @@ bz_special_get_round_zombie_health( round_num )
 	return maps\_bz_rules::bz_estimate_round_zombie_health( round_num );
 }
 
+bz_special_is_hidden_spawning_dog( ent )
+{
+	return maps\_bz_hooks::bz_is_spawning_dog( ent );
+}
+
 bz_special_resolve_stock_fx( kind )
 {
-	if ( !IsDefined( level._effect ) )
-	{
-		return undefined;
-	}
-
 	if ( kind == "war_club" )
 	{
-		if ( IsDefined( level._effect["rise_burst"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["rise_burst"] ) )
 		{
 			return level._effect["rise_burst"];
 		}
-		if ( IsDefined( level._effect["large_ceiling_dust"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["large_ceiling_dust"] ) )
 		{
 			return level._effect["large_ceiling_dust"];
 		}
-		if ( IsDefined( level._effect["rise_billow"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["rise_billow"] ) )
 		{
 			return level._effect["rise_billow"];
 		}
@@ -190,28 +190,55 @@ bz_special_resolve_stock_fx( kind )
 
 	if ( kind == "crossbow" )
 	{
-		if ( IsDefined( level._effect["betty_explode"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["betty_explode"] ) )
 		{
 			return level._effect["betty_explode"];
 		}
-		if ( IsDefined( level._effect["mini_nuke"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["molotov_exp"] ) )
 		{
-			return level._effect["mini_nuke"];
+			return level._effect["molotov_exp"];
 		}
-		if ( IsDefined( level._effect["rise_burst"] ) )
+		ray_fx = maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
+		if ( IsDefined( ray_fx ) )
+		{
+			return ray_fx;
+		}
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["rise_burst"] ) )
 		{
 			return level._effect["rise_burst"];
 		}
 		return undefined;
 	}
 
-	if ( kind == "boomerang" )
+	if ( kind == "boomerang" || kind == "boomerang_hit" )
 	{
-		if ( IsDefined( level._effect["wire_spark"] ) )
+		blood_fx = maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_zombie_bloodsplat" );
+		if ( IsDefined( blood_fx ) )
 		{
-			return level._effect["wire_spark"];
+			return blood_fx;
 		}
-		if ( IsDefined( level._effect["powerup_grabbed"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["flesh_hit"] ) )
+		{
+			return level._effect["flesh_hit"];
+		}
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["wire_sparks_oneshot"] ) )
+		{
+			return level._effect["wire_sparks_oneshot"];
+		}
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["powerup_grabbed"] ) )
+		{
+			return level._effect["powerup_grabbed"];
+		}
+		return maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
+	}
+
+	if ( kind == "boomerang_trail" )
+	{
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["wire_sparks_oneshot"] ) )
+		{
+			return level._effect["wire_sparks_oneshot"];
+		}
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["powerup_grabbed"] ) )
 		{
 			return level._effect["powerup_grabbed"];
 		}
@@ -220,19 +247,19 @@ bz_special_resolve_stock_fx( kind )
 
 	if ( kind == "portal" )
 	{
-		if ( IsDefined( level._effect["transporter_ambient"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["transporter_ambient"] ) )
 		{
 			return level._effect["transporter_ambient"];
 		}
-		if ( IsDefined( level._effect["powerup_on"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["powerup_on"] ) )
 		{
 			return level._effect["powerup_on"];
 		}
-		if ( IsDefined( level._effect["transporter_beam"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["transporter_beam"] ) )
 		{
 			return level._effect["transporter_beam"];
 		}
-		if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
+		if ( IsDefined( level._effect ) && IsDefined( level._effect["powerup_grabbed_wave"] ) )
 		{
 			return level._effect["powerup_grabbed_wave"];
 		}
@@ -300,7 +327,7 @@ bz_special_war_club_stagger_timer( stagger_sec, expected_until )
 
 bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 {
-	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( zombie.origin ) )
+	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( zombie.origin ) || maps\_bz_hooks::bz_is_dog_entity( zombie ) )
 	{
 		return false;
 	}
@@ -398,7 +425,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 		for ( i = 0; i < enemies.size; i++ )
 		{
 			z = enemies[i];
-			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_special_is_hidden_spawning_dog( z ) )
 			{
 				continue;
 			}
@@ -497,7 +524,6 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, "bz_multi_crossbow" );
 	round_num = bz_special_get_current_round();
 	max_range = 1600;
-	fuse_sec = 1.2;
 
 	bolts = [];
 	stuck_zombies = 0;
@@ -515,13 +541,50 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 		);
 
 		tr = BulletTrace( eye, trace_end, true, player );
-		land_pos = trace_end;
-		if ( IsDefined( tr ) && IsDefined( tr["position"] ) )
+		has_hit_ent = ( IsDefined( tr ) && IsDefined( tr["entity"] ) );
+		hit_frac = 1.0;
+		if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) )
 		{
-			land_pos = tr["position"];
+			hit_frac = tr["fraction"];
+		}
+		// Skip sky misses so bolts never hover and explode in empty air at 1600u.
+		if ( hit_frac >= 0.99 && !has_hit_ent )
+		{
+			continue;
 		}
 
-		bolt = Spawn( "script_model", land_pos );
+		impact_pos = trace_end;
+		if ( IsDefined( tr ) && IsDefined( tr["position"] ) )
+		{
+			impact_pos = tr["position"];
+		}
+
+		impact_dist = Distance( eye, impact_pos );
+		spawn_pos = eye;
+		if ( impact_dist > 28.0 )
+		{
+			spawn_pos = (
+				eye[0] + ( dir[0] * 24.0 ),
+				eye[1] + ( dir[1] * 24.0 ),
+				eye[2] + ( dir[2] * 24.0 )
+			);
+		}
+
+		travel_dist = Distance( spawn_pos, impact_pos );
+		travel_time = travel_dist / 2400.0;
+		if ( travel_time < 0.05 )
+		{
+			travel_time = 0.05;
+		}
+		if ( travel_time > 0.22 )
+		{
+			travel_time = 0.22;
+		}
+
+		// Staggered triple-bang cascade: 1.00s, 1.12s, 1.24s.
+		fuse_sec = 1.00 + ( bolts.size * 0.12 );
+
+		bolt = Spawn( "script_model", spawn_pos );
 		bolt.angles = bolt_angles;
 		bolt SetModel( "weapon_usa_kbar_knife" );
 		bolt SetContents( 0 );
@@ -529,20 +592,37 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 		bolt.bz_special_kind = "crossbow_bolt";
 		bolt.bz_owner = player;
 		bolt.bz_yaw_offset = yaw_offset;
+		bolt.bz_impact_pos = impact_pos;
+		bolt.bz_travel_time = travel_time;
 		bolt.bz_fuse_time = fuse_sec;
+		bolt.bz_arrived = false;
 		bolt.bz_detonated = false;
 		bolt.bz_is_double_pap = is_dpap;
 		bolt.bz_stuck_entity = undefined;
+		bolt.bz_stuck_z_offset = 0.0;
 		bolt.bz_stuck_type = "world";
 
-		if ( IsDefined( tr ) && IsDefined( tr["entity"] ) )
+		if ( has_hit_ent )
 		{
 			hit_ent = tr["entity"];
-			if ( IsDefined( hit_ent ) && !IsPlayer( hit_ent ) && IsAlive( hit_ent ) )
+			if ( IsDefined( hit_ent ) && !IsPlayer( hit_ent ) && IsAlive( hit_ent ) && !bz_special_is_hidden_spawning_dog( hit_ent ) )
 			{
 				bolt.bz_stuck_entity = hit_ent;
 				bolt.bz_stuck_type = "zombie";
-				bolt LinkTo( hit_ent );
+				z_off = 40.0;
+				if ( IsDefined( hit_ent.origin ) )
+				{
+					z_off = impact_pos[2] - hit_ent.origin[2];
+					if ( z_off < 24.0 )
+					{
+						z_off = 24.0;
+					}
+					if ( z_off > 56.0 )
+					{
+						z_off = 56.0;
+					}
+				}
+				bolt.bz_stuck_z_offset = z_off;
 				stuck_zombies++;
 			}
 			else
@@ -576,6 +656,65 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 	return res;
 }
 
+// Synchronous/testable bolt flight & stick helper (zero endon() inside; called from child thread).
+bz_special_crossbow_bolt_fly_and_stick( bolt )
+{
+	if ( !IsDefined( bolt ) || ( IsDefined( bolt.bz_special_deleted ) && bolt.bz_special_deleted ) )
+	{
+		return 0.0;
+	}
+
+	travel_time = 0.05;
+	if ( IsDefined( bolt.bz_travel_time ) && bolt.bz_travel_time > 0.0 )
+	{
+		travel_time = bolt.bz_travel_time;
+	}
+
+	dest = bolt.bz_impact_pos;
+	if ( IsDefined( bolt.bz_stuck_entity ) && IsAlive( bolt.bz_stuck_entity ) && IsDefined( bolt.bz_stuck_entity.origin ) )
+	{
+		z_off = 40.0;
+		if ( IsDefined( bolt.bz_stuck_z_offset ) && bolt.bz_stuck_z_offset > 0.0 )
+		{
+			z_off = bolt.bz_stuck_z_offset;
+		}
+		dest = (
+			bolt.bz_stuck_entity.origin[0],
+			bolt.bz_stuck_entity.origin[1],
+			bolt.bz_stuck_entity.origin[2] + z_off
+		);
+	}
+
+	if ( IsDefined( dest ) )
+	{
+		bolt MoveTo( dest, travel_time );
+		wait( travel_time );
+	}
+
+	if ( !IsDefined( bolt ) || ( IsDefined( bolt.bz_special_deleted ) && bolt.bz_special_deleted ) )
+	{
+		return travel_time;
+	}
+
+	bolt.bz_arrived = true;
+	if ( IsDefined( bolt.bz_stuck_entity ) && IsAlive( bolt.bz_stuck_entity ) && IsDefined( bolt.bz_stuck_entity.origin ) )
+	{
+		z_off = 40.0;
+		if ( IsDefined( bolt.bz_stuck_z_offset ) && bolt.bz_stuck_z_offset > 0.0 )
+		{
+			z_off = bolt.bz_stuck_z_offset;
+		}
+		bolt.origin = (
+			bolt.bz_stuck_entity.origin[0],
+			bolt.bz_stuck_entity.origin[1],
+			bolt.bz_stuck_entity.origin[2] + z_off
+		);
+		bolt LinkTo( bolt.bz_stuck_entity );
+	}
+
+	return travel_time;
+}
+
 bz_special_crossbow_bolt_fuse( bolt, is_double_pap, round_num )
 {
 	level endon( "end_game" );
@@ -585,12 +724,19 @@ bz_special_crossbow_bolt_fuse( bolt, is_double_pap, round_num )
 	}
 	bolt endon( "death" );
 
-	fuse = 1.2;
+	travel_time = bz_special_crossbow_bolt_fly_and_stick( bolt );
+
+	fuse = 1.00;
 	if ( IsDefined( bolt.bz_fuse_time ) && bolt.bz_fuse_time > 0.0 )
 	{
 		fuse = bolt.bz_fuse_time;
 	}
-	wait( fuse );
+	remaining_fuse = fuse - travel_time;
+	if ( remaining_fuse < 0.25 )
+	{
+		remaining_fuse = 0.25;
+	}
+	wait( remaining_fuse );
 
 	if ( IsDefined( bolt ) && ( !IsDefined( bolt.bz_detonated ) || !bolt.bz_detonated ) )
 	{
@@ -613,7 +759,20 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	center = bolt.origin;
 	if ( IsDefined( bolt.bz_stuck_entity ) && IsAlive( bolt.bz_stuck_entity ) && IsDefined( bolt.bz_stuck_entity.origin ) )
 	{
-		center = bolt.bz_stuck_entity.origin;
+		z_off = 40.0;
+		if ( IsDefined( bolt.bz_stuck_z_offset ) && bolt.bz_stuck_z_offset > 0.0 )
+		{
+			z_off = bolt.bz_stuck_z_offset;
+		}
+		center = (
+			bolt.bz_stuck_entity.origin[0],
+			bolt.bz_stuck_entity.origin[1],
+			bolt.bz_stuck_entity.origin[2] + z_off
+		);
+	}
+	else if ( IsDefined( bolt.bz_impact_pos ) && ( !IsDefined( bolt.bz_arrived ) || !bolt.bz_arrived ) )
+	{
+		center = bolt.bz_impact_pos;
 	}
 	if ( !IsDefined( center ) )
 	{
@@ -642,7 +801,7 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 		for ( i = 0; i < enemies.size; i++ )
 		{
 			z = enemies[i];
-			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_special_is_hidden_spawning_dog( z ) )
 			{
 				continue;
 			}
@@ -685,6 +844,7 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	}
 
 	bz_special_play_stock_fx( "crossbow", center );
+	PlaySoundAtPosition( "grenade_explode_default", center );
 	Earthquake( 0.25, 0.25, center, 192 );
 
 	// Emit telemetry BEFORE deleting bolt so bolt Delete() firing notify("death")
@@ -766,7 +926,7 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 			break;
 		}
 		z = enemies[i];
-		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_special_is_hidden_spawning_dog( z ) )
 		{
 			continue;
 		}

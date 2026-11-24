@@ -237,6 +237,11 @@ bz_pap_refresh_double_pap_ammo( player )
 
 bz_pap_apply_single_pap( player, weapon_name )
 {
+	return bz_pap_apply_single_pap_with_source( player, weapon_name, "" );
+}
+
+bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
+{
 	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
 		return "";
@@ -285,6 +290,10 @@ bz_pap_apply_single_pap( player, weapon_name )
 	fields[2] = maps\_bz_log::kv( "weapon", weap );
 	fields[3] = maps\_bz_log::kv( "upgraded", final_weap );
 	fields[4] = maps\_bz_log::kv( "mode", mode );
+	if ( IsDefined( console_source ) && console_source != "" )
+	{
+		fields[fields.size] = maps\_bz_log::kv( "console", console_source );
+	}
 	maps\_bz_log::emit( "PAP_SINGLE_UPGRADE", maps\_bz_log::join_fields( fields ) );
 
 	bz_pap_update_hud( player );
@@ -292,6 +301,11 @@ bz_pap_apply_single_pap( player, weapon_name )
 }
 
 bz_pap_apply_double_pap( player, weapon_name )
+{
+	return bz_pap_apply_double_pap_effect( player, weapon_name, "" );
+}
+
+bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 {
 	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
 	{
@@ -319,10 +333,264 @@ bz_pap_apply_double_pap( player, weapon_name )
 	fields[3] = maps\_bz_log::kv( "dmg_mult", dmg_mult );
 	fields[4] = maps\_bz_log::kv( "ammo_mult", ammo_mult );
 	fields[5] = maps\_bz_log::kv( "stock", target_stock );
+	if ( IsDefined( console_source ) && console_source != "" )
+	{
+		fields[fields.size] = maps\_bz_log::kv( "console", console_source );
+	}
 	maps\_bz_log::emit( "PAP_DOUBLE_UPGRADE", maps\_bz_log::join_fields( fields ) );
 
 	bz_pap_update_hud( player );
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Native Der Riese Pack-a-Punch Console Integration (POL-T4 #40)
+// Handles Double PaP (Level 2) and scripted Tier 1 PaP for bz_* / custom
+// primaries directly inside stock vending_upgrade(), leaving base stock
+// weapons 100% untouched on stock Der Riese intake/rollers/pickup.
+// ---------------------------------------------------------------------------
+
+bz_pap_get_single_pap_price()
+{
+	price = maps\_bz_rules::bz_get_pap_upgrade_price( "single_pap" );
+	if ( IsDefined( price ) && Int( price ) > 0 )
+	{
+		return Int( price );
+	}
+	return 5000;
+}
+
+bz_pap_has_native_upgrade_entry( weapon_name )
+{
+	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	if ( norm == "" || norm == "none" || bz_pap_is_native_upgraded_name( norm ) )
+	{
+		return false;
+	}
+	if ( IsDefined( level.zombie_include_weapons ) )
+	{
+		return IsDefined( level.zombie_include_weapons[norm] ) &&
+			IsDefined( level.zombie_include_weapons[norm + "_upgraded"] );
+	}
+	return bz_pap_resolve_native_upgrade( norm ) != "";
+}
+
+bz_pap_is_held_primary( player, weapon_name )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	if ( norm == "" || norm == "none" )
+	{
+		return false;
+	}
+	if ( IsSubStr( norm, "perk_bottle" ) ||
+		norm == "zombie_knuckle_crack" ||
+		norm == "mine_bouncing_betty" ||
+		norm == "stielhandgranate" ||
+		norm == "fraggrenade" ||
+		norm == "zombie_cymbal_monkey" ||
+		norm == "molotov" ||
+		norm == "syrette" ||
+		norm == "knife" ||
+		norm == "bowie_knife" )
+	{
+		return false;
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( IsDefined( primaries ) )
+	{
+		for ( i = 0; i < primaries.size; i++ )
+		{
+			if ( maps\_bz_rules::bz_normalize_id( primaries[i] ) == norm )
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bz_pap_play_console_deny( trigger )
+{
+	if ( IsDefined( trigger ) )
+	{
+		trigger PlaySound( "deny" );
+	}
+}
+
+bz_pap_play_console_upgrade_fx( trigger, perk_machine, packa_rollers )
+{
+	sound_org = undefined;
+	if ( IsDefined( trigger ) && IsDefined( trigger.origin ) )
+	{
+		sound_org = trigger.origin;
+	}
+	else if ( IsDefined( perk_machine ) && IsDefined( perk_machine.origin ) )
+	{
+		sound_org = perk_machine.origin;
+	}
+
+	if ( IsDefined( sound_org ) )
+	{
+		PlaySoundAtPosition( "bottle_dispense3d", sound_org );
+	}
+
+	if ( IsDefined( packa_rollers ) )
+	{
+		packa_rollers PlaySound( "packa_weap_ready" );
+	}
+	else if ( IsDefined( trigger ) )
+	{
+		trigger PlaySound( "packa_weap_ready" );
+	}
+
+	if ( IsDefined( level._effect ) && IsDefined( level._effect["packapunch_fx"] ) )
+	{
+		fx_org = sound_org;
+		if ( IsDefined( perk_machine ) && IsDefined( perk_machine.origin ) )
+		{
+			fx_org = perk_machine.origin;
+		}
+		if ( IsDefined( fx_org ) )
+		{
+			PlayFX( level._effect["packapunch_fx"], fx_org );
+		}
+	}
+}
+
+// Synchronous hook called from stock Der Riese vending_upgrade() right BEFORE
+// the stock zombie_include_weapons[*_upgraded] check.
+// Returns true when this console interaction was consumed (Double PaP, scripted
+// Tier 1 bz_* PaP, deny, or debounce), or false to fall through to stock PaP.
+bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine, packa_rollers )
+{
+	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) || !IsPlayer( player ) )
+	{
+		return false;
+	}
+
+	if ( IsDefined( trigger ) )
+	{
+		level.bz_native_pap_trigger = trigger;
+	}
+
+	bz_pap_ensure_player_tables( player );
+
+	weap = bz_pap_get_weapon_safe( player, current_weapon );
+	if ( weap == "" )
+	{
+		return false;
+	}
+
+	// Per-player debounce prevents holding Use from double-triggering Tier 1 -> Tier 2 or deny spam.
+	now = GetTime();
+	if ( IsDefined( player.bz_pap_console_next_ms ) && now < Int( player.bz_pap_console_next_ms ) )
+	{
+		return true;
+	}
+
+	has_native_upgrade = bz_pap_has_native_upgrade_entry( weap );
+	is_papped = bz_pap_is_weapon_papped( player, weap );
+
+	// Case A: Base stock native-upgradable weapon -> fall straight through to 100% stock Der Riese PaP.
+	if ( has_native_upgrade && !is_papped )
+	{
+		return false;
+	}
+
+	// Case D: Already Double Pack-a-Punched weapon -> play deny sound and consume cleanly.
+	if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weap ) )
+	{
+		player.bz_pap_console_next_ms = now + 750;
+		bz_pap_play_console_deny( trigger );
+		bz_pap_update_native_prompt_hud( player );
+		return true;
+	}
+
+	// Case B: Already PaP'd weapon (native *_upgraded OR scripted Tier 1) -> Double Pack-a-Punch.
+	if ( is_papped )
+	{
+		player.bz_pap_console_next_ms = now + 750;
+		dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
+		res = maps\_bz_state::bz_try_buy_pap_upgrade( player, "double_pap", weap, true );
+		if ( !IsDefined( res ) || !res.ok )
+		{
+			bz_pap_play_console_deny( trigger );
+			return true;
+		}
+
+		if ( IsDefined( res.cost ) && Int( res.cost ) > 0 && IsDefined( player.old_score ) )
+		{
+			player maps\_zombiemode_score::set_player_score_hud();
+		}
+
+		bz_pap_play_console_upgrade_fx( trigger, perk_machine, packa_rollers );
+		bz_pap_apply_double_pap_effect( player, weap, "native" );
+		maps\_bz_stations::bz_stations_sync_player_ui(
+			player,
+			"Purchased Double Pack-a-Punch (-" + dpap_cost + " pts)"
+		);
+		bz_pap_update_native_prompt_hud( player );
+		return true;
+	}
+
+	// Case C: Un-upgraded scripted-PaP primary weapon (e.g. bz_* cloned primaries or any held
+	// primary lacking a native *_upgraded asset) -> scripted Tier 1 PaP inside native console.
+	if ( bz_pap_is_held_primary( player, weap ) )
+	{
+		player.bz_pap_console_next_ms = now + 750;
+		spap_cost = bz_pap_get_single_pap_price();
+		score = maps\_bz_state::bz_state_get_score_safe( player );
+		if ( score < spap_cost )
+		{
+			bz_pap_play_console_deny( trigger );
+			return true;
+		}
+
+		player.score = score - spap_cost;
+		if ( IsDefined( player.old_score ) )
+		{
+			player maps\_zombiemode_score::set_player_score_hud();
+		}
+
+		bz_pap_play_console_upgrade_fx( trigger, perk_machine, packa_rollers );
+		bz_pap_apply_single_pap_with_source( player, weap, "native" );
+		maps\_bz_stations::bz_stations_sync_player_ui(
+			player,
+			"Purchased Pack-a-Punch (-" + spap_cost + " pts)"
+		);
+		bz_pap_update_native_prompt_hud( player );
+		return true;
+	}
+
+	// Non-primary / utility weapon (perk bottle, grenade, etc.): let stock continue cleanly.
+	return false;
+}
+
+// Synchronous post-pickup hook called from stock Der Riese wait_for_player_to_take()
+// right after GiveMaxAmmo / GiveWeapon so reserve ammo & HUD refresh immediately.
+bz_pap_on_native_weapon_taken( player, weapon_name )
+{
+	if ( !maps\_bz_hooks::bz_pap_enabled() || !bz_pap_ensure_player_tables( player ) )
+	{
+		return;
+	}
+
+	weap = bz_pap_get_weapon_safe( player, weapon_name );
+	if ( weap == "" )
+	{
+		return;
+	}
+
+	bz_pap_apply_reserve_ammo( player, weap );
+	bz_pap_update_hud( player );
+	bz_pap_update_native_prompt_hud( player );
+	maps\_bz_stations::bz_stations_sync_player_ui( player, undefined );
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +776,10 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 		{
 			enemy = enemies[i];
 			if ( !IsDefined( enemy ) || !IsAlive( enemy ) || !IsDefined( enemy.origin ) )
+			{
+				continue;
+			}
+			if ( maps\_bz_hooks::bz_is_spawning_dog( enemy ) )
 			{
 				continue;
 			}
@@ -730,6 +1002,231 @@ bz_pap_update_hud( player )
 	}
 }
 
+bz_pap_untrack_hud_elem( hud )
+{
+	if ( !IsDefined( hud ) || !IsDefined( level.bz_pap_hud_elems ) )
+	{
+		return;
+	}
+	for ( i = 0; i < level.bz_pap_hud_elems.size; i++ )
+	{
+		if ( IsDefined( level.bz_pap_hud_elems[i] ) && level.bz_pap_hud_elems[i] == hud )
+		{
+			level.bz_pap_hud_elems[i] = undefined;
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Co-op-Safe Per-Player Native Der Riese PaP Proximity Prompt HUD
+// Never mutates the shared trigger hint string for teammates.
+// ---------------------------------------------------------------------------
+
+bz_pap_is_native_console_unlocked()
+{
+	if ( IsDefined( level.bz_native_pap_unlocked ) && level.bz_native_pap_unlocked )
+	{
+		return true;
+	}
+	if ( IsDefined( level.flag ) && IsDefined( level.flag["Pack_A_Punch_on"] ) && level.flag["Pack_A_Punch_on"] )
+	{
+		level.bz_native_pap_unlocked = true;
+		return true;
+	}
+	return false;
+}
+
+bz_pap_get_native_console_origin()
+{
+	if ( IsDefined( level.bz_native_pap_trigger ) && IsDefined( level.bz_native_pap_trigger.origin ) )
+	{
+		return level.bz_native_pap_trigger.origin;
+	}
+
+	trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+	if ( IsDefined( trigs ) && trigs.size > 0 && IsDefined( trigs[0] ) && IsDefined( trigs[0].origin ) )
+	{
+		level.bz_native_pap_trigger = trigs[0];
+		return trigs[0].origin;
+	}
+
+	return ( -61, 577, 153 );
+}
+
+bz_pap_format_native_prompt_text( player, weapon_name )
+{
+	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	{
+		return "";
+	}
+	if ( maps\_bz_hooks::bz_get_map_name() != "nazi_zombie_factory" )
+	{
+		return "";
+	}
+	if ( !bz_pap_is_native_console_unlocked() )
+	{
+		return "";
+	}
+
+	weap = bz_pap_get_weapon_safe( player, weapon_name );
+	if ( weap == "" )
+	{
+		return "";
+	}
+
+	if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weap ) )
+	{
+		return "Weapon Already Double Pack-a-Punched (PAP II)";
+	}
+
+	if ( bz_pap_is_weapon_papped( player, weap ) )
+	{
+		dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
+		return "Press [F] for Double Pack-a-Punch [Cost: " + dpap_cost + "]";
+	}
+
+	if ( bz_pap_has_native_upgrade_entry( weap ) )
+	{
+		return "";
+	}
+
+	if ( bz_pap_is_held_primary( player, weap ) )
+	{
+		spap_cost = bz_pap_get_single_pap_price();
+		return "Press [F] for Pack-a-Punch [Cost: " + spap_cost + "]";
+	}
+
+	return "";
+}
+
+bz_pap_player_is_downed( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.is_in_laststand ) && player.is_in_laststand )
+	{
+		return true;
+	}
+	if ( IsDefined( player.in_last_stand ) && player.in_last_stand )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_pap_is_native_console_busy()
+{
+	trig = level.bz_native_pap_trigger;
+	if ( !IsDefined( trig ) )
+	{
+		trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+		if ( IsDefined( trigs ) && trigs.size > 0 && IsDefined( trigs[0] ) )
+		{
+			level.bz_native_pap_trigger = trigs[0];
+			trig = trigs[0];
+		}
+	}
+	if ( !IsDefined( trig ) )
+	{
+		return false;
+	}
+	if ( IsDefined( trig.bz_pap_stock_busy ) && trig.bz_pap_stock_busy )
+	{
+		return true;
+	}
+	if ( IsDefined( trig.bz_pap_busy ) && trig.bz_pap_busy )
+	{
+		return true;
+	}
+	if ( IsDefined( trig.pack_player ) )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_pap_hide_native_prompt_hud( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.bz_pap_prompt_hud ) )
+	{
+		return;
+	}
+	player.bz_pap_prompt_hud.alpha = 0;
+	player.bz_pap_prompt_text = "";
+}
+
+bz_pap_update_native_prompt_hud( player )
+{
+	if ( !maps\_bz_hooks::bz_pap_enabled() || !IsDefined( player ) )
+	{
+		bz_pap_hide_native_prompt_hud( player );
+		return;
+	}
+	if ( maps\_bz_hooks::bz_get_map_name() != "nazi_zombie_factory" )
+	{
+		bz_pap_hide_native_prompt_hud( player );
+		return;
+	}
+	if ( !IsAlive( player ) || bz_pap_player_is_downed( player ) || !IsDefined( player.origin ) || !bz_pap_is_native_console_unlocked() || bz_pap_is_native_console_busy() )
+	{
+		bz_pap_hide_native_prompt_hud( player );
+		return;
+	}
+
+	console_org = bz_pap_get_native_console_origin();
+	dz = player.origin[2] - console_org[2];
+	if ( dz < 0 )
+	{
+		dz = 0 - dz;
+	}
+	dist = Distance( player.origin, console_org );
+	if ( dz > 96 || dist > 110.0 )
+	{
+		bz_pap_hide_native_prompt_hud( player );
+		return;
+	}
+
+	text = bz_pap_format_native_prompt_text( player, "" );
+	if ( text == "" )
+	{
+		bz_pap_hide_native_prompt_hud( player );
+		return;
+	}
+
+	if ( !IsDefined( player.bz_pap_prompt_hud ) )
+	{
+		hud = NewClientHudElem( player );
+		hud.alignX = "center";
+		hud.alignY = "bottom";
+		hud.horzAlign = "center";
+		hud.vertAlign = "bottom";
+		hud.x = 0;
+		hud.y = -112;
+		hud.fontScale = 1.45;
+		hud.color = ( 1.0, 0.86, 0.35 );
+		hud.alpha = 0;
+		hud.sort = 11;
+		hud.hidewheninmenu = true;
+		hud.archived = false;
+		player.bz_pap_prompt_hud = hud;
+		player.bz_pap_prompt_text = "";
+		bz_pap_track_hud_elem( hud );
+	}
+
+	if ( !IsDefined( player.bz_pap_prompt_text ) || player.bz_pap_prompt_text != text )
+	{
+		player.bz_pap_prompt_hud SetText( text );
+		player.bz_pap_prompt_text = text;
+	}
+	player.bz_pap_prompt_hud.alpha = 1;
+}
+
 bz_pap_destroy_player_hud( player )
 {
 	if ( !IsDefined( player ) )
@@ -742,22 +1239,21 @@ bz_pap_destroy_player_hud( player )
 	{
 		hud = player.bz_pap_hud;
 		player.bz_pap_hud = undefined;
-
-		if ( IsDefined( level.bz_pap_hud_elems ) )
-		{
-			for ( i = 0; i < level.bz_pap_hud_elems.size; i++ )
-			{
-				if ( IsDefined( level.bz_pap_hud_elems[i] ) && level.bz_pap_hud_elems[i] == hud )
-				{
-					level.bz_pap_hud_elems[i] = undefined;
-				}
-			}
-		}
-
+		bz_pap_untrack_hud_elem( hud );
 		hud Destroy();
 		destroyed = true;
 	}
 	player.bz_pap_hud_text = undefined;
+
+	if ( IsDefined( player.bz_pap_prompt_hud ) )
+	{
+		phud = player.bz_pap_prompt_hud;
+		player.bz_pap_prompt_hud = undefined;
+		bz_pap_untrack_hud_elem( phud );
+		phud Destroy();
+		destroyed = true;
+	}
+	player.bz_pap_prompt_text = undefined;
 	return destroyed;
 }
 
@@ -809,6 +1305,40 @@ bz_pap_ensure_player_watchers( player )
 	player thread bz_pap_watch_weapon_switch();
 	player thread bz_pap_watch_max_ammo();
 	player thread bz_pap_watch_player_disconnect();
+	if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+	{
+		player thread bz_pap_watch_native_console_prompt();
+	}
+}
+
+bz_pap_watch_native_unlock()
+{
+	level endon( "end_game" );
+
+	if ( bz_pap_is_native_console_unlocked() )
+	{
+		return;
+	}
+
+	level waittill( "Pack_A_Punch_on" );
+	level.bz_native_pap_unlocked = true;
+}
+
+bz_pap_watch_native_console_prompt()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.15 );
+		if ( !maps\_bz_hooks::bz_pap_enabled() )
+		{
+			bz_pap_hide_native_prompt_hud( self );
+			continue;
+		}
+		bz_pap_update_native_prompt_hud( self );
+	}
 }
 
 bz_pap_watch_grenade_throws()
@@ -872,6 +1402,10 @@ bz_pap_watch_weapon_switch()
 		if ( maps\_bz_hooks::bz_pap_enabled() )
 		{
 			bz_pap_update_hud( self );
+			if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+			{
+				bz_pap_update_native_prompt_hud( self );
+			}
 		}
 	}
 }
@@ -913,6 +1447,14 @@ bz_pap_on_init()
 	{
 		level.bz_pap_hud_elems = [];
 	}
+	if ( maps\_bz_hooks::bz_get_map_name() == "nazi_zombie_factory" )
+	{
+		if ( !IsDefined( level.bz_pap_unlock_watcher_started ) || !level.bz_pap_unlock_watcher_started )
+		{
+			level.bz_pap_unlock_watcher_started = true;
+			level thread bz_pap_watch_native_unlock();
+		}
+	}
 }
 
 bz_pap_on_player_connect( player )
@@ -945,6 +1487,7 @@ bz_pap_on_player_downed( player )
 	}
 	// Strictly preserve Tier 1 PaP, Double PaP, PaP Knife, PaP Bowie, and PaP Cluster across downs.
 	bz_pap_ensure_player_tables( player );
+	bz_pap_hide_native_prompt_hud( player );
 	bz_pap_update_hud( player );
 }
 

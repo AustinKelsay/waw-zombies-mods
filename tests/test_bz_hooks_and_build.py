@@ -135,6 +135,7 @@ class FakeEntity(GscStruct):
         self.hint_string: str = ""
         self.cursor_hint: str = ""
         self.deleted: bool = False
+        self.not_solid: bool = False
 
     def give_perk(self, perk: str) -> None:
         self._perks.add(perk.lower())
@@ -676,6 +677,10 @@ class BzGscRuntime(GscRuntime):
                 receiver.contents = int(args[0])
                 return old
             return 1
+        if method == "notsolid":
+            if isinstance(receiver, FakeEntity):
+                receiver.not_solid = True
+            return UNDEFINED
         if method == "playerads":
             if isinstance(receiver, FakeEntity):
                 return float(receiver.__dict__.get("ads_fraction", 0.0))
@@ -1384,6 +1389,9 @@ class TestBzHooksAndComposition(unittest.TestCase):
             "bz_global_damage_ads_wrapper",
             "bz_recompute_player_speed",
             "bz_recompute_player_max_health",
+            "bz_is_dog_entity",
+            "bz_is_spawning_dog",
+            "bz_recompute_zombie_move_rate",
         }
         module = self.gsc.load_module(BZ_HOOKS_MOD)
         for fn_name in sync_funcs:
@@ -1394,6 +1402,99 @@ class TestBzHooksAndComposition(unittest.TestCase):
                 _ast_contains_method_call(fn_def.body, "endon"),
                 f"Forbidden endon() inside synchronous caller {fn_name}()",
             )
+
+    def test_hellhound_detection_and_move_rate_protection(self) -> None:
+        self._enable_all_phase1()
+        self.gsc.sim_time_ms = 5000
+
+        # Undefined and normal zombies are NOT dogs
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", UNDEFINED))
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", self.zombie))
+        self.assertFalse(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", self.zombie))
+
+        # Every canonical Hellhound marker is recognized
+        for field_name, field_val in (
+            ("animname", "zombie_dog"),
+            ("targetname", "zombie_dog"),
+            ("species", "dog"),
+            ("is_dog", True),
+        ):
+            dog = FakeEntity(f"dog_{field_name}", ent_num=60, is_player=False)
+            dog.set_field(field_name, field_val)
+            self.assertTrue(
+                self.gsc.call(BZ_HOOKS_MOD, "bz_is_dog_entity", dog),
+                f"Expected bz_is_dog_entity=True for {field_name}={field_val!r}",
+            )
+            self.assertFalse(
+                self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", dog),
+                f"Active dog ({field_name}) without spawn flags must not be spawning",
+            )
+
+        # Spawning dog during dog_spawn_fx() (ignoreall=True, not bz_stunned) -> skipped untouched
+        spawning_dog = FakeEntity("spawning_dog", ent_num=61, is_player=False)
+        spawning_dog.set_field("species", "dog")
+        spawning_dog.set_field("animname", "zombie_dog")
+        spawning_dog.set_field("ignoreall", True)
+        spawning_dog.set_field("moveplaybackrate", 1.0)
+        spawning_dog.set_field("bz_cryo_frozen_until", 9000)
+        spawning_dog.set_field("bz_is_frozen", True)
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", spawning_dog))
+
+        rate_spawning = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", spawning_dog)
+        self.assertAlmostEqual(float(rate_spawning), 1.0, places=4)
+        self.assertAlmostEqual(float(spawning_dog.get_field("moveplaybackrate")), 1.0, places=4)
+        self.assertTrue(spawning_dog.get_field("ignoreall"))
+        self.assertIs(spawning_dog.get_field("bz_stunned"), UNDEFINED)
+
+        # Spawning dog with magic_bullet_shield=True -> skipped untouched
+        shield_dog = FakeEntity("shield_dog", ent_num=62, is_player=False)
+        shield_dog.set_field("animname", "zombie_dog")
+        shield_dog.set_field("magic_bullet_shield", True)
+        shield_dog.set_field("ignoreall", True)
+        shield_dog.set_field("moveplaybackrate", 1.0)
+        shield_dog.set_field("bz_tesla_stun_until", 9000)
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_is_spawning_dog", shield_dog))
+        self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", shield_dog)
+        self.assertAlmostEqual(float(shield_dog.get_field("moveplaybackrate")), 1.0, places=4)
+        self.assertTrue(shield_dog.get_field("ignoreall"))
+
+        # Active Hellhound under Cryo freeze / Tesla stun / Second Chance stun:
+        # NEVER drops below 0.55 and NEVER flips ignoreall to True!
+        active_dog = FakeEntity("active_dog", ent_num=63, is_player=False)
+        active_dog.set_field("species", "dog")
+        active_dog.set_field("animname", "zombie_dog")
+        active_dog.set_field("ignoreall", False)
+        active_dog.set_field("moveplaybackrate", 1.0)
+
+        active_dog.set_field("bz_is_frozen", True)
+        active_dog.set_field("bz_cryo_frozen_until", 9000)
+        rate_frozen = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_frozen), 0.55, places=4)
+        self.assertAlmostEqual(float(active_dog.get_field("moveplaybackrate")), 0.55, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
+
+        # Acid slow on active dog applies 0.60 (>= 0.55 floor)
+        active_dog.set_field("bz_is_frozen", False)
+        active_dog.set_field("bz_cryo_frozen_until", 0)
+        active_dog.set_field("bz_acid_slow_until", 9000)
+        rate_acid = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_acid), 0.60, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
+
+        # Even if a dog had a lower base rate (0.8), acid slow (0.48) clamps cleanly to 0.55 floor
+        slow_dog = FakeEntity("slow_dog", ent_num=64, is_player=False)
+        slow_dog.set_field("species", "dog")
+        slow_dog.set_field("ignoreall", False)
+        slow_dog.set_field("moveplaybackrate", 0.8)
+        slow_dog.set_field("bz_acid_slow_until", 9000)
+        rate_clamped = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", slow_dog)
+        self.assertAlmostEqual(float(rate_clamped), 0.55, places=4)
+
+        # When debuffs expire, active dog restores to base rate 1.0 without touching ignoreall
+        active_dog.set_field("bz_acid_slow_until", 0)
+        rate_restored = self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_zombie_move_rate", active_dog)
+        self.assertAlmostEqual(float(rate_restored), 1.0, places=4)
+        self.assertFalse(active_dog.get_field("ignoreall"))
 
 
 def _ast_contains_method_call(node: Any, method_lower: str) -> bool:
@@ -1679,6 +1780,196 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         ).decode("latin1")
         self.assertIn("maps\\_bz_hooks::bz_recompute_player_max_health( player );", asylum_patched)
         self.assertIn("maps\\_zombiemode_weapons_bz_asylum::weapon_give(", asylum_patched)
+        # Non-Factory perks scripts lack vending_upgrade() and must patch cleanly without injecting PaP hooks
+        self.assertNotIn("bz_pap_try_native_console_upgrade", asylum_patched)
+        self.assertNotIn("bz_pap_on_native_weapon_taken", asylum_patched)
+
+    def test_inject_zombiemode_perks_hooks_patches_factory_vending_upgrade_and_pickup(self) -> None:
+        factory_perks = (
+            "vending_set_perk( perk )\n"
+            "{\n"
+            "\tif ( perk == \"specialty_armorvest\" )\n"
+            "\t{\n"
+            "\t\tself.maxhealth = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t\tself.health = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "vending_upgrade()\n"
+            "{\n"
+            "\tperk_machine = getent( self.target, \"targetname\" );\n"
+            "\tpacka_rollers = spawn( \"script_origin\", self.origin );\n"
+            "\tflag_wait( \"Pack_A_Punch_on\" );\n"
+            "\tfor( ;; )\n"
+            "\t{\n"
+            "\t\tself waittill( \"trigger\", player );\n"
+            "\t\tcurrent_weapon = player getCurrentWeapon();\n"
+            "\t\tif( !IsDefined( level.zombie_include_weapons[current_weapon] ) || !IsDefined( level.zombie_include_weapons[current_weapon + \"_upgraded\"] ) )\n"
+            "\t\t{\n"
+            "\t\t\tcontinue;\n"
+            "\t\t}\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "wait_for_player_to_take( player, weapon_name, packa_timer )\n"
+            "{\n"
+            "\tplayer GiveWeapon( weapon_name );\n"
+            "\tplayer GiveMaxAmmo( weapon_name );\n"
+            "\tplayer SwitchToWeapon( weapon_name );\n"
+            "}\n"
+        ).encode("latin1")
+
+        patched = self.bm.inject_zombiemode_perks_hooks(
+            factory_perks,
+            rewire_weapons_module="_zombiemode_weapons_bz_factory",
+        ).decode("latin1")
+
+        # 1. Native PaP unlock flag & dedicated build-hook marker set right after flag_wait( "Pack_A_Punch_on" )
+        self.assertIn(
+            'if ( maps\\_bz_hooks::bz_pap_enabled() ) { level.bz_native_pap_unlocked = true; level.bz_native_pap_unlock_hook_fired = true; }',
+            patched,
+        )
+        self.assertLess(
+            patched.index('flag_wait( "Pack_A_Punch_on" );'),
+            patched.index("level.bz_native_pap_unlock_hook_fired = true;"),
+        )
+
+        # 2. Native console upgrade hook injected right BEFORE stock zombie_include_weapons check
+        hook_call = (
+            "if ( maps\\_bz_hooks::bz_pap_enabled() && "
+            "maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers ) )"
+        )
+        stock_guard = (
+            'if( !IsDefined( level.zombie_include_weapons[current_weapon] ) || '
+            '!IsDefined( level.zombie_include_weapons[current_weapon + "_upgraded"] ) )'
+        )
+        self.assertIn(hook_call, patched)
+        self.assertIn(stock_guard, patched)
+        self.assertLess(patched.index(hook_call), patched.index(stock_guard))
+
+        # 3. Post-pickup hook injected right AFTER GiveMaxAmmo( weapon_name ) in wait_for_player_to_take()
+        pickup_hook = "if ( maps\\_bz_hooks::bz_pap_enabled() ) { maps\\_bz_pap::bz_pap_on_native_weapon_taken( player, weapon_name ); }"
+        self.assertIn(pickup_hook, patched)
+        self.assertLess(patched.index("player GiveMaxAmmo( weapon_name );"), patched.index(pickup_hook))
+        self.assertLess(patched.index(pickup_hook), patched.index("player SwitchToWeapon( weapon_name );"))
+
+        # 4. Also supports dual-branch wait_for_player_to_take() (weapon_give at cap + GiveMaxAmmo below cap)
+        #    AND level waittill("Pack_A_Punch_on") + stock busy state hooks!
+        factory_perks_dual = (
+            "vending_set_perk( perk )\n"
+            "{\n"
+            "\tif ( primaryWeapons.size >= 2 )\n"
+            "\t{\n"
+            "\t\tself.maxhealth = level.zombie_vars[\"zombie_perk_juggernaut_health\"];\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "vending_upgrade()\n"
+            "{\n"
+            "\tlevel waittill( \"Pack_A_Punch_on\" );\n"
+            "\tfor( ;; )\n"
+            "\t{\n"
+            "\t\tself waittill( \"trigger\", player );\n"
+            "\t\tcurrent_weapon = player getCurrentWeapon();\n"
+            "\t\tif( !IsDefined( level.zombie_include_weapons[current_weapon] ) || !IsDefined( level.zombie_include_weapons[current_weapon + \"_upgraded\"] ) )\n"
+            "\t\t{\n"
+            "\t\t\tcontinue;\n"
+            "\t\t}\n"
+            "\t\tself disable_trigger();\n"
+            "\t\tself setvisibletoall();\n"
+            "\t}\n"
+            "}\n"
+            "\n"
+            "wait_for_player_to_take( player, weapon, packa_timer )\n"
+            "{\n"
+            "\tif ( primaries.size >= 2 )\n"
+            "\t{\n"
+            "\t\tplayer maps\\_zombiemode_weapons::weapon_give( weapon+\"_upgraded\" );\n"
+            "\t}\n"
+            "\telse\n"
+            "\t{\n"
+            "\t\tplayer GiveWeapon( weapon+\"_upgraded\" );\n"
+            "\t\tplayer GiveMaxAmmo( weapon+\"_upgraded\" );\n"
+            "\t}\n"
+            "\tplayer SwitchToWeapon( weapon+\"_upgraded\" );\n"
+            "}\n"
+        ).encode("latin1")
+        patched_dual = self.bm.inject_zombiemode_perks_hooks(
+            factory_perks_dual,
+            rewire_weapons_module="_zombiemode_weapons_bz_factory",
+        ).decode("latin1")
+        self.assertIn("level.bz_native_pap_unlocked = true;", patched_dual)
+        self.assertIn("level.bz_native_pap_unlock_hook_fired = true;", patched_dual)
+        self.assertIn("self.bz_pap_stock_busy = true;", patched_dual)
+        self.assertIn("self.bz_pap_stock_busy = false;", patched_dual)
+        take_section = patched_dual.split("wait_for_player_to_take", 1)[1]
+        if_part, else_part = take_section.split("else", 1)
+        self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", if_part)
+        self.assertIn("bz_pap_on_native_weapon_taken( player, weapon+\"_upgraded\" )", else_part)
+
+    def test_inject_zombiemode_dogs_hooks_preserves_spawning_marker_through_show(self) -> None:
+        stock_dogs = (
+            "dog_init()\n"
+            "{\n"
+            "\tself hide();\n"
+            "\tself thread magic_bullet_shield();\n"
+            "}\n"
+            "\n"
+            "dog_spawn_fx( ai, ent )\n"
+            "{\n"
+            "\tai zombie_setup_attack_properties_dog();\n"
+            "\tai stop_magic_bullet_shield();\n"
+            "\twait( 0.1 );\n"
+            "\tai show();\n"
+            "}\n"
+        ).encode("latin1")
+        patched = self.bm.inject_zombiemode_dogs_hooks(stock_dogs).decode("latin1")
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { self.bz_spawning_dog = true; }", patched)
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { ai.bz_spawning_dog = true; }", patched)
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { ai.bz_spawning_dog = false; }", patched)
+        self.assertLess(
+            patched.index("ai.bz_spawning_dog = true;"),
+            patched.index("ai stop_magic_bullet_shield();"),
+        )
+        self.assertLess(
+            patched.index("ai show();"),
+            patched.index("ai.bz_spawning_dog = false;"),
+        )
+
+        # Verify generate_staged_mod_csv includes per-map dog/powerups modules and teleporter script
+        base_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
+        staged_csv = self.bm.generate_staged_mod_csv(
+            base_csv,
+            [
+                "maps/_zombiemode_dogs_bz_sumpf.gsc",
+                "maps/_zombiemode_dogs_bz_factory.gsc",
+                "maps/_zombiemode_powerups_bz_factory.gsc",
+                "maps/nazi_zombie_factory_teleporter.gsc",
+            ],
+        )
+        for rel in (
+            "maps/_zombiemode_dogs_bz_sumpf.gsc",
+            "maps/_zombiemode_dogs_bz_factory.gsc",
+            "maps/_zombiemode_powerups_bz_factory.gsc",
+            "maps/nazi_zombie_factory_teleporter.gsc",
+        ):
+            self.assertIn(f"rawfile,{rel}", staged_csv.splitlines())
+
+        # Verify _rewire_stock_module_refs routes Der Riese teleporter & powerups dog callers cleanly
+        teleporter_src = (
+            "teleporter_dogs()\n{\n"
+            "\tmaps\\_zombiemode_dogs::special_dog_spawn( undefined, 4 );\n"
+            "\tss thread maps\\_zombiemode_powerups::special_powerup_drop( ss.origin );\n"
+            "}\n"
+        )
+        rewired_tp = self.bm._rewire_stock_module_refs(
+            teleporter_src,
+            rewire_dogs_module="_zombiemode_dogs_bz_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        )
+        self.assertIn("maps\\_zombiemode_dogs_bz_factory::special_dog_spawn", rewired_tp)
+        self.assertIn("maps\\_zombiemode_powerups_bz_factory::special_powerup_drop", rewired_tp)
+        self.assertNotIn("maps\\_zombiemode_dogs::", rewired_tp)
 
     def test_inject_zombiemode_score_hooks_routes_points_through_bz_points_modify(self) -> None:
         patched = self.bm.inject_zombiemode_score_hooks(SYNTHETIC_ZOMBIEMODE_SCORE).decode("latin1")
@@ -1779,6 +2070,26 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", ls_patched)
+
+            # Real stock _zombiemode_perks.gsc: Factory hooks native PaP console; Verruckt & Sumpf skip cleanly
+            fp = self.bm.extract_stock_script(
+                "nazi_zombie_factory", "maps/_zombiemode_perks.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+            )
+            fp_patched = self.bm.inject_zombiemode_perks_hooks(
+                fp, rewire_weapons_module="_zombiemode_weapons_bz_factory"
+            ).decode("latin1")
+            self.assertIn(
+                "maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers )",
+                fp_patched,
+            )
+            self.assertIn("maps\\_bz_pap::bz_pap_on_native_weapon_taken(", fp_patched)
+            for non_factory in ("nazi_zombie_asylum", "nazi_zombie_sumpf"):
+                nfp = self.bm.try_extract_stock_script(
+                    non_factory, "maps/_zombiemode_perks.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
+                )
+                if nfp is not None:
+                    nfp_patched = self.bm.inject_zombiemode_perks_hooks(nfp).decode("latin1")
+                    self.assertNotIn("bz_pap_try_native_console_upgrade", nfp_patched)
 
             # Verify stage_mod_files() stages patched _zombiemode_score.gsc and _laststand.gsc into mod.csv
             if (self.bm.DEFAULT_TOOLS_ROOT / "raw" / "ui" / "main.menu").is_file():

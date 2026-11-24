@@ -44,7 +44,8 @@ VERIFIED_STOCK_FX_PATHS: frozenset[str] = frozenset(
         "maps/zombie/fx_zombie_light_glow_green",
         "misc/fx_exp_raygun_impact",
         "misc/fx_zombie_powerup_on",
-        "maps/zombie/fx_zombie_mainframe_steam",
+        "misc/fx_zombie_powerup_wave",
+        "misc/fx_zombie_bloodsplat",
         "maps/zombie/fx_zombie_tesla_shock_secondary",
         "env/electrical/fx_elec_short_oneshot",
         "bio/player/fx_footstep_water",
@@ -183,10 +184,12 @@ def _setup_elem_new_env(
     if map_name == "nazi_zombie_factory" and populate_der_riese_effects:
         effects.set_item("zapper_light_ready", "dr_fx:zapper_light_ready")
         effects.set_item("powerup_on", "dr_fx:powerup_on")
+        effects.set_item("powerup_grabbed_wave", "dr_fx:powerup_grabbed_wave")
         effects.set_item("zombie_mainframe_steam", "dr_fx:zombie_mainframe_steam")
         effects.set_item("tesla_shock_secondary", "dr_fx:tesla_shock_secondary")
     elif map_name == "nazi_zombie_sumpf":
         effects.set_item("powerup_on", "sumpf_fx:powerup_on")
+        effects.set_item("powerup_grabbed_wave", "sumpf_fx:powerup_grabbed_wave")
         effects.set_item("tesla_shock_secondary", "sumpf_fx:tesla_shock_secondary")
     gsc.level.set_field("_effect", effects)
 
@@ -295,8 +298,15 @@ class TestBzElemNewRegistrationAndZeroFxResolver(unittest.TestCase):
 
         self.assertEqual(acid_dr.get_field("puddle_fx"), "dr_fx:zapper_light_ready")
         self.assertEqual(acid_dr.get_field("puddle_fx_source"), "level_effect:zapper_light_ready")
-        self.assertEqual(cryo_dr.get_field("freeze_fx"), "dr_fx:zombie_mainframe_steam")
-        self.assertEqual(cryo_dr.get_field("shatter_fx"), "dr_fx:tesla_shock_secondary")
+        self.assertEqual(cryo_dr.get_field("freeze_fx"), "dr_fx:tesla_shock_secondary")
+        self.assertEqual(cryo_dr.get_field("spray_fx"), "fx_handle:bio/player/fx_footstep_water")
+        self.assertEqual(cryo_dr.get_field("shatter_fx"), "dr_fx:powerup_grabbed_wave")
+        self.assertNotEqual(cryo_dr.get_field("freeze_fx"), "dr_fx:zombie_mainframe_steam")
+        self.assertNotEqual(cryo_dr.get_field("shatter_fx"), "dr_fx:zombie_mainframe_steam")
+        self.assertEqual(
+            gsc_dr.call(BZ_ELEM_NEW_MOD, "bz_elem_new_get_cached_fx", "misc/fx_zombie_bloodsplat"),
+            "fx_handle:misc/fx_zombie_bloodsplat",
+        )
 
         # 2. Der Riese when zapper_light_ready absent -> prefers powerup_on
         effects = gsc_dr.level.get_field("_effect")
@@ -657,9 +667,11 @@ class TestCryoCannonWeapon(unittest.TestCase):
             self.assertFalse(bool(z.get_field("bz_is_frozen")))
             self.assertAlmostEqual(float(z.get_field("moveplaybackrate")), 1.0)
 
-        # Icy stock FX played (Der Riese prefers zombie_mainframe_steam)
+        # Icy stock FX played (Der Riese uses finite tesla_shock_secondary + crisp water/ice spray, NEVER roaring steam)
         fx_handles = [fx for fx, _pos in gsc.played_fx]
-        self.assertIn("dr_fx:zombie_mainframe_steam", fx_handles)
+        self.assertIn("dr_fx:tesla_shock_secondary", fx_handles)
+        self.assertIn("fx_handle:bio/player/fx_footstep_water", fx_handles)
+        self.assertNotIn("dr_fx:zombie_mainframe_steam", fx_handles)
 
         # Structured ASCII telemetry emitted
         cryo_events = [e for e in gsc.emitted_events if e.startswith("BZ_EVENT|ELEM_CRYO_FREEZE|")]
@@ -803,9 +815,11 @@ class TestCryoCannonWeapon(unittest.TestCase):
         )
         self.assertEqual(follow_up, 100)
 
-        # Shatter burst FX and BZ_EVENT|ELEM_CRYO_SHATTER telemetry emitted
+        # Shatter burst FX (crisp 0.4s wave + 0.8s ice droplet burst, zero steam) and telemetry emitted
         shatter_fx = [fx for fx, _pos in gsc.played_fx]
-        self.assertEqual(shatter_fx.count("dr_fx:tesla_shock_secondary"), 3)
+        self.assertEqual(shatter_fx.count("dr_fx:powerup_grabbed_wave"), 3)
+        self.assertEqual(shatter_fx.count("fx_handle:bio/player/fx_footstep_water"), 3)
+        self.assertNotIn("dr_fx:zombie_mainframe_steam", shatter_fx)
         shatter_events = [
             e for e in gsc.emitted_events if e.startswith("BZ_EVENT|ELEM_CRYO_SHATTER|")
         ]
@@ -1031,6 +1045,54 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
                     _ast_contains_method_call(fn_def.body, "endon"),
                     f"Forbidden endon() inside synchronous function {fn_name}()",
                 )
+
+    def test_no_forbidden_looping_or_steam_fx_in_elem_new_and_hellhounds_guarded(self) -> None:
+        # Static FX audit: zero forbidden looping/blinding FX keys in active _bz_elem_new.gsc code
+        source = BZ_ELEM_NEW_PATH.read_text(encoding="latin1")
+        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        for forbidden in (
+            "wire_spark",
+            "fx_zombie_wire_spark",
+            "fx_elec_wire_spark_burst",
+            "fx_zombie_elec_trail_oneshot",
+            "zombie_mainframe_steam",
+            "mini_nuke",
+        ):
+            self.assertIsNone(
+                re.search(rf'"{re.escape(forbidden)}"', code_only),
+                f"Forbidden FX token {forbidden!r} found in active _bz_elem_new.gsc code",
+            )
+
+        # Hellhound protection: hidden/spawning dogs skipped by Acid & Cryo; active dogs still affected
+        _, gsc, player = _setup_elem_new_env(map_name="nazi_zombie_factory")
+        gsc.sim_time_ms = 5000
+        gsc.bullet_trace_fn = lambda s, e: {"fraction": 0.25, "position": GscArray([200.0, 0.0, 0.0])}
+
+        dog_spawning = ElemNewFakeEntity("SpawningDog", ent_num=60, is_player=False, origin=(200.0, 0.0, 0.0))
+        dog_spawning.set_field("health", 500)
+        dog_spawning.set_field("animname", "zombie_dog")
+        dog_spawning.set_field("ignoreall", True)
+
+        dog_active = ElemNewFakeEntity("ActiveDog", ent_num=61, is_player=False, origin=(210.0, 0.0, 0.0))
+        dog_active.set_field("health", 500)
+        dog_active.set_field("animname", "zombie_dog")
+        dog_active.set_field("ignoreall", False)
+
+        gsc.ai_enemies.extend([dog_spawning, dog_active])
+
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
+        self.assertEqual(dog_spawning.damage_events, [])
+        self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0)
+        self.assertIs(dog_spawning.get_field("bz_acid_brittle_until"), UNDEFINED)
+        self.assertEqual(len(dog_active.damage_events), 1)
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.60)
+
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
+        self.assertFalse(bool(dog_spawning.get_field("bz_is_frozen")))
+        self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0)
+        self.assertTrue(bool(dog_active.get_field("bz_is_frozen")))
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.55)
+        self.assertFalse(bool(dog_active.get_field("ignoreall")))
 
 
 if __name__ == "__main__":

@@ -693,6 +693,54 @@ class TestWunderwaffeChainStunAndSplashGuard(unittest.TestCase):
         self.assertTrue(z_hooked_neighbor.get_field("bz_tesla_stunned"))
         self.assertEqual(z_hooked_neighbor.get_field("bz_tesla_stun_until"), 15500)
 
+    def test_wunderwaffe_chain_hit_and_flame_spread_skip_spawning_hellhounds_and_clamp_active_dogs(self) -> None:
+        _dvars, gsc, player = _setup_elem_stock_env(map_name="nazi_zombie_factory")
+        gsc.sim_time_ms = 5000
+
+        dog_spawning = ElemStockFakeEntity("DogSpawning", ent_num=70, is_player=False)
+        dog_spawning.set_field("species", "dog")
+        dog_spawning.set_field("animname", "zombie_dog")
+        dog_spawning.set_field("ignoreall", True)
+        dog_spawning.set_field("magic_bullet_shield", True)
+        dog_spawning.set_field("health", 600)
+        dog_spawning.set_field("origin", GscArray([140, 0, 0]))
+
+        dog_active = ElemStockFakeEntity("DogActive", ent_num=71, is_player=False)
+        dog_active.set_field("species", "dog")
+        dog_active.set_field("animname", "zombie_dog")
+        dog_active.set_field("ignoreall", False)
+        dog_active.set_field("health", 600)
+        dog_active.set_field("origin", GscArray([180, 0, 0]))
+
+        z_primary = ElemStockFakeEntity("ZPrimary", ent_num=72, is_player=False)
+        z_primary.set_field("health", 2000)
+        z_primary.set_field("origin", GscArray([100, 0, 0]))
+
+        gsc.ai_enemies.extend([dog_spawning, dog_active, z_primary])
+
+        # Direct chain hit on a spawning Hellhound must return 0 and leave it untouched
+        self.assertEqual(gsc.call(BZ_ELEM_STOCK_MOD, "bz_tesla_on_chain_hit", dog_spawning, player), 0)
+        self.assertIs(dog_spawning.get_field("bz_tesla_stunned"), UNDEFINED)
+        self.assertTrue(dog_spawning.get_field("ignoreall"))
+        self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0, places=4)
+
+        # Chain hit on primary zombie stuns primary (0.01) + slows active dog (0.55), skips spawning dog!
+        stunned = gsc.call(BZ_ELEM_STOCK_MOD, "bz_tesla_on_chain_hit", z_primary, player)
+        self.assertEqual(stunned, 2)
+        self.assertAlmostEqual(float(z_primary.get_field("moveplaybackrate")), 0.01, places=4)
+        self.assertTrue(z_primary.get_field("ignoreall"))
+        self.assertAlmostEqual(float(dog_active.get_field("moveplaybackrate")), 0.55, places=4)
+        self.assertFalse(dog_active.get_field("ignoreall"))
+        self.assertIs(dog_spawning.get_field("bz_tesla_stunned"), UNDEFINED)
+        self.assertTrue(dog_spawning.get_field("ignoreall"))
+        self.assertAlmostEqual(float(dog_spawning.get_field("moveplaybackrate")), 1.0, places=4)
+
+        # Flame spread near spawning Hellhound (40u <= 96u) must also skip spawning dog
+        spread = gsc.call(BZ_ELEM_STOCK_MOD, "bz_flame_spread_nearby", z_primary, player, 10, 1045, False)
+        self.assertEqual(spread, 1)  # spreads to dog_active (80u <= 96u), NOT dog_spawning
+        self.assertIs(dog_spawning.get_field("bz_flame_dot_active"), UNDEFINED)
+        self.assertTrue(dog_spawning.get_field("ignoreall"))
+
     def test_wunderwaffe_self_splash_guard_in_player_damage_respects_blast_shield_and_preserves_hp(self) -> None:
         # Disable perks hook temporarily so we verify _bz_elem_stock's own player_damage Blast Shield guard directly
         _dvars, gsc, player = _setup_elem_stock_env(
@@ -963,6 +1011,7 @@ class TestEnhancedFlamethrower(unittest.TestCase):
                         "misc/fx_exp_raygun_impact",
                         "env/electrical/fx_elec_short_oneshot",
                         "bio/player/fx_footstep_water",
+                        "misc/fx_zombie_bloodsplat",
                     )
                     for fx in gsc.fx_loads
                 ),

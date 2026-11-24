@@ -122,7 +122,7 @@ class BzClassesRuntime(BzGscRuntime):
         return super()._call_builtin(name_lower, args, line)
 
     def _exec_method(self, receiver: Any, method: str, args: list[Any], line: int) -> Any:
-        if method == "notsolid":
+        if method == "notsolid" and getattr(receiver, "classname", "") != "script_model":
             raise AssertionError("Forbidden NotSolid() call! Must use SetContents(0)/restore instead.")
         if isinstance(receiver, FakeHudElem):
             if method == "settext":
@@ -964,7 +964,7 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
     def test_assassin_5x_headshot_and_safe_ghost_slip_through_contents_restore(self) -> None:
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:assassin")
 
-        z_close = ClassFakeEntity("ZClose", ent_num=50, is_player=False, origin=(48, 0, 64))
+        z_close = ClassFakeEntity("ZClose", ent_num=50, is_player=False, origin=(36, 0, 64))
         z_close.set_field("health", 1000)
         orig_contents = z_close.contents  # 16777216
         z_far = ClassFakeEntity("ZFar", ent_num=51, is_player=False, origin=(250, 0, 64))
@@ -1044,9 +1044,9 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
 
         # 6. Co-op refcount safety: two moving Assassins share zombie, restoring only after both release
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:assassin")
-        self.p2.set_origin(60, 0, 64)
+        self.p2.set_origin(50, 0, 64)
         self.p1.set_velocity(200, 0, 0)
-        self.p2.set_velocity(200, 0, 0)
+        self.p2.set_velocity(-200, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p2)
         self.assertEqual(z_close.contents, 0)
@@ -1058,6 +1058,84 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         # p2 swaps off Assassin -> last ref released, original contents restored!
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:broker")
         self.assertEqual(z_close.contents, orig_contents)
+
+    def test_assassin_contact_radius_speed_gate_release_and_hellhound_protection(self) -> None:
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:assassin")
+        self.p1.set_origin(0, 0, 64)
+
+        z_contact = ClassFakeEntity("ZContact", ent_num=60, is_player=False, origin=(40, 0, 64))
+        z_contact.set_field("health", 1000)
+        z_mid_48 = ClassFakeEntity("ZMid48", ent_num=61, is_player=False, origin=(48, 0, 64))
+        z_mid_48.set_field("health", 1000)
+        z_mid_64 = ClassFakeEntity("ZMid64", ent_num=62, is_player=False, origin=(64, 0, 64))
+        z_mid_64.set_field("health", 1000)
+        z_mid_96 = ClassFakeEntity("ZMid96", ent_num=63, is_player=False, origin=(96, 0, 64))
+        z_mid_96.set_field("health", 1000)
+
+        dog_contact = ClassFakeEntity("DogContact", ent_num=64, is_player=False, origin=(24, 0, 64))
+        dog_contact.set_field("species", "dog")
+        dog_contact.set_field("animname", "zombie_dog")
+        dog_contact.set_field("health", 600)
+
+        orig_contents = z_contact.contents
+        self.gsc.zombies.extend([z_contact, z_mid_48, z_mid_64, z_mid_96, dog_contact])
+
+        # 1. Slow ADS strafe (35 u/s < 40 u/s) must NOT trigger ghosting even at contact range
+        self.p1.set_velocity(35, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+        self.assertEqual(dog_contact.contents, orig_contents)
+
+        # 1b. Moving AWAY from zombie at >= 40 u/s must NOT acquire ghosting
+        self.p1.set_velocity(-120, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+
+        # 2. Moving TOWARD zombie (>= 40 u/s): ONLY zombie <= 42u is ghosted; 48u/64u/96u & Hellhound stay solid!
+        self.p1.set_velocity(120, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
+        self.assertEqual(z_contact.contents, 0)
+        self.assertEqual(z_mid_48.contents, orig_contents)
+        self.assertEqual(z_mid_64.contents, orig_contents)
+        self.assertEqual(z_mid_96.contents, orig_contents)
+        self.assertEqual(dog_contact.contents, orig_contents)
+
+        # Direct acquire call on a Hellhound is also rejected
+        self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_acquire_ghost_on_zombie", self.p1, dog_contact)
+        self.assertEqual(dog_contact.contents, orig_contents)
+
+        # 2b. Reversing direction at 40u (still inside 42u contact radius, outside 16u overlap) restores immediately!
+        self.p1.set_velocity(-200, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+
+        # Re-acquire moving forward, then back out past 42u -> restores immediately!
+        self.p1.set_velocity(200, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
+        self.assertEqual(z_contact.contents, 0)
+
+        # 3. Immediate release outside 42u contact radius (e.g. backing away to 50u restores bullet collision!)
+        self.p1.set_origin(-10, 0, 64)
+        self.p1.set_velocity(-200, 0, 0)
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(z_contact.contents, orig_contents)
+
+        # 4. Spawning Hellhounds are skipped by Titan aggro & Daredevil slam
+        dog_spawning = ClassFakeEntity("DogSpawning", ent_num=65, is_player=False, origin=(60, 0, 64))
+        dog_spawning.set_field("species", "dog")
+        dog_spawning.set_field("ignoreall", True)
+        dog_spawning.set_field("magic_bullet_shield", True)
+        dog_spawning.set_field("health", 600)
+        self.gsc.zombies = [dog_spawning]
+
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:titan")
+        self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_titan_apply_aggro_bias", self.p1), 0)
+        self.assertIs(dog_spawning.get_field("favoriteenemy"), UNDEFINED)
+
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:daredevil")
+        slam_res = self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_execute_slam", self.p1, 120, GscArray([0, 0, 64]))
+        self.assertEqual(slam_res.get_field("hits"), 0)
+        self.assertEqual(dog_spawning.damage_taken, [])
 
 
 if __name__ == "__main__":

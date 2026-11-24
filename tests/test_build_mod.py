@@ -139,6 +139,15 @@ class TestBuildModPatching(unittest.TestCase):
             self.assertIn("maps\\_gauntlet_mode::on_end_game()", patched)
             if map_name in ("nazi_zombie_sumpf", "nazi_zombie_factory"):
                 self.assertIn("waw_solo_fov()", patched)
+                dogs_bytes = build_mod.extract_stock_script(
+                    map_name,
+                    "maps/_zombiemode_dogs.gsc",
+                    build_mod.DEFAULT_STEAM_GAME,
+                    build_mod.DEFAULT_TOOLS_ROOT,
+                )
+                dogs_patched = build_mod.inject_zombiemode_dogs_hooks(dogs_bytes).decode("latin1")
+                self.assertIn(".bz_spawning_dog = true;", dogs_patched)
+                self.assertIn(".bz_spawning_dog = false;", dogs_patched)
 
     def test_no_foreach_in_tracked_gauntlet_gsc_files(self) -> None:
         gsc_files = sorted((REPO_ROOT / "mod" / "maps").glob("_gauntlet_*.gsc"))

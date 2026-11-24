@@ -125,6 +125,167 @@ SYNTHETIC_ZOMBIE_COLT = (
     "\\worldFlashEffect\\weapon/muzzleflashes/pistolflash_world"
 )
 
+SYNTHETIC_M2_FLAMETHROWER_ZOMBIE = (
+    "WEAPONFILE"
+    "\\displayName\\WEAPON_M2_FLAMETHROWER"
+    "\\inventoryType\\primary"
+    "\\weaponType\\gas"
+    "\\weaponClass\\gas"
+    "\\fireType\\Full Auto"
+    "\\ammoName\\fuel"
+    "\\clipName\\fuel"
+    "\\damage\\30"
+    "\\minDamage\\30"
+    "\\explosionInnerDamage\\0"
+    "\\explosionOuterDamage\\0"
+    "\\explosionRadius\\0"
+    "\\clipSize\\100"
+    "\\maxAmmo\\300"
+    "\\startAmmo\\300"
+    "\\dropAmmoMin\\100"
+    "\\dropAmmoMax\\300"
+    "\\fireTime\\0.05"
+    "\\aimDownSight\\1"
+    "\\adsFire\\1"
+    "\\adsUpAnim\\viewmodel_usa_flamethrower_ADS_up"
+    "\\adsDownAnim\\viewmodel_usa_flamethrower_ADS_down"
+    "\\adsFireAnim\\viewmodel_usa_flamethrower_ADS_fire"
+    "\\adsLastShotAnim\\viewmodel_usa_flamethrower_ADS_lastshot"
+    "\\adsRechamberAnim\\viewmodel_usa_flamethrower_ADS_rechamber"
+    "\\idleAnim\\viewmodel_usa_flamethrower_idle"
+    "\\fireAnim\\viewmodel_usa_flamethrower_fire"
+    "\\fireSound\\weap_flamethrower_fire"
+    "\\fireSoundPlayer\\weap_flamethrower_fire_plr"
+    "\\gunModel\\viewmodel_usa_flamethrower"
+    "\\worldModel\\weapon_usa_flamethrower"
+    "\\viewFlashEffect\\weapon/flamethrower/fx_flamethrower_disallowed"
+    "\\worldFlashEffect\\weapon/flamethrower/fx_flamethrower_world_disallowed"
+)
+
+SYNTHETIC_TESLA_GUN = (
+    "WEAPONFILE"
+    "\\displayName\\ZOMBIE_TESLA_GUN"
+    "\\inventoryType\\primary"
+    "\\weaponType\\projectile"
+    "\\weaponClass\\rifle"
+    "\\fireType\\Single Shot"
+    "\\ammoName\\tesla"
+    "\\clipName\\tesla"
+    "\\damage\\1000"
+    "\\minDamage\\1000"
+    "\\explosionInnerDamage\\1"
+    "\\explosionOuterDamage\\1"
+    "\\explosionRadius\\110"
+    "\\clipSize\\3"
+    "\\maxAmmo\\15"
+    "\\startAmmo\\15"
+    "\\dropAmmoMin\\3"
+    "\\dropAmmoMax\\9"
+    "\\fireTime\\1.0"
+    "\\adsUpAnim\\viewmodel_usa_tesla_ADS_up"
+    "\\adsDownAnim\\viewmodel_usa_tesla_ADS_down"
+    "\\adsFireAnim\\viewmodel_usa_tesla_ADS_fire"
+    "\\idleAnim\\viewmodel_usa_tesla_idle"
+    "\\fireAnim\\viewmodel_usa_tesla_fire"
+    "\\gunModel\\viewmodel_usa_tesla_gun"
+    "\\worldModel\\weapon_usa_tesla"
+    "\\viewFlashEffect\\maps/zombie/fx_zombie_tesla_muzzle_disallowed"
+    "\\worldFlashEffect\\maps/zombie/fx_zombie_tesla_muzzle_world_disallowed"
+    "\\projTrailEffect\\maps/zombie/fx_zombie_tesla_trail_disallowed"
+    "\\projExplosionEffect\\maps/zombie/fx_zombie_tesla_impact_disallowed"
+)
+
+SYNTHETIC_M7_LAUNCHER_ZOMBIE = (
+    "WEAPONFILE"
+    "\\displayName\\WEAPON_M7_LAUNCHER"
+    "\\inventoryType\\primary"
+    "\\weaponType\\grenade"
+    "\\weaponClass\\grenade"
+    "\\fireType\\Single Shot"
+    "\\altWeapon\\m1garand_gl_zombie"
+    "\\ammoName\\m7_launcher"
+    "\\clipName\\m7_launcher"
+    "\\damage\\250"
+    "\\minDamage\\150"
+    "\\explosionInnerDamage\\300"
+    "\\explosionOuterDamage\\100"
+    "\\explosionRadius\\192"
+    "\\clipSize\\1"
+    "\\maxAmmo\\10"
+    "\\startAmmo\\10"
+    "\\dropAmmoMin\\1"
+    "\\dropAmmoMax\\4"
+    "\\fireTime\\1.25"
+    "\\adsUpAnim\\viewmodel_m1garand_gl_ADS_up"
+    "\\adsFireAnim\\viewmodel_m1garand_gl_ADS_fire"
+    "\\idleAnim\\viewmodel_m1garand_gl_idle"
+    "\\fireAnim\\viewmodel_m1garand_gl_fire"
+    "\\gunModel\\viewmodel_zombie_m1garand_rifle_grenade"
+    "\\worldModel\\weapon_zombie_m1garand_rifle_grenade"
+    "\\viewFlashEffect\\weapon/muzzleflashes/rifleflash_disallowed"
+    "\\projTrailEffect\\weapon/grenade/fx_trail_rifle_grenade"
+)
+
+SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED = (
+    "WEAPONFILE"
+    "\\displayName\\WEAPON_DOUBLEBARREL_SAWED"
+    "\\inventoryType\\primary"
+    "\\weaponType\\bullet"
+    "\\weaponClass\\spread"
+    "\\fireType\\Single Shot"
+    "\\ammoName\\doublebarrel"
+    "\\clipName\\doublebarrel"
+    "\\damage\\150"
+    "\\minDamage\\100"
+    "\\clipSize\\2"
+    "\\maxAmmo\\60"
+    "\\startAmmo\\60"
+    "\\fireTime\\0.35"
+    "\\reloadTime\\1.8"
+    "\\reloadEmptyTime\\1.8"
+    "\\aimDownSight\\1"
+    "\\adsFire\\1"
+    "\\adsUpAnim\\viewmodel_doublebarrel_missing_ads_up"
+    "\\idleAnim\\viewmodel_doublebarrel_idle"
+    "\\emptyIdleAnim\\viewmodel_doublebarrel_idle"
+    "\\fireAnim\\viewmodel_doublebarrel_fire"
+    "\\reloadAnim\\viewmodel_doublebarrel_reload"
+    "\\reloadEmptyAnim\\viewmodel_doublebarrel_reload"
+    "\\fireSound\\weap_dbshotgun_fire"
+    "\\fireSoundPlayer\\weap_dbshotgun_fire_plr"
+    "\\gunModel\\viewmodel_usa_sawed_off_shotgun"
+    "\\worldModel\\weapon_usa_sawed_off_shotgun"
+    "\\viewFlashEffect\\weapon/muzzleflashes/shotgunflash_disallowed"
+)
+
+SYNTHETIC_ZOMBIE_BOWIE_FLOURISH = (
+    "WEAPONFILE"
+    "\\displayName\\ZOMBIE_BOWIE_FLOURISH"
+    "\\inventoryType\\item"
+    "\\weaponType\\bullet"
+    "\\weaponClass\\rifle"
+    "\\fireType\\Full Auto"
+    "\\ammoName\\bowie"
+    "\\clipName\\bowie"
+    "\\damage\\150"
+    "\\minDamage\\150"
+    "\\clipSize\\1"
+    "\\maxAmmo\\1"
+    "\\startAmmo\\1"
+    "\\fireTime\\1.0"
+    "\\reloadTime\\1.5"
+    "\\aimDownSight\\1"
+    "\\adsFire\\1"
+    "\\adsUpAnim\\viewmodel_knife_bowie_missing_ads_up"
+    "\\idleAnim\\viewmodel_knife_bowie_idle"
+    "\\fireAnim\\viewmodel_knife_bowie_flourish"
+    "\\fireSound\\weap_colt_fire"
+    "\\fireSoundPlayer\\weap_colt_fire_plr"
+    "\\gunModel\\viewmodel_knife_bowie"
+    "\\worldModel\\weapon_knife_bowie_placeholder"
+    "\\viewFlashEffect\\weapon/muzzleflashes/pistolflash_disallowed"
+)
+
 
 class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
     """Slice 1: Deterministic zero-FX weapon file cloning, staging, and mod.csv registration."""
@@ -202,12 +363,48 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
         self.assertEqual(gl_pairs["altWeapon"], "")
 
     def test_stage_bz_element_weapons_generates_all_four_distinct_zero_fx_primaries_and_mod_csv(self) -> None:
+        # Verify canonical primary template specs are distinct per weapon
+        spec_templates = {
+            weap_name: templates
+            for weap_name, templates, _overrides in self.bm.BZ_ELEMENT_WEAPON_SPECS
+        }
+        self.assertEqual(
+            spec_templates["bz_acid_sprayer"],
+            ("m2_flamethrower_zombie", "ray_gun"),
+        )
+        self.assertEqual(
+            spec_templates["bz_cryo_cannon"],
+            ("tesla_gun", "ray_gun"),
+        )
+        self.assertEqual(
+            spec_templates["bz_multi_crossbow"],
+            ("m7_launcher_zombie", "fg42_scoped", "m1garand_gl", "zombie_m1garand", "kar98k"),
+        )
+        self.assertEqual(
+            spec_templates["bz_blade_boomerang"],
+            ("zombie_doublebarrel_sawed", "walther", "zombie_colt", "colt"),
+        )
+        self.assertEqual(
+            len({templates[0] for templates in spec_templates.values()}),
+            4,
+        )
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             raw_sp = root / "tools" / "raw" / "weapons" / "sp"
             raw_sp.mkdir(parents=True)
+            (raw_sp / "m2_flamethrower_zombie").write_text(
+                SYNTHETIC_M2_FLAMETHROWER_ZOMBIE, encoding="latin1"
+            )
+            (raw_sp / "tesla_gun").write_text(SYNTHETIC_TESLA_GUN, encoding="latin1")
+            (raw_sp / "m7_launcher_zombie").write_text(
+                SYNTHETIC_M7_LAUNCHER_ZOMBIE, encoding="latin1"
+            )
+            (raw_sp / "zombie_doublebarrel_sawed").write_text(
+                SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED, encoding="latin1"
+            )
+            # Also include fallback templates to prove primary distinct templates win
             (raw_sp / "ray_gun").write_text(SYNTHETIC_RAY_GUN, encoding="latin1")
-            # Provide m1garand_gl with altWeapon=m7_launcher to prove altWeapon & splash are sanitized
             (raw_sp / "m1garand_gl").write_text(SYNTHETIC_M1GARAND_GL, encoding="latin1")
             (raw_sp / "zombie_colt").write_text(SYNTHETIC_ZOMBIE_COLT, encoding="latin1")
 
@@ -226,19 +423,63 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             )
 
             expected_specs = {
-                "bz_acid_sprayer": ("bz_acid", "Acid Sprayer", "20", "120", "120"),
-                "bz_cryo_cannon": ("bz_cryo", "Cryo Cannon", "16", "96", "96"),
-                "bz_multi_crossbow": ("bz_xbow", "Multi-Crossbow", "6", "36", "36"),
-                "bz_blade_boomerang": ("bz_blade", "Blade Boomerang", "1", "20", "20"),
+                "bz_acid_sprayer": (
+                    "bz_acid",
+                    "Acid Sprayer",
+                    "20",
+                    "120",
+                    "120",
+                    "viewmodel_usa_flamethrower",
+                    "weapon_usa_flamethrower",
+                    "0.45",
+                ),
+                "bz_cryo_cannon": (
+                    "bz_cryo",
+                    "Cryo Cannon",
+                    "16",
+                    "96",
+                    "96",
+                    "viewmodel_usa_tesla_gun",
+                    "weapon_usa_tesla",
+                    "0.55",
+                ),
+                "bz_multi_crossbow": (
+                    "bz_xbow",
+                    "Multi-Crossbow",
+                    "6",
+                    "36",
+                    "36",
+                    "viewmodel_zombie_m1garand_rifle_grenade",
+                    "weapon_zombie_m1garand_rifle_grenade",
+                    "0.60",
+                ),
+                "bz_blade_boomerang": (
+                    "bz_blade",
+                    "Blade Boomerang",
+                    "1",
+                    "20",
+                    "20",
+                    "viewmodel_usa_sawed_off_shotgun",
+                    "weapon_usa_sawed_off_shotgun",
+                    "0.65",
+                ),
             }
             seen_ammo: set[str] = set()
+            seen_gun_models: set[str] = set()
+            seen_world_models: set[str] = set()
             allowed_norm = {fx.lower() for fx in self.bm.VERIFIED_ALL_4_MAP_FX}
+            staged_pairs: dict[str, dict[str, str]] = {}
 
-            for weap_name, (ammo, disp, clip, max_ammo, start_ammo) in expected_specs.items():
+            for (
+                weap_name,
+                (ammo, disp, clip, max_ammo, start_ammo, gun_model, world_model, fire_time),
+            ) in expected_specs.items():
                 weap_path = stage_dir / "weapons" / "sp" / weap_name
                 self.assertTrue(weap_path.is_file(), f"Missing staged weapon file: {weap_path}")
                 pairs = dict(self.bm.parse_weapon_file(weap_path.read_text(encoding="latin1")))
+                staged_pairs[weap_name] = pairs
                 self.assertEqual(pairs["inventoryType"], "primary")
+                self.assertEqual(pairs["weaponType"], "bullet")
                 self.assertEqual(pairs["ammoName"], ammo)
                 self.assertEqual(pairs["clipName"], ammo)
                 self.assertEqual(pairs["displayName"], disp)
@@ -252,7 +493,12 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 self.assertEqual(pairs["clipSize"], clip)
                 self.assertEqual(pairs["maxAmmo"], max_ammo)
                 self.assertEqual(pairs["startAmmo"], start_ammo)
+                self.assertEqual(pairs["fireTime"], fire_time)
+                self.assertEqual(pairs["gunModel"], gun_model)
+                self.assertEqual(pairs["worldModel"], world_model)
                 seen_ammo.add(ammo)
+                seen_gun_models.add(gun_model)
+                seen_world_models.add(world_model)
 
                 # Zero added FX: every *Effect / *Fx field must be empty or in the all-4-map intersection
                 for k, v in pairs.items():
@@ -265,6 +511,41 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                         )
 
             self.assertEqual(len(seen_ammo), 4)
+            self.assertEqual(len(seen_gun_models), 4)
+            self.assertEqual(len(seen_world_models), 4)
+
+            # Weapon-specific feel, ADS, and audio overrides
+            acid = staged_pairs["bz_acid_sprayer"]
+            self.assertEqual(acid["weaponClass"], "rifle")
+            self.assertEqual(acid["fireType"], "Single Shot")
+            self.assertEqual(acid["aimDownSight"], "0")
+            self.assertEqual(acid["adsFire"], "0")
+            for ads_key in ("adsUpAnim", "adsDownAnim", "adsFireAnim", "adsLastShotAnim", "adsRechamberAnim"):
+                self.assertEqual(acid[ads_key], "")
+            self.assertEqual(acid["fireSound"], "weap_raygun_fire")
+            self.assertEqual(acid["fireSoundPlayer"], "weap_raygun_fire_plr")
+            self.assertEqual(acid["emptyIdleAnim"], "viewmodel_flamethrower_idle")
+            self.assertEqual(acid["reloadAnim"], "viewmodel_flamethrower_reload")
+            self.assertEqual(acid["reloadEmptyAnim"], "viewmodel_flamethrower_reload")
+
+            xbow = staged_pairs["bz_multi_crossbow"]
+            self.assertEqual(xbow["fireType"], "Single Shot")
+            self.assertEqual(xbow["fireTime"], "0.60")
+
+            blade = staged_pairs["bz_blade_boomerang"]
+            self.assertEqual(blade["weaponClass"], "pistol")
+            self.assertEqual(blade["shotCount"], "1")
+            self.assertEqual(blade["fireType"], "Single Shot")
+            self.assertEqual(blade["reloadTime"], "0.45")
+            self.assertEqual(blade["reloadEmptyTime"], "0.45")
+            self.assertEqual(blade["aimDownSight"], "0")
+            self.assertEqual(blade["adsFire"], "0")
+            self.assertEqual(blade["fireSound"], "melee_swing_plr")
+            self.assertEqual(blade["fireSoundPlayer"], "melee_swing_plr")
+            self.assertEqual(blade["idleAnim"], "viewmodel_doublebarrel_idle")
+            self.assertEqual(blade["fireAnim"], "viewmodel_doublebarrel_fire")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_doublebarrel_reload")
+            self.assertEqual(blade["reloadEmptyAnim"], "viewmodel_doublebarrel_reload")
 
             # generate_staged_mod_csv appends weapon,sp/bz_* entries cleanly without duplicates
             base_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
@@ -285,6 +566,145 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             )
             for weap_name in expected_specs:
                 self.assertEqual(staged_csv_2.count(f"weapon,sp/{weap_name}"), 1)
+
+    def test_clone_zero_fx_weapon_file_resolves_linux_xanim_case_clears_missing_ads_and_falls_back_fire_anim(
+        self,
+    ) -> None:
+        stock_fg42 = (
+            "WEAPONFILE"
+            "\\displayName\\WEAPON_FG42_SCOPED"
+            "\\inventoryType\\primary"
+            "\\playerAnimType\\rifle"
+            "\\idleAnim\\viewmodel_fg42_IDLE"
+            "\\fireAnim\\viewmodel_fg42_fire"
+            "\\adsUpAnim\\viewmodel_ray_gun_ADS_up"
+            "\\adsFireAnim\\viewmodel_fg42_ADS_fire"
+            "\\adsDownAnim\\viewmodel_fg42_MISSING_ADS_down"
+            "\\adsLastShotAnim\\viewmodel_fg42_MISSING_ADS_lastshot"
+            "\\adsRechamberAnim\\viewmodel_fg42_MISSING_ADS_rechamber"
+        )
+        xanim_case_map = {
+            "viewmodel_fg42_idle": "viewmodel_fg42_idle",
+            "viewmodel_fg42_fire": "viewmodel_fg42_fire",
+            "viewmodel_ray_gun_ads_up": "viewmodel_ray_gun_ads_up",
+            "viewmodel_fg42_ads_fire": "viewmodel_fg42_ads_fire",
+        }
+
+        cloned = self.bm.clone_zero_fx_weapon_file(
+            stock_fg42,
+            overrides={"displayName": "Multi-Crossbow"},
+            xanim_case_map=xanim_case_map,
+        )
+        pairs = dict(self.bm.parse_weapon_file(cloned))
+
+        # Uppercase _ADS_ and _IDLE names resolve to exact lowercase on-disk filenames
+        self.assertEqual(pairs["idleAnim"], "viewmodel_fg42_idle")
+        self.assertEqual(pairs["fireAnim"], "viewmodel_fg42_fire")
+        self.assertEqual(pairs["adsUpAnim"], "viewmodel_ray_gun_ads_up")
+        self.assertEqual(pairs["adsFireAnim"], "viewmodel_fg42_ads_fire")
+        # Non-*Anim fields like playerAnimType are untouched
+        self.assertEqual(pairs["playerAnimType"], "rifle")
+        # Missing optional ADS anims are cleared to "" so linker_pc.exe never errors
+        self.assertEqual(pairs["adsDownAnim"], "")
+        self.assertEqual(pairs["adsLastShotAnim"], "")
+        self.assertEqual(pairs["adsRechamberAnim"], "")
+
+        # fireAnim override falls back to template's existing anim when absent from xanim_case_map
+        cloned_blade_fallback = self.bm.clone_zero_fx_weapon_file(
+            SYNTHETIC_ZOMBIE_BOWIE_FLOURISH,
+            overrides={"fireAnim": "viewmodel_knife_slash"},
+            xanim_case_map={
+                "viewmodel_knife_bowie_idle": "viewmodel_knife_bowie_idle",
+                "viewmodel_knife_bowie_flourish": "viewmodel_knife_bowie_flourish",
+            },
+        )
+        blade_fb_pairs = dict(self.bm.parse_weapon_file(cloned_blade_fallback))
+        self.assertEqual(blade_fb_pairs["fireAnim"], "viewmodel_knife_bowie_flourish")
+        self.assertEqual(blade_fb_pairs["adsUpAnim"], "")
+
+        # When viewmodel_knife_slash IS present on disk, override resolves to exact on-disk casing
+        cloned_blade_present = self.bm.clone_zero_fx_weapon_file(
+            SYNTHETIC_ZOMBIE_BOWIE_FLOURISH,
+            overrides={"fireAnim": "viewmodel_knife_slash"},
+            xanim_case_map={
+                "viewmodel_knife_bowie_idle": "viewmodel_knife_bowie_idle",
+                "viewmodel_knife_bowie_flourish": "viewmodel_knife_bowie_flourish",
+                "viewmodel_knife_slash": "viewmodel_knife_slash",
+            },
+        )
+        blade_ok_pairs = dict(self.bm.parse_weapon_file(cloned_blade_present))
+        self.assertEqual(blade_ok_pairs["fireAnim"], "viewmodel_knife_slash")
+
+    def test_stage_bz_element_weapons_auto_wires_raw_xanim_case_map(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_sp = root / "tools" / "raw" / "weapons" / "sp"
+            raw_xanim = root / "tools" / "raw" / "xanim"
+            raw_sp.mkdir(parents=True)
+            raw_xanim.mkdir(parents=True)
+
+            (raw_sp / "m2_flamethrower_zombie").write_text(
+                SYNTHETIC_M2_FLAMETHROWER_ZOMBIE, encoding="latin1"
+            )
+            (raw_sp / "tesla_gun").write_text(SYNTHETIC_TESLA_GUN, encoding="latin1")
+            (raw_sp / "m7_launcher_zombie").write_text(
+                SYNTHETIC_M7_LAUNCHER_ZOMBIE, encoding="latin1"
+            )
+            (raw_sp / "zombie_doublebarrel_sawed").write_text(
+                SYNTHETIC_ZOMBIE_DOUBLEBARREL_SAWED, encoding="latin1"
+            )
+
+            # Populate Linux lowercase xanim files (deliberately omitting tesla adsDownAnim & doublebarrel adsUpAnim)
+            for anim_name in (
+                "viewmodel_usa_flamethrower_idle",
+                "viewmodel_usa_flamethrower_fire",
+                "viewmodel_flamethrower_idle",
+                "viewmodel_flamethrower_reload",
+                "viewmodel_usa_tesla_idle",
+                "viewmodel_usa_tesla_fire",
+                "viewmodel_usa_tesla_ads_up",
+                "viewmodel_usa_tesla_ads_fire",
+                "viewmodel_m1garand_gl_idle",
+                "viewmodel_m1garand_gl_fire",
+                "viewmodel_m1garand_gl_ads_up",
+                "viewmodel_m1garand_gl_ads_fire",
+                "viewmodel_doublebarrel_idle",
+                "viewmodel_doublebarrel_fire",
+                "viewmodel_doublebarrel_reload",
+            ):
+                (raw_xanim / anim_name).write_bytes(b"XANIM")
+
+            stage_dir = root / "stage"
+            stage_dir.mkdir(parents=True)
+            self.bm.stage_bz_element_weapons(root / "tools", stage_dir)
+
+            cryo = dict(
+                self.bm.parse_weapon_file(
+                    (stage_dir / "weapons" / "sp" / "bz_cryo_cannon").read_text(encoding="latin1")
+                )
+            )
+            self.assertEqual(cryo["adsUpAnim"], "viewmodel_usa_tesla_ads_up")
+            self.assertEqual(cryo["adsFireAnim"], "viewmodel_usa_tesla_ads_fire")
+            # Missing optional adsDownAnim cleared to ""
+            self.assertEqual(cryo["adsDownAnim"], "")
+
+            xbow = dict(
+                self.bm.parse_weapon_file(
+                    (stage_dir / "weapons" / "sp" / "bz_multi_crossbow").read_text(encoding="latin1")
+                )
+            )
+            self.assertEqual(xbow["adsUpAnim"], "viewmodel_m1garand_gl_ads_up")
+            self.assertEqual(xbow["adsFireAnim"], "viewmodel_m1garand_gl_ads_fire")
+
+            blade = dict(
+                self.bm.parse_weapon_file(
+                    (stage_dir / "weapons" / "sp" / "bz_blade_boomerang").read_text(encoding="latin1")
+                )
+            )
+            self.assertEqual(blade["fireAnim"], "viewmodel_doublebarrel_fire")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_doublebarrel_reload")
+            # Missing optional adsUpAnim cleared to ""
+            self.assertEqual(blade["adsUpAnim"], "")
 
 
 class TestMysteryBoxAndElementHookSeams(unittest.TestCase):

@@ -1067,6 +1067,10 @@ bz_titan_apply_aggro_bias( titan )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 
 		dist_titan = Distance( z.origin, titan.origin );
 		if ( dist_titan > aggro_radius )
@@ -1249,6 +1253,10 @@ bz_sapper_on_grenade_detonate( player, origin, base_radius, base_damage )
 	{
 		z = zombies[i];
 		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 		{
 			continue;
 		}
@@ -1582,6 +1590,10 @@ bz_sapper_fire_trap_tick( trap )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( trap.origin, z.origin ) <= trap.radius )
 		{
 			z DoDamage( trap.tick_damage, trap.origin, trap.owner );
@@ -1630,6 +1642,10 @@ bz_sapper_betty_trap_check( trap )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( trap.origin, z.origin ) <= trap.trigger_radius )
 		{
 			triggered = true;
@@ -1648,6 +1664,10 @@ bz_sapper_betty_trap_check( trap )
 	{
 		z = zombies[i];
 		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
+		{
+			continue;
+		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
 		{
 			continue;
 		}
@@ -1848,6 +1868,10 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 		if ( Distance( pos, z.origin ) <= slam_radius )
 		{
 			z DoDamage( slam_dmg, pos, player );
@@ -1977,6 +2001,10 @@ bz_assassin_acquire_ghost_on_zombie( player, zombie )
 	{
 		return;
 	}
+	if ( maps\_bz_hooks::bz_is_dog_entity( zombie ) )
+	{
+		return;
+	}
 	if ( bz_assassin_has_ghosted_zombie( player, zombie ) )
 	{
 		return;
@@ -2062,22 +2090,37 @@ bz_assassin_ghost_tick( player )
 	}
 	hspeed_sq = ( vx * vx ) + ( vy * vy );
 
-	// Active while moving/sprinting (horizontal speed >= 20 u/s)
-	if ( hspeed_sq < 400.0 || !IsDefined( player.origin ) )
+	// Active only while moving purposefully into contact (horizontal speed >= 40 u/s)
+	if ( hspeed_sq < 1600.0 || !IsDefined( player.origin ) )
 	{
 		bz_assassin_restore_all_zombies( player );
 		return 0;
 	}
 
-	ghost_radius = 96;
-	release_radius = 112;
+	ghost_radius = 42;
+	release_radius = 42;
 
-	// First restore any previously ghosted zombies that died or exited range
+	// First restore any previously ghosted zombies that died, exited contact radius (> 42u),
+	// or that the Assassin is no longer moving toward outside tight body overlap (> 16u)
 	kept = [];
 	for ( i = 0; i < player.bz_ghost_zombies.size; i++ )
 	{
 		z = player.bz_ghost_zombies[i];
-		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || Distance( player.origin, z.origin ) > release_radius )
+		keep_z = false;
+		if ( IsDefined( z ) && IsAlive( z ) && IsDefined( z.origin ) )
+		{
+			z_dist = Distance( player.origin, z.origin );
+			if ( z_dist <= release_radius )
+			{
+				z_dx = z.origin[0] - player.origin[0];
+				z_dy = z.origin[1] - player.origin[1];
+				if ( ( ( vx * z_dx ) + ( vy * z_dy ) ) > 0.0 || z_dist <= 16.0 )
+				{
+					keep_z = true;
+				}
+			}
+		}
+		if ( !keep_z )
 		{
 			if ( IsDefined( z ) )
 			{
@@ -2091,7 +2134,7 @@ bz_assassin_ghost_tick( player )
 	}
 	player.bz_ghost_zombies = kept;
 
-	// Ghost nearby alive zombies via safe SetContents(0)
+	// Ghost contact-range alive zombies only when moving toward them (skipping Hellhounds)
 	zombies = bz_class_get_zombies_safe();
 	for ( i = 0; i < zombies.size; i++ )
 	{
@@ -2100,9 +2143,20 @@ bz_assassin_ghost_tick( player )
 		{
 			continue;
 		}
-		if ( Distance( player.origin, z.origin ) <= ghost_radius )
+		if ( maps\_bz_hooks::bz_is_dog_entity( z ) )
 		{
-			bz_assassin_acquire_ghost_on_zombie( player, z );
+			continue;
+		}
+		dist = Distance( player.origin, z.origin );
+		if ( dist <= ghost_radius )
+		{
+			dx = z.origin[0] - player.origin[0];
+			dy = z.origin[1] - player.origin[1];
+			toward_dot = ( vx * dx ) + ( vy * dy );
+			if ( toward_dot > 0.0 || dist <= 16.0 )
+			{
+				bz_assassin_acquire_ghost_on_zombie( player, z );
+			}
 		}
 	}
 

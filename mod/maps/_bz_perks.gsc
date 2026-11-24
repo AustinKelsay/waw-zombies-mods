@@ -1076,6 +1076,10 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 		{
 			continue;
 		}
+		if ( maps\_bz_hooks::bz_is_spawning_dog( z ) )
+		{
+			continue;
+		}
 
 		dist = Distance( p_org, z.origin );
 		if ( dist <= radius )
@@ -1083,36 +1087,39 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 			z.bz_second_chance_stun_until = stun_until;
 			maps\_bz_hooks::bz_recompute_zombie_move_rate( z );
 
-			dx = z.origin[0] - p_org[0];
-			dy = z.origin[1] - p_org[1];
-			nx = 1.0;
-			ny = 0.0;
-			if ( dist > 1.0 )
+			if ( !maps\_bz_hooks::bz_is_dog_entity( z ) )
 			{
-				nx = dx / dist;
-				ny = dy / dist;
-			}
-
-			raw_push = ( z.origin[0] + ( nx * 96 ), z.origin[1] + ( ny * 96 ), z.origin[2] );
-			trace_start = ( z.origin[0], z.origin[1], z.origin[2] + 24 );
-			trace_end = ( raw_push[0], raw_push[1], raw_push[2] + 24 );
-			push_org = raw_push;
-			tr = BulletTrace( trace_start, trace_end, false, z );
-			if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
-			{
-				safe_frac = tr["fraction"] - 0.15;
-				if ( safe_frac < 0.0 )
+				dx = z.origin[0] - p_org[0];
+				dy = z.origin[1] - p_org[1];
+				nx = 1.0;
+				ny = 0.0;
+				if ( dist > 1.0 )
 				{
-					safe_frac = 0.0;
+					nx = dx / dist;
+					ny = dy / dist;
 				}
-				push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
+
+				raw_push = ( z.origin[0] + ( nx * 96 ), z.origin[1] + ( ny * 96 ), z.origin[2] );
+				trace_start = ( z.origin[0], z.origin[1], z.origin[2] + 24 );
+				trace_end = ( raw_push[0], raw_push[1], raw_push[2] + 24 );
+				push_org = raw_push;
+				tr = BulletTrace( trace_start, trace_end, false, z );
+				if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
+				{
+					safe_frac = tr["fraction"] - 0.15;
+					if ( safe_frac < 0.0 )
+					{
+						safe_frac = 0.0;
+					}
+					push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
+				}
+				z_ang = ( 0, 0, 0 );
+				if ( IsDefined( z.angles ) )
+				{
+					z_ang = z.angles;
+				}
+				z ForceTeleport( push_org, z_ang );
 			}
-			z_ang = ( 0, 0, 0 );
-			if ( IsDefined( z.angles ) )
-			{
-				z_ang = z.angles;
-			}
-			z ForceTeleport( push_org, z_ang );
 			z thread bz_perks_second_chance_stun_zombie( stun_sec, stun_until );
 			count++;
 		}

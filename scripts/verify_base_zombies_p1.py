@@ -42,7 +42,8 @@ import smoke_verify  # noqa: E402
 
 REPO_ROOT = build_mod.REPO_ROOT
 DEFAULT_LOG_DIR = REPO_ROOT / ".smoke_logs"
-REQUIRED_STATIONS: tuple[str, ...] = ("perks", "class", "arsenal", "pap")
+REQUIRED_STATIONS: tuple[str, ...] = ("perks", "class", "arsenal")
+NON_FACTORY_REQUIRED_STATIONS: tuple[str, ...] = ("perks", "class", "arsenal", "pap")
 
 BZ_EVENT_RE = re.compile(r"BZ_EVENT\|([A-Z0-9_]+)\|(.*)")
 FX_COUNT_RE = re.compile(r"(\d+)\s+of\s+400\s+'?fx'?\s+assets", re.IGNORECASE)
@@ -146,9 +147,27 @@ def analyze_bz_p1_log(
         for e in events
         if e.event_type == "STATION_SPAWN" and e.fields.get("map") == map_name
     }
-    for station_id in REQUIRED_STATIONS:
+    expected_stations = REQUIRED_STATIONS if map_name == "nazi_zombie_factory" else NON_FACTORY_REQUIRED_STATIONS
+    for station_id in expected_stations:
         if station_id not in spawned_stations:
             errors.append(f"Missing STATION_SPAWN for station={station_id!r} on {map_name!r}")
+    if map_name == "nazi_zombie_factory":
+        if "pap" in spawned_stations:
+            errors.append(
+                "Unexpected duplicate standalone STATION_SPAWN for station='pap' on 'nazi_zombie_factory' "
+                "(Double PaP must run inside Der Riese's native Pack-a-Punch console)"
+            )
+        native_dpap = [
+            e
+            for e in events
+            if e.event_type == "PAP_DOUBLE_UPGRADE"
+            and e.fields.get("map") == map_name
+            and e.fields.get("console") == "native"
+        ]
+        if not native_dpap:
+            errors.append(
+                "Missing PAP_DOUBLE_UPGRADE event with console=native on 'nazi_zombie_factory'"
+            )
 
     fail_events = [e for e in events if e.event_type == "BZ_SELFTEST_FAIL"]
     for fev in fail_events:
@@ -161,7 +180,7 @@ def analyze_bz_p1_log(
         pev = pass_events[-1]
         expected_fields = (
             ("map", map_name),
-            ("stations", "4"),
+            ("stations", str(len(expected_stations))),
             ("titan_hp", "440"),
             ("sapper_nades", "10"),
             ("broker_pts", "200"),

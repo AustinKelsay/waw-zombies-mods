@@ -112,6 +112,54 @@ PERK_RESET_HEALTH_RE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)\.maxhealth[ \t]*=[ \t]*100;(?P<trailing>[ \t]*)\r?$",
     re.MULTILINE,
 )
+VENDING_UPGRADE_DEF_RE = re.compile(
+    r"^vending_upgrade\([ \t]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+PAP_FLAG_WAIT_RE = re.compile(
+    r'^(?P<indent>[ \t]*)(?:flag_wait|level[ \t]+waittill)[ \t]*\([ \t]*"Pack_A_Punch_on"[ \t]*\);(?P<trailing>[ \t]*)\r?$',
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_UPGRADE_GUARD_RE = re.compile(
+    r'^(?P<indent>[ \t]*)if[ \t]*\([ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\][ \t]*\)[ \t]*\|\|[ \t]*!IsDefined[ \t]*\([ \t]*level\.zombie_include_weapons\[[ \t]*current_weapon[ \t]*\+[ \t]*"_upgraded"[ \t]*\][ \t]*\)[ \t]*\)(?P<trailing>[ \t]*)\r?$',
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_STOCK_BUSY_START_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+(?:disable_trigger\([ \t]*\)|SetHintString[ \t]*\([ \t]*&\"ZOMBIE_GET_UPGRADED\"[ \t]*\));(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_STOCK_BUSY_END_RE = re.compile(
+    r"^(?P<indent>[ \t]*)self[ \t]+(?:setvisibletoall\([ \t]*\)|enable_trigger\([ \t]*\));(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+WAIT_FOR_PLAYER_TAKE_DEF_RE = re.compile(
+    r"^wait_for_player_to_take\([^)]*\)[ \t]*\r?\n\{",
+    re.MULTILINE,
+)
+PAP_TAKE_GIVE_MAX_AMMO_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GiveMaxAmmo[ \t]*\([ \t]*(?P<weap>[^,)]+?)[ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_TAKE_GIVE_WEAPON_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+GiveWeapon[ \t]*\([ \t]*(?P<weap>[^,)]+?)(?:[ \t]*,[^)]*)?\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+PAP_TAKE_WEAPON_GIVE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_weapons::weapon_give[ \t]*\([ \t]*(?P<weap>[^,)]+?)(?:[ \t]*,[^)]*)?\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+DOG_HIDE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+hide\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+DOG_STOP_SHIELD_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+(?:thread[ \t]+)?stop_magic_bullet_shield\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
+DOG_SHOW_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+show\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+    re.MULTILINE | re.IGNORECASE,
+)
 ADD_PLAYER_SCORE_DEF_RE = re.compile(
     r"^add_to_player_score\([ \t]*(?P<param>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*\r?\n\{",
     re.MULTILINE,
@@ -200,90 +248,120 @@ VERIFIED_ALL_4_MAP_FX: frozenset[str] = frozenset(
 BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
     (
         "bz_acid_sprayer",
-        ("ray_gun",),
+        ("m2_flamethrower_zombie", "ray_gun"),
         {
+            "displayName": "Acid Sprayer",
             "inventoryType": "primary",
+            "weaponType": "bullet",
+            "weaponClass": "rifle",
+            "fireType": "Single Shot",
             "ammoName": "bz_acid",
             "clipName": "bz_acid",
-            "displayName": "Acid Sprayer",
-            "altWeapon": "",
-            "damage": "1",
-            "minDamage": "1",
-            "explosionInnerDamage": "0",
-            "explosionOuterDamage": "0",
-            "explosionRadius": "0",
             "clipSize": "20",
             "maxAmmo": "120",
             "startAmmo": "120",
             "dropAmmoMin": "20",
             "dropAmmoMax": "60",
-            "projTrailEffect": "misc/fx_trail_raygun_geotrail",
-            "projExplosionEffect": "misc/fx_exp_raygun_impact",
-        },
-    ),
-    (
-        "bz_cryo_cannon",
-        ("ray_gun",),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_cryo",
-            "clipName": "bz_cryo",
-            "displayName": "Cryo Cannon",
-            "altWeapon": "",
+            "fireTime": "0.45",
+            "reloadTime": "1.2",
+            "reloadEmptyTime": "1.2",
+            "emptyIdleAnim": "viewmodel_flamethrower_idle",
+            "reloadAnim": "viewmodel_flamethrower_reload",
+            "reloadEmptyAnim": "viewmodel_flamethrower_reload",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "adsUpAnim": "",
+            "adsDownAnim": "",
+            "adsFireAnim": "",
+            "adsLastShotAnim": "",
+            "adsRechamberAnim": "",
+            "fireSound": "weap_raygun_fire",
+            "fireSoundPlayer": "weap_raygun_fire_plr",
+        },
+    ),
+    (
+        "bz_cryo_cannon",
+        ("tesla_gun", "ray_gun"),
+        {
+            "displayName": "Cryo Cannon",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "ammoName": "bz_cryo",
+            "clipName": "bz_cryo",
             "clipSize": "16",
             "maxAmmo": "96",
             "startAmmo": "96",
             "dropAmmoMin": "16",
             "dropAmmoMax": "48",
-            "projTrailEffect": "",
-            "projExplosionEffect": "env/electrical/fx_elec_short_oneshot",
-        },
-    ),
-    (
-        "bz_multi_crossbow",
-        ("m1garand_gl", "zombie_m1garand", "kar98k"),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_xbow",
-            "clipName": "bz_xbow",
-            "displayName": "Multi-Crossbow",
-            "altWeapon": "",
+            "fireTime": "0.55",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+        },
+    ),
+    (
+        "bz_multi_crossbow",
+        ("m7_launcher_zombie", "fg42_scoped", "m1garand_gl", "zombie_m1garand", "kar98k"),
+        {
+            "displayName": "Multi-Crossbow",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "fireType": "Single Shot",
+            "ammoName": "bz_xbow",
+            "clipName": "bz_xbow",
             "clipSize": "6",
             "maxAmmo": "36",
             "startAmmo": "36",
             "dropAmmoMin": "6",
             "dropAmmoMax": "18",
-        },
-    ),
-    (
-        "bz_blade_boomerang",
-        ("zombie_colt", "colt"),
-        {
-            "inventoryType": "primary",
-            "ammoName": "bz_blade",
-            "clipName": "bz_blade",
-            "displayName": "Blade Boomerang",
-            "altWeapon": "",
+            "fireTime": "0.60",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
+            "altWeapon": "",
+        },
+    ),
+    (
+        "bz_blade_boomerang",
+        ("zombie_doublebarrel_sawed", "walther", "zombie_colt", "colt"),
+        {
+            "displayName": "Blade Boomerang",
+            "inventoryType": "primary",
+            "weaponType": "bullet",
+            "weaponClass": "pistol",
+            "shotCount": "1",
+            "fireType": "Single Shot",
+            "ammoName": "bz_blade",
+            "clipName": "bz_blade",
             "clipSize": "1",
             "maxAmmo": "20",
             "startAmmo": "20",
             "dropAmmoMin": "1",
             "dropAmmoMax": "10",
+            "fireTime": "0.65",
+            "reloadTime": "0.45",
+            "reloadEmptyTime": "0.45",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "fireSound": "melee_swing_plr",
+            "fireSoundPlayer": "melee_swing_plr",
         },
     ),
 )
@@ -356,6 +434,22 @@ def zombiemode_perks_module_for_map(map_name: str) -> str:
     return f"_zombiemode_perks_bz_{slug}"
 
 
+def zombiemode_dogs_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_dogs script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_dogs_bz_{slug}"
+
+
+def zombiemode_powerups_module_for_map(map_name: str) -> str:
+    """Return the per-map hooked _zombiemode_powerups script stem (without .gsc)."""
+    slug = STOCK_MAP_SLUGS.get(map_name)
+    if slug is None:
+        raise ValueError(f"Unsupported stock Nazi Zombies map: {map_name!r}")
+    return f"_zombiemode_powerups_bz_{slug}"
+
+
 def extract_stock_script(
     map_name: str, rawfile_rel: str, steam_game: Path, tools_root: Path
 ) -> bytes:
@@ -389,11 +483,17 @@ def _rewire_stock_module_refs(
     text: str,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> str:
     if rewire_weapons_module:
         text = text.replace("maps\\_zombiemode_weapons::", f"maps\\{rewire_weapons_module}::")
     if rewire_perks_module:
         text = text.replace("maps\\_zombiemode_perks::", f"maps\\{rewire_perks_module}::")
+    if rewire_dogs_module:
+        text = text.replace("maps\\_zombiemode_dogs::", f"maps\\{rewire_dogs_module}::")
+    if rewire_powerups_module:
+        text = text.replace("maps\\_zombiemode_powerups::", f"maps\\{rewire_powerups_module}::")
     return text
 
 
@@ -403,6 +503,8 @@ def inject_map_hooks(
     *,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> bytes:
     """Inject Gauntlet + guarded Base Zombies bootstrap hooks and rewire maps\\_zombiemode::main(...)."""
     text = script_bytes.decode("latin1")
@@ -433,6 +535,8 @@ def inject_map_hooks(
         patched,
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
+        rewire_dogs_module=rewire_dogs_module,
+        rewire_powerups_module=rewire_powerups_module,
     )
     return patched.encode("latin1")
 
@@ -443,6 +547,8 @@ def inject_zombiemode_hooks(
     *,
     rewire_weapons_module: str | None = None,
     rewire_perks_module: str | None = None,
+    rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
 ) -> bytes:
     """Inject strictly gated Gauntlet & Base Zombies hooks into a stock map's maps/_zombiemode.gsc.
 
@@ -552,6 +658,8 @@ def inject_zombiemode_hooks(
         text,
         rewire_weapons_module=rewire_weapons_module,
         rewire_perks_module=rewire_perks_module,
+        rewire_dogs_module=rewire_dogs_module,
+        rewire_powerups_module=rewire_powerups_module,
     )
     return text.encode("latin1")
 
@@ -733,9 +841,168 @@ def inject_zombiemode_perks_hooks(
         raise ValueError(
             "Expected at least 1 weapon-cap or maxhealth hook site in _zombiemode_perks.gsc"
         )
+
+    # Der Riese native Pack-a-Punch console hooks (only when vending_upgrade() exists,
+    # so Verruckt & Shi No Numa _zombiemode_perks.gsc patch cleanly without error).
+    vu_match = VENDING_UPGRADE_DEF_RE.search(text)
+    if vu_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=vu_match.end())
+        vu_end = next_fn.start() if next_fn is not None else len(text)
+        vu_body = text[vu_match.start() : vu_end]
+
+        def _inject_after_pap_flag(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ level.bz_native_pap_unlocked = true; level.bz_native_pap_unlock_hook_fired = true; }}{ending}"
+            )
+
+        vu_body = PAP_FLAG_WAIT_RE.sub(_inject_after_pap_flag, vu_body, count=1)
+
+        def _inject_before_pap_guard(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0)
+            return (
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() && "
+                f"maps\\_bz_pap::bz_pap_try_native_console_upgrade( self, player, current_weapon, perk_machine, packa_rollers ) ){newline}"
+                f"{indent}{{{newline}"
+                f"{indent}\tcontinue;{newline}"
+                f"{indent}}}{newline}"
+                f"{orig}"
+            )
+
+        vu_body, guard_hits = PAP_UPGRADE_GUARD_RE.subn(_inject_before_pap_guard, vu_body, count=1)
+        if guard_hits != 1:
+            raise ValueError(
+                "Could not locate zombie_include_weapons upgrade guard inside vending_upgrade() "
+                "in _zombiemode_perks.gsc"
+            )
+
+        def _inject_busy_start(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ self.bz_pap_stock_busy = true; }}{ending}"
+            )
+
+        def _inject_busy_end(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                f"{{ self.bz_pap_stock_busy = false; }}{ending}"
+            )
+
+        vu_body = PAP_STOCK_BUSY_START_RE.sub(_inject_busy_start, vu_body)
+        vu_body = PAP_STOCK_BUSY_END_RE.sub(_inject_busy_end, vu_body)
+        text = text[: vu_match.start()] + vu_body + text[vu_end:]
+
+        # Hook wait_for_player_to_take() across ALL pickup branches (weapon_give at cap AND
+        # GiveMaxAmmo/GiveWeapon below cap) so picking up a native *_upgraded weapon refreshes
+        # reserve ammo & HUD regardless of current primary weapon count.
+        take_match = WAIT_FOR_PLAYER_TAKE_DEF_RE.search(text)
+        if take_match is not None:
+            next_take_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=take_match.end())
+            take_end = next_take_fn.start() if next_take_fn is not None else len(text)
+            take_body = text[take_match.start() : take_end]
+
+            def _inject_after_take(match: re.Match[str]) -> str:
+                indent = match.group("indent")
+                ent = match.group("ent")
+                weap = match.group("weap").strip()
+                orig = match.group(0).rstrip("\r")
+                ending = "\r" if match.group(0).endswith("\r") else ""
+                return (
+                    f"{orig}{newline}"
+                    f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
+                    f"{{ maps\\_bz_pap::bz_pap_on_native_weapon_taken( {ent}, {weap} ); }}{ending}"
+                )
+
+            take_body, wg_hits = PAP_TAKE_WEAPON_GIVE_RE.subn(_inject_after_take, take_body)
+            take_body, gma_hits = PAP_TAKE_GIVE_MAX_AMMO_RE.subn(_inject_after_take, take_body)
+            gw_hits = 0
+            if gma_hits == 0:
+                take_body, gw_hits = PAP_TAKE_GIVE_WEAPON_RE.subn(_inject_after_take, take_body)
+            take_hits = wg_hits + gma_hits + gw_hits
+            if take_hits == 0:
+                raise ValueError(
+                    "Could not locate GiveMaxAmmo/GiveWeapon/weapon_give inside "
+                    "wait_for_player_to_take() in _zombiemode_perks.gsc"
+                )
+            text = text[: take_match.start()] + take_body + text[take_end:]
+
     text = _rewire_stock_module_refs(
         text,
         rewire_weapons_module=rewire_weapons_module,
+    )
+    return text.encode("latin1")
+
+
+def inject_zombiemode_dogs_hooks(
+    script_bytes: bytes,
+    *,
+    rewire_weapons_module: str | None = None,
+    rewire_powerups_module: str | None = None,
+) -> bytes:
+    """Patch stock maps/_zombiemode_dogs.gsc to keep bz_spawning_dog set through Show().
+
+    Stock dog_spawn_fx() clears ignoreall and calls stop_magic_bullet_shield(), then waits
+    100 ms before calling show(). Setting bz_spawning_dog=true on hide() and right before
+    stop_magic_bullet_shield() and clearing it right after show() guarantees Base Zombies
+    combat/CC effects never hit a still-hidden Hellhound during that 100 ms window.
+    """
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+
+    def _inject_after_hide(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = true; }}{ending}"
+        )
+
+    def _inject_before_stop_shield(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0)
+        return (
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = true; }}{newline}"
+            f"{orig}"
+        )
+
+    def _inject_after_show(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        ent = match.group("ent")
+        orig = match.group(0).rstrip("\r")
+        ending = "\r" if match.group(0).endswith("\r") else ""
+        return (
+            f"{orig}{newline}"
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ) {{ {ent}.bz_spawning_dog = false; }}{ending}"
+        )
+
+    text, _hide_hits = DOG_HIDE_RE.subn(_inject_after_hide, text)
+    text, stop_hits = DOG_STOP_SHIELD_RE.subn(_inject_before_stop_shield, text)
+    text, show_hits = DOG_SHOW_RE.subn(_inject_after_show, text)
+    if stop_hits == 0 or show_hits == 0:
+        raise ValueError(
+            f"Could not locate stop_magic_bullet_shield()/show() spawn markers in _zombiemode_dogs.gsc "
+            f"(stop_hits={stop_hits}, show_hits={show_hits})"
+        )
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+        rewire_powerups_module=rewire_powerups_module,
     )
     return text.encode("latin1")
 
@@ -1067,15 +1334,31 @@ def serialize_weapon_file(pairs: list[tuple[str, str]]) -> str:
     return "\\".join(parts)
 
 
+def build_xanim_case_map(xanim_dir: Path) -> dict[str, str]:
+    """Build a lowercase -> exact on-disk filename map from raw/xanim/ for Linux case-safe linking."""
+    if not xanim_dir.is_dir():
+        return {}
+    case_map: dict[str, str] = {}
+    for entry in sorted(xanim_dir.iterdir()):
+        if entry.is_file():
+            case_map[entry.name.lower()] = entry.name
+    return case_map
+
+
 def clone_zero_fx_weapon_file(
     stock_text: str,
     overrides: dict[str, str],
     allowed_fx_set: set[str] | frozenset[str] | None = None,
+    xanim_case_map: dict[str, str] | None = None,
 ) -> str:
     """Deterministically clone a WaW stock weapon definition with 0 added FX slots.
 
     Any `*Effect` or `*Fx` field (case-insensitive) whose value is non-empty and not
     present in `allowed_fx_set` (defaults to VERIFIED_ALL_4_MAP_FX) is cleared to `""`.
+    When `xanim_case_map` (lowercase -> exact on-disk filename from `raw/xanim/`) is
+    provided, every non-empty `*Anim` value is resolved case-insensitively to its exact
+    on-disk casing, overridden `*Anim` values missing from disk fall back to the
+    template's existing anim, and missing optional `ads*Anim` fields are cleared to `""`.
     """
     pairs = parse_weapon_file(stock_text)
     allowed = {
@@ -1083,7 +1366,15 @@ def clone_zero_fx_weapon_file(
         for fx in (VERIFIED_ALL_4_MAP_FX if allowed_fx_set is None else allowed_fx_set)
         if fx and fx.strip()
     }
+    anim_map: dict[str, str] | None = None
+    if xanim_case_map is not None:
+        anim_map = {
+            k.strip().lower(): v.strip()
+            for k, v in xanim_case_map.items()
+            if k and k.strip() and v and v.strip()
+        }
 
+    original_values: dict[str, str] = {key: val for key, val in pairs}
     applied_keys: set[str] = set()
     updated: list[tuple[str, str]] = []
     for key, val in pairs:
@@ -1105,6 +1396,26 @@ def clone_zero_fx_weapon_file(
             norm_val = val.strip().replace("\\", "/").lower()
             if norm_val and norm_val not in allowed:
                 val = ""
+        elif anim_map is not None and key_lower.endswith("anim"):
+            stripped = val.strip()
+            if stripped:
+                resolved = anim_map.get(stripped.lower())
+                if resolved is not None:
+                    val = resolved
+                elif key in overrides:
+                    orig_val = original_values.get(key, "").strip()
+                    if orig_val:
+                        orig_resolved = anim_map.get(orig_val.lower())
+                        if orig_resolved is not None:
+                            val = orig_resolved
+                        elif key_lower.startswith("ads"):
+                            val = ""
+                        else:
+                            val = orig_val
+                    else:
+                        val = ""
+                elif key_lower.startswith("ads"):
+                    val = ""
         sanitized.append((key, val))
 
     return serialize_weapon_file(sanitized)
@@ -1123,6 +1434,9 @@ def stage_bz_element_weapons(
     raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
     if not raw_weapons_dir.is_dir():
         return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
 
     out_dir = stage_dir / "weapons" / "sp"
     staged_relpaths: list[str] = []
@@ -1143,6 +1457,7 @@ def stage_bz_element_weapons(
             stock_text,
             overrides=overrides,
             allowed_fx_set=allowed_fx_set,
+            xanim_case_map=xanim_case_map,
         )
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / weap_name
@@ -1181,7 +1496,15 @@ def generate_staged_mod_csv(
             stem.startswith("_bz_")
             or stem.startswith("_zombiemode_weapons_bz_")
             or stem.startswith("_zombiemode_perks_bz_")
-            or stem in ("_zombiemode_score.gsc", "_laststand.gsc", "_zombiemode_tesla.gsc")
+            or stem.startswith("_zombiemode_dogs_bz_")
+            or stem.startswith("_zombiemode_powerups_bz_")
+            or stem
+            in (
+                "_zombiemode_score.gsc",
+                "_laststand.gsc",
+                "_zombiemode_tesla.gsc",
+                "nazi_zombie_factory_teleporter.gsc",
+            )
         )
         if not is_bz_script:
             continue
@@ -1410,6 +1733,55 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             perks_dst.parent.mkdir(parents=True, exist_ok=True)
             perks_dst.write_bytes(perks_patched)
 
+        dogs_mod: str | None = None
+        powerups_mod: str | None = None
+        dogs_stock = try_extract_stock_script(
+            map_name, "maps/_zombiemode_dogs.gsc", steam_game, tools_root
+        )
+        if dogs_stock is not None:
+            dogs_mod = zombiemode_dogs_module_for_map(map_name)
+            powerups_stock = try_extract_stock_script(
+                map_name, "maps/_zombiemode_powerups.gsc", steam_game, tools_root
+            )
+            if powerups_stock is not None and b"maps\\_zombiemode_dogs::" in powerups_stock:
+                powerups_mod = zombiemode_powerups_module_for_map(map_name)
+                powerups_patched = _rewire_stock_module_refs(
+                    powerups_stock.decode("latin1"),
+                    rewire_weapons_module=weapons_mod,
+                    rewire_dogs_module=dogs_mod,
+                    rewire_powerups_module=powerups_mod,
+                ).encode("latin1")
+                powerups_dst = stage_dir / "maps" / f"{powerups_mod}.gsc"
+                powerups_dst.parent.mkdir(parents=True, exist_ok=True)
+                powerups_dst.write_bytes(powerups_patched)
+
+            dogs_patched = inject_zombiemode_dogs_hooks(
+                dogs_stock,
+                rewire_weapons_module=weapons_mod,
+                rewire_powerups_module=powerups_mod,
+            )
+            dogs_dst = stage_dir / "maps" / f"{dogs_mod}.gsc"
+            dogs_dst.parent.mkdir(parents=True, exist_ok=True)
+            dogs_dst.write_bytes(dogs_patched)
+
+            teleporter_rel = f"maps/{map_name}_teleporter.gsc"
+            teleporter_stock = try_extract_stock_script(
+                map_name, teleporter_rel, steam_game, tools_root
+            )
+            if teleporter_stock is not None and (
+                b"maps\\_zombiemode_dogs::" in teleporter_stock
+                or b"maps\\_zombiemode_powerups::" in teleporter_stock
+            ):
+                teleporter_patched = _rewire_stock_module_refs(
+                    teleporter_stock.decode("latin1"),
+                    rewire_weapons_module=weapons_mod,
+                    rewire_dogs_module=dogs_mod,
+                    rewire_powerups_module=powerups_mod,
+                ).encode("latin1")
+                teleporter_dst = stage_dir / teleporter_rel
+                teleporter_dst.parent.mkdir(parents=True, exist_ok=True)
+                teleporter_dst.write_bytes(teleporter_patched)
+
         rawfile_rel = f"maps/{map_name}.gsc"
         ff_path = resolve_stock_ff(map_name, steam_game, tools_root, prefer_patch=False)
         stock_bytes = extract_rawfile_from_ff(ff_path, rawfile_rel)
@@ -1418,6 +1790,8 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             map_name,
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
+            rewire_dogs_module=dogs_mod,
+            rewire_powerups_module=powerups_mod,
         )
         dst = stage_dir / rawfile_rel
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1429,6 +1803,8 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             map_name,
             rewire_weapons_module=weapons_mod,
             rewire_perks_module=perks_mod,
+            rewire_dogs_module=dogs_mod,
+            rewire_powerups_module=powerups_mod,
         )
         zm_dst = stage_dir / "maps" / f"{zombiemode_module_for_map(map_name)}.gsc"
         zm_dst.parent.mkdir(parents=True, exist_ok=True)

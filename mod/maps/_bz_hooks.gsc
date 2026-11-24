@@ -1590,9 +1590,69 @@ bz_recompute_player_max_health( player )
 }
 
 // ---------------------------------------------------------------------------
+// Unified Hellhound Detection & Protection Helpers
+// GetAiSpeciesArray("axis", "all") includes Hellhounds; these guards prevent
+// script CC loops from freezing dog animations or breaking dog_spawn_fx().
+// ---------------------------------------------------------------------------
+
+bz_is_dog_entity( ent )
+{
+	if ( !IsDefined( ent ) )
+	{
+		return false;
+	}
+	if ( IsDefined( ent.animname ) && tolower( "" + ent.animname ) == "zombie_dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.targetname ) && tolower( "" + ent.targetname ) == "zombie_dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.species ) && tolower( "" + ent.species ) == "dog" )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.is_dog ) && ent.is_dog )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_is_spawning_dog( ent )
+{
+	if ( !bz_is_dog_entity( ent ) )
+	{
+		return false;
+	}
+	if ( IsDefined( ent.bz_spawning_dog ) && ent.bz_spawning_dog )
+	{
+		return true;
+	}
+	if ( IsDefined( ent.ignoreall ) && ent.ignoreall && ( !IsDefined( ent.bz_stunned ) || !ent.bz_stunned ) )
+	{
+		ent.bz_dog_spawn_grace_until = GetTime() + 250;
+		return true;
+	}
+	if ( IsDefined( ent.magic_bullet_shield ) && ent.magic_bullet_shield )
+	{
+		ent.bz_dog_spawn_grace_until = GetTime() + 250;
+		return true;
+	}
+	if ( IsDefined( ent.bz_dog_spawn_grace_until ) && GetTime() < Int( ent.bz_dog_spawn_grace_until ) )
+	{
+		return true;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------
 // Unified Zombie Move-Rate & Stun/Freeze/Slow Composition
 // Priority: Frozen/Stunned (0.01 + ignoreall) > Acid Slow (0.60) > Flame (0.80) > Base.
 // Prevents Flamethrower 0.80 from overwriting Cryo/Acid and keeps overlapping stuns intact.
+// Hellhounds are protected: spawning dogs are skipped untouched; active dogs
+// never clamp below 0.55 moveplaybackrate and never have ignoreall flipped.
 // ---------------------------------------------------------------------------
 
 bz_save_zombie_base_move_rate( zombie )
@@ -1620,6 +1680,16 @@ bz_recompute_zombie_move_rate( zombie )
 		return 1.0;
 	}
 
+	if ( bz_is_spawning_dog( zombie ) )
+	{
+		if ( IsDefined( zombie.moveplaybackrate ) && zombie.moveplaybackrate > 0.0 )
+		{
+			return zombie.moveplaybackrate;
+		}
+		return 1.0;
+	}
+
+	is_dog = bz_is_dog_entity( zombie );
 	base_rate = bz_save_zombie_base_move_rate( zombie );
 	now = GetTime();
 
@@ -1646,6 +1716,31 @@ bz_recompute_zombie_move_rate( zombie )
 
 	is_stunned = tesla_stunned || war_club_staggered || second_chance_stunned;
 	zombie.bz_stunned = is_stunned;
+
+	if ( is_dog )
+	{
+		dog_floor = 0.55;
+		target_rate = base_rate;
+		if ( frozen || is_stunned )
+		{
+			target_rate = dog_floor;
+		}
+		else if ( IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until ) )
+		{
+			target_rate = base_rate * maps\_bz_rules::bz_get_acid_slow_scale();
+		}
+		else if ( IsDefined( zombie.bz_flame_dot_active ) && zombie.bz_flame_dot_active )
+		{
+			target_rate = base_rate * 0.8;
+		}
+
+		if ( target_rate < dog_floor )
+		{
+			target_rate = dog_floor;
+		}
+		zombie.moveplaybackrate = target_rate;
+		return target_rate;
+	}
 
 	if ( frozen || is_stunned )
 	{
@@ -1760,16 +1855,29 @@ bz_run_test_selftest()
 
 	map_name = bz_get_map_name();
 
-	// 1. All 4 Stations spawned with visible precached stock models
+	// 1. Stations spawned with visible precached stock models:
+	//    Der Riese spawns 3 courtyard stations (real native PaP console handles Double PaP + bz_* Tier 1);
+	//    Nacht, Verruckt, and Shi No Numa spawn all 4 including standalone PaP Station.
+	expected_stations = 4;
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		expected_stations = 3;
+	}
 	stations_ok = IsDefined( level.bz_stations ) &&
 		IsDefined( level.bz_stations["perks"] ) &&
 		IsDefined( level.bz_stations["class"] ) &&
 		IsDefined( level.bz_stations["arsenal"] ) &&
-		IsDefined( level.bz_stations["pap"] ) &&
 		IsDefined( level.bz_stations["perks"].model ) &&
 		IsDefined( level.bz_stations["class"].model ) &&
-		IsDefined( level.bz_stations["arsenal"].model ) &&
-		IsDefined( level.bz_stations["pap"].model );
+		IsDefined( level.bz_stations["arsenal"].model );
+	if ( expected_stations == 4 )
+	{
+		stations_ok = stations_ok && IsDefined( level.bz_stations["pap"] ) && IsDefined( level.bz_stations["pap"].model );
+	}
+	else
+	{
+		stations_ok = stations_ok && !IsDefined( level.bz_stations["pap"] );
+	}
 	bz_selftest_check( st, stations_ok, "stations_spawned" );
 
 	// 1b. Actor damage hook wired onto stock level.global_damage_func & _ads
@@ -1933,24 +2041,97 @@ bz_run_test_selftest()
 	live_score_delta = Int( p.score ) - score_before_live;
 	bz_selftest_check( st, maps\_bz_state::bz_state_get_class( p ) == "broker" && broker_pts == 200 && broker_box == 475 && live_score_delta == 200, "class_broker_2x_475" );
 
-	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP + PaP Bowie + PaP Cluster
-	bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
+	// 4. Pack-a-Punch Expansion: Single PaP -> Double PaP (via real native vending_upgrade trigger on Der Riese) + PaP Bowie + PaP Cluster
 	cur_w = "";
-	w_wait = 0.0;
-	while ( w_wait < 2.0 )
+	if ( map_name == "nazi_zombie_factory" )
 	{
-		cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
-		if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
+		native_trig = undefined;
+		pap_trigs = GetEntArray( "zombie_vending_upgrade", "targetname" );
+		if ( IsDefined( pap_trigs ) && pap_trigs.size > 0 )
 		{
-			break;
+			native_trig = pap_trigs[0];
 		}
-		wait( 0.1 );
-		w_wait = w_wait + 0.1;
-	}
-	bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
 
-	bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
-	bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+		// Unlock real stock vending_upgrade() thread and verify build-injected unlock flag fires
+		if ( !IsDefined( level.flag ) )
+		{
+			level.flag = [];
+		}
+		level.flag["Pack_A_Punch_on"] = true;
+		level notify( "Pack_A_Punch_on" );
+		wait( 0.15 );
+		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired, "pap_native_unlock_hook" );
+
+		base_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )
+		{
+			base_fallthrough = !maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
+			bz_selftest_check( st, base_fallthrough, "pap_native_base_fallthrough" );
+		}
+
+		// Equip a real native upgraded weapon & run pickup sync, then exercise the LIVE vending_upgrade() trigger for Double PaP
+		upg_w = "";
+		if ( base_w != "" && IsDefined( level.zombie_weapons ) && IsDefined( level.zombie_weapons[base_w] ) && IsDefined( level.zombie_weapons[base_w].upgrade_name ) )
+		{
+			upg_w = level.zombie_weapons[base_w].upgrade_name;
+		}
+		if ( upg_w == "" )
+		{
+			upg_w = "zombie_colt_upgraded";
+		}
+		p GiveWeapon( upg_w );
+		p GiveMaxAmmo( upg_w );
+		maps\_bz_pap::bz_pap_on_native_weapon_taken( p, upg_w );
+		p SwitchToWeapon( upg_w );
+		w_wait = 0.0;
+		while ( w_wait < 2.0 )
+		{
+			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			if ( cur_w == upg_w && !p IsSwitchingWeapons() )
+			{
+				break;
+			}
+			wait( 0.05 );
+			w_wait = w_wait + 0.05;
+		}
+		bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
+
+		p.bz_pap_console_next_ms = 0;
+		dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
+		score_before_dpap = Int( p.score );
+		if ( IsDefined( native_trig ) )
+		{
+			native_trig notify( "trigger", p );
+		}
+		dpap_wait = 0.0;
+		while ( dpap_wait < 1.0 && !maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) )
+		{
+			wait( 0.05 );
+			dpap_wait = dpap_wait + 0.05;
+		}
+		native_dpap_ok = maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ) &&
+			Int( p.score ) == ( score_before_dpap - dpap_cost );
+		bz_selftest_check( st, native_dpap_ok, "pap_double_native_console" );
+	}
+	else
+	{
+		bz_on_menu_response( p, "bz_station_pap", "buy_pap:single_pap" );
+		w_wait = 0.0;
+		while ( w_wait < 2.0 )
+		{
+			cur_w = maps\_bz_stations::bz_stations_get_player_weapon_safe( p );
+			if ( cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ) )
+			{
+				break;
+			}
+			wait( 0.1 );
+			w_wait = w_wait + 0.1;
+		}
+		bz_selftest_check( st, cur_w != "" && maps\_bz_pap::bz_pap_is_weapon_papped( p, cur_w ), "pap_single" );
+
+		bz_on_menu_response( p, "bz_station_pap", "buy_pap:double_pap" );
+		bz_selftest_check( st, maps\_bz_state::bz_state_is_weapon_double_pap( p, cur_w ), "pap_double" );
+	}
 
 	p SetPerk( "specialty_altmelee" );
 	p.has_altmelee = true;
@@ -1994,7 +2175,7 @@ bz_run_test_selftest()
 		fields = [];
 		fields[0] = maps\_bz_log::kv( "map", map_name );
 		fields[1] = maps\_bz_log::kv( "checks", st.passed );
-		fields[2] = maps\_bz_log::kv( "stations", 4 );
+		fields[2] = maps\_bz_log::kv( "stations", expected_stations );
 		fields[3] = maps\_bz_log::kv( "titan_hp", titan_hp );
 		fields[4] = maps\_bz_log::kv( "sapper_nades", sapper_nades );
 		fields[5] = maps\_bz_log::kv( "broker_pts", broker_pts );
@@ -2179,9 +2360,10 @@ bz_run_test_p2_selftest()
 		{
 			for ( zi = 0; zi < zlist.size; zi++ )
 			{
-				if ( IsDefined( zlist[zi] ) && IsAlive( zlist[zi] ) )
+				cand = zlist[zi];
+				if ( IsDefined( cand ) && IsAlive( cand ) && !bz_is_dog_entity( cand ) && ( !IsDefined( cand.magic_bullet_shield ) || !cand.magic_bullet_shield ) )
 				{
-					live_z = zlist[zi];
+					live_z = cand;
 					break;
 				}
 			}
@@ -2267,6 +2449,9 @@ bz_run_test_p2_selftest()
 		live_z.health = 50000;
 		live_z.bz_flame_last_ignite_ms = undefined;
 		live_z.bz_flame_dot_active = false;
+		flame_close_org = ( p.origin[0] + 48.0, p.origin[1], p.origin[2] );
+		live_z ForceTeleport( flame_close_org, orig_z_ang );
+		wait( 0.05 );
 		flame_close_dmg = bz_actor_damage_dispatch( live_z, p, p, 50, 0, "MOD_BURNED", "m2_flamethrower_zombie", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
 		flame_close_ok = flame_close_dmg > 50 && IsDefined( live_z.bz_flame_dot_active ) && live_z.bz_flame_dot_active;
 
@@ -2278,7 +2463,19 @@ bz_run_test_p2_selftest()
 		long_dot_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( 10, 50000, false, false );
 		dot_applied = maps\_bz_elem_stock::bz_flame_apply_dot_tick( live_z, p, long_dot_dmg, false, false, 1 );
 		wait( 0.05 );
-		flame_dot_ok = dot_applied && long_dot_dmg > 0 && IsAlive( live_z ) && Int( live_z.health ) < hp_before_dot;
+		hp_after_dot = Int( live_z.health );
+		flame_dot_ok = dot_applied && long_dot_dmg > 0 && IsAlive( live_z ) && hp_after_dot < hp_before_dot;
+		if ( !flame_close_ok || !flame_dot_ok )
+		{
+			fdbg = [];
+			fdbg[0] = maps\_bz_log::kv( "close_dmg", flame_close_dmg );
+			fdbg[1] = maps\_bz_log::kv( "close_ok", bz_bool_int( flame_close_ok ) );
+			fdbg[2] = maps\_bz_log::kv( "dot_ok", bz_bool_int( flame_dot_ok ) );
+			fdbg[3] = maps\_bz_log::kv( "dist", Int( Distance( p.origin, live_z.origin ) ) );
+			fdbg[4] = maps\_bz_log::kv( "hp_before", hp_before_dot );
+			fdbg[5] = maps\_bz_log::kv( "hp_after", hp_after_dot );
+			maps\_bz_log::emit( "SELFTEST_FLAME_DBG", maps\_bz_log::join_fields( fdbg ) );
+		}
 		bz_selftest_check( st, flame_close_ok && flame_dot_ok, "flamethrower_melt_and_dot" );
 
 		// 7. PaP War Club frontal AOE knockback smash on live zombie
