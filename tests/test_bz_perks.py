@@ -602,7 +602,7 @@ class TestBzApexPerks(unittest.TestCase):
         self.gsc.call(BZ_STATE_MOD, "bz_state_mark_weapon_double_pap", self.player, "thompson_upgraded")
 
         self._buy_perks_menu("buy_apex:double_ammo")
-        self.assertEqual(self.player.get_field("score"), 280000)
+        self.assertEqual(self.player.get_field("score"), 292000)
 
         # Purchase immediately grants 2x (and 3x for Double PaP) reserve ammo
         self.assertEqual(self.player.weapon_stock["thompson"], 400)           # 200 * 2.0
@@ -904,7 +904,7 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         # Station UI refreshed to reflect lost perks
         self.assertEqual(self.p1.client_dvars["ui_bz_perk_staminup"], "BUY 2000")
         self.assertEqual(self.p1.client_dvars["ui_bz_t2_juggernog"], "REQ TIER 1")
-        self.assertEqual(self.p1.client_dvars["ui_bz_apex_second_chance"], "BUY 20000")
+        self.assertEqual(self.p1.client_dvars["ui_bz_apex_second_chance"], "BUY 8000")
 
         # Telemetry emitted
         self.assertTrue(

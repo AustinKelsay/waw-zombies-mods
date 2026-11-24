@@ -387,11 +387,11 @@ class TestBzDoublePapAndPersistence(unittest.TestCase):
         zombie = PapFakeEntity("Z1", ent_num=20, is_player=False)
         zombie.set_field("health", 5000)
 
-        # Purchase Double PaP (10,000 pts)
+        # Purchase Double PaP (5,000 pts test cap)
         self.assertTrue(
             gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_pap", "buy_pap:double_pap")
         )
-        self.assertEqual(player.get_field("score"), 40000)
+        self.assertEqual(player.get_field("score"), 45000)
         self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, "thompson_upgraded"))
 
         # +50% reserve ammo: 220 * 1.5 = 330

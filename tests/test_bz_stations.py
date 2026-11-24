@@ -266,7 +266,7 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         self.assertEqual(self.p1.client_dvars["ui_bz_perk_staminup"], "BUY 2000")
         self.assertEqual(self.p1.client_dvars["ui_bz_perk_mule_kick"], "BUY 4000")
         self.assertEqual(self.p1.client_dvars["ui_bz_t2_staminup"], "REQ TIER 1")
-        self.assertEqual(self.p1.client_dvars["ui_bz_apex_second_chance"], "BUY 20000")
+        self.assertEqual(self.p1.client_dvars["ui_bz_apex_second_chance"], "BUY 8000")
         self.assertIn(
             "BZ_EVENT|STATION_OPEN|player=PlayerOne;station=perks;menu=bz_station_perks;score=50000",
             self.gsc.emitted_events,
@@ -331,24 +331,24 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         )
         self.assertEqual(self.p1.get_field("score"), 38000)
 
-        # 4. Buy Apex Perk Second Chance (20000) -> 18000 remaining
+        # 4. Buy Apex Perk Second Chance (8000 test cap) -> 30000 remaining
         self.assertTrue(
             self.gsc.call(
                 BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_apex:second_chance"
             )
         )
-        self.assertEqual(self.p1.get_field("score"), 18000)
+        self.assertEqual(self.p1.get_field("score"), 30000)
         self.assertEqual(self.p1.client_dvars["ui_bz_apex_second_chance"], "OWNED")
 
-        # 5. Buy Titan Class (10000) -> 8000 remaining
+        # 5. Buy Titan Class (5000 test cap) -> 25000 remaining
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:titan")
         )
-        self.assertEqual(self.p1.get_field("score"), 8000)
+        self.assertEqual(self.p1.get_field("score"), 25000)
         self.assertEqual(self.p1.client_dvars["ui_bz_class"], "CLASS: Titan")
         self.assertEqual(self.p1.client_dvars["ui_bz_class_titan"], "ACTIVE")
 
-        # 6. Top up score and buy Single PaP (5000) -> Double PaP (10000) -> PaP Knife / Bowie / Cluster
+        # 6. Top up score and buy Single PaP (5000) -> Double PaP (5000 test cap) -> PaP Knife / Bowie / Cluster
         self.p1.set_field("score", 35000)
         self.p1.give_perk("specialty_altmelee")
         self.assertTrue(
@@ -356,12 +356,12 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         )
         self.assertEqual(self.p1.get_field("score"), 30000)
         self.assertEqual(self.p1.client_dvars["ui_bz_pap_single_pap"], "UPGRADED")
-        self.assertEqual(self.p1.client_dvars["ui_bz_pap_double_pap"], "UPGRADE 10000")
+        self.assertEqual(self.p1.client_dvars["ui_bz_pap_double_pap"], "UPGRADE 5000")
 
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_pap", "buy_pap:double_pap")
         )
-        self.assertEqual(self.p1.get_field("score"), 20000)
+        self.assertEqual(self.p1.get_field("score"), 25000)
         self.assertEqual(self.p1.client_dvars["ui_bz_pap_double_pap"], "MAXED (II)")
 
         self.assertTrue(
@@ -373,7 +373,7 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_arsenal", "buy_pap:pap_cluster")
         )
-        self.assertEqual(self.p1.get_field("score"), 5000)
+        self.assertEqual(self.p1.get_field("score"), 10000)
 
         self.assertEqual(
             purchased_log,
@@ -381,10 +381,10 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
                 ("PlayerOne", "perk", "staminup", 2000, "thompson"),
                 ("PlayerOne", "perk_t2", "staminup", 5000, "thompson"),
                 ("PlayerOne", "perk_t2", "juggernog", 5000, "thompson"),
-                ("PlayerOne", "apex", "second_chance", 20000, "thompson"),
-                ("PlayerOne", "class", "titan", 10000, "thompson"),
+                ("PlayerOne", "apex", "second_chance", 8000, "thompson"),
+                ("PlayerOne", "class", "titan", 5000, "thompson"),
                 ("PlayerOne", "pap", "single_pap", 5000, "thompson"),
-                ("PlayerOne", "pap", "double_pap", 10000, "thompson"),
+                ("PlayerOne", "pap", "double_pap", 5000, "thompson"),
                 ("PlayerOne", "pap", "pap_knife", 5000, "thompson"),
                 ("PlayerOne", "pap", "pap_bowie", 5000, "thompson"),
                 ("PlayerOne", "pap", "pap_cluster", 5000, "thompson"),

@@ -117,10 +117,10 @@ class TestBzRulesCatalog(unittest.TestCase):
         )
 
         expected = [
-            ("double_ammo", 20000, "Double Ammo"),
-            ("lightweight_heavy", 20000, "Lightweight Heavy"),
-            ("second_chance", 20000, "Second Chance"),
-            ("blast_shield", 20000, "Blast Shield"),
+            ("double_ammo", 8000, "Double Ammo"),
+            ("lightweight_heavy", 8000, "Lightweight Heavy"),
+            ("second_chance", 8000, "Second Chance"),
+            ("blast_shield", 8000, "Blast Shield"),
         ]
         for apex_id, price, display_name in expected:
             self.assertTrue(self.gsc.call(RULES_MOD, "bz_is_valid_apex_perk", apex_id))
@@ -140,12 +140,12 @@ class TestBzRulesCatalog(unittest.TestCase):
         )
 
         expected = [
-            ("medic", 10000, "Field Medic"),
-            ("titan", 10000, "Titan"),
-            ("sapper", 10000, "Sapper"),
-            ("daredevil", 10000, "Daredevil"),
-            ("assassin", 10000, "Assassin"),
-            ("broker", 10000, "Broker"),
+            ("medic", 5000, "Field Medic"),
+            ("titan", 5000, "Titan"),
+            ("sapper", 5000, "Sapper"),
+            ("daredevil", 5000, "Daredevil"),
+            ("assassin", 5000, "Assassin"),
+            ("broker", 5000, "Broker"),
         ]
         for class_id, price, display_name in expected:
             self.assertTrue(self.gsc.call(RULES_MOD, "bz_is_valid_class", class_id))
@@ -162,7 +162,7 @@ class TestBzRulesCatalog(unittest.TestCase):
         self.assertEqual(ids, ["double_pap", "pap_knife", "pap_bowie", "pap_cluster"])
 
         expected = [
-            ("double_pap", 10000, "Double Pack-a-Punch"),
+            ("double_pap", 5000, "Double Pack-a-Punch"),
             ("pap_knife", 5000, "PaP Knife"),
             ("pap_bowie", 5000, "PaP Bowie Knife"),
             ("pap_cluster", 5000, "PaP Cluster Grenade"),
@@ -652,14 +652,14 @@ class TestBzStatePurchases(unittest.TestCase):
         self.assertEqual(inv.status, "invalid_item")
 
     def test_buy_apex_perks_and_second_chance_arming(self) -> None:
-        p = _make_player(85000)
+        p = _make_player(37000)
         self.gsc.call(STATE_MOD, "bz_state_init_player", p)
 
         for apex_id in ("double_ammo", "lightweight_heavy", "second_chance", "blast_shield"):
             res = self.gsc.call(STATE_MOD, "bz_try_buy_apex", p, apex_id)
             self.assertTrue(res.ok)
             self.assertEqual(res.status, "ok")
-            self.assertEqual(res.cost, 20000)
+            self.assertEqual(res.cost, 8000)
             self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_has_apex", p, apex_id))
 
         self.assertEqual(p.score, 5000)
@@ -672,26 +672,26 @@ class TestBzStatePurchases(unittest.TestCase):
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_try_buy_apex", p, "god_mode").status, "invalid_item")
 
         # Insufficient points rejected
-        p2 = _make_player(19990)
+        p2 = _make_player(7990)
         self.gsc.call(STATE_MOD, "bz_state_init_player", p2)
         insuff = self.gsc.call(STATE_MOD, "bz_try_buy_apex", p2, "double_ammo")
         self.assertEqual(insuff.status, "insufficient_points")
-        self.assertEqual(p2.score, 19990)
+        self.assertEqual(p2.score, 7990)
 
     def test_buy_and_swap_classes_updates_derived_stats(self) -> None:
-        p = _make_player(35000)
+        p = _make_player(20000)
         self.gsc.call(STATE_MOD, "bz_state_init_player", p)
-        self.gsc.call(STATE_MOD, "bz_try_buy_perk", p, "juggernog")      # -2500 -> 32500
-        self.gsc.call(STATE_MOD, "bz_try_buy_perk_t2", p, "juggernog")   # -5000 -> 27500
+        self.gsc.call(STATE_MOD, "bz_try_buy_perk", p, "juggernog")      # -2500 -> 17500
+        self.gsc.call(STATE_MOD, "bz_try_buy_perk_t2", p, "juggernog")   # -5000 -> 12500
 
-        # Buy Titan (10,000) -> 440 HP with Juggernog II
+        # Buy Titan (5,000 test cap) -> 440 HP with Juggernog II
         c1 = self.gsc.call(STATE_MOD, "bz_try_buy_class", p, "titan")
         self.assertTrue(c1.ok)
         self.assertEqual(c1.status, "ok")
-        self.assertEqual(c1.cost, 10000)
+        self.assertEqual(c1.cost, 5000)
         self.assertEqual(c1.previous_class, "")
         self.assertFalse(c1.swapped)
-        self.assertEqual(p.score, 17500)
+        self.assertEqual(p.score, 7500)
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_class", p), "titan")
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_max_health", p), 440)
 
@@ -699,31 +699,31 @@ class TestBzStatePurchases(unittest.TestCase):
         same = self.gsc.call(STATE_MOD, "bz_try_buy_class", p, "TITAN")
         self.assertFalse(same.ok)
         self.assertEqual(same.status, "already_owned")
-        self.assertEqual(p.score, 17500)
+        self.assertEqual(p.score, 7500)
 
-        # Swapping to Sapper (10,000) reports previous_class="titan", drops HP back to 220, raises grenades to 10
+        # Swapping to Sapper (5,000 test cap) reports previous_class="titan", drops HP back to 220, raises grenades to 10
         c2 = self.gsc.call(STATE_MOD, "bz_try_buy_class", p, "sapper")
         self.assertTrue(c2.ok)
         self.assertEqual(c2.status, "ok")
         self.assertEqual(c2.previous_class, "titan")
         self.assertTrue(c2.swapped)
-        self.assertEqual(p.score, 7500)
+        self.assertEqual(p.score, 2500)
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_class", p), "sapper")
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_max_health", p), 220)
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_max_grenades", p), 10)
 
-        # Insufficient points to swap to Broker
+        # Insufficient points to swap to Broker (need 5000, have 2500)
         insuff = self.gsc.call(STATE_MOD, "bz_try_buy_class", p, "broker")
         self.assertEqual(insuff.status, "insufficient_points")
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_state_get_class", p), "sapper")
-        self.assertEqual(p.score, 7500)
+        self.assertEqual(p.score, 2500)
 
         # Invalid class rejected
         inv = self.gsc.call(STATE_MOD, "bz_try_buy_class", p, "necromancer")
         self.assertEqual(inv.status, "invalid_item")
 
     def test_buy_pap_upgrades_and_double_pap_weapon_flags(self) -> None:
-        p = _make_player(40000)
+        p = _make_player(27500)
         self.gsc.call(STATE_MOD, "bz_state_init_player", p)
 
         # Double PaP rejected if weapon not Tier 1 PaP'd or empty weapon name
@@ -731,14 +731,14 @@ class TestBzStatePurchases(unittest.TestCase):
         self.assertEqual(no_pap.status, "missing_prereq")
         no_weap = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "double_pap", "", True)
         self.assertEqual(no_weap.status, "missing_prereq")
-        self.assertEqual(p.score, 40000)
+        self.assertEqual(p.score, 27500)
 
-        # Double PaP succeeds on PaP'd PPSH (10,000 pts)
+        # Double PaP succeeds on PaP'd PPSH (5,000 pts test cap)
         dp1 = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "double_pap", "zombie_ppsh_upgraded", True)
         self.assertTrue(dp1.ok)
         self.assertEqual(dp1.status, "ok")
-        self.assertEqual(dp1.cost, 10000)
-        self.assertEqual(p.score, 30000)
+        self.assertEqual(dp1.cost, 5000)
+        self.assertEqual(p.score, 22500)
         self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_is_weapon_double_pap", p, "zombie_ppsh_upgraded"))
         self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_is_weapon_double_pap", p, "ZOMBIE_PPSH_UPGRADED"))
         self.assertFalse(self.gsc.call(STATE_MOD, "bz_state_is_weapon_double_pap", p, "zombie_mg42_upgraded"))
@@ -746,12 +746,12 @@ class TestBzStatePurchases(unittest.TestCase):
         # Re-buying Double PaP on the SAME weapon -> already_owned
         dp_dup = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "double_pap", "zombie_ppsh_upgraded", True)
         self.assertEqual(dp_dup.status, "already_owned")
-        self.assertEqual(p.score, 30000)
+        self.assertEqual(p.score, 22500)
 
-        # Buying Double PaP on a SECOND distinct PaP'd weapon succeeds (10,000 pts)
+        # Buying Double PaP on a SECOND distinct PaP'd weapon succeeds (5,000 pts test cap)
         dp2 = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "double_pap", "zombie_mg42_upgraded", True)
         self.assertTrue(dp2.ok)
-        self.assertEqual(p.score, 20000)
+        self.assertEqual(p.score, 17500)
         self.assertTrue(self.gsc.call(STATE_MOD, "bz_state_is_weapon_double_pap", p, "zombie_mg42_upgraded"))
 
         # Direct mark/unmark helpers work cleanly
@@ -765,7 +765,7 @@ class TestBzStatePurchases(unittest.TestCase):
         pk = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "pap_knife")
         self.assertTrue(pk.ok)
         self.assertEqual(pk.cost, 5000)
-        self.assertEqual(p.score, 15000)
+        self.assertEqual(p.score, 12500)
         self.assertTrue(p.bz_pap_knife)
         self.assertEqual(self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "pap_knife").status, "already_owned")
 
@@ -775,20 +775,20 @@ class TestBzStatePurchases(unittest.TestCase):
         pb_yes = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "pap_bowie", "", True)
         self.assertTrue(pb_yes.ok)
         self.assertEqual(pb_yes.cost, 5000)
-        self.assertEqual(p.score, 10000)
+        self.assertEqual(p.score, 7500)
         self.assertTrue(p.bz_pap_bowie)
 
         # PaP Cluster Grenade (5,000 pts)
         pc = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "pap_cluster")
         self.assertTrue(pc.ok)
         self.assertEqual(pc.cost, 5000)
-        self.assertEqual(p.score, 5000)
+        self.assertEqual(p.score, 2500)
         self.assertTrue(p.bz_pap_cluster)
 
-        # Insufficient points for another Double PaP (need 10,000, have 5,000)
+        # Insufficient points for another Double PaP (need 5,000, have 2,500)
         insuff = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "double_pap", "ray_gun_upgraded", True)
         self.assertEqual(insuff.status, "insufficient_points")
-        self.assertEqual(p.score, 5000)
+        self.assertEqual(p.score, 2500)
 
         # Invalid PaP upgrade ID
         inv = self.gsc.call(STATE_MOD, "bz_try_buy_pap_upgrade", p, "pap_monkey")

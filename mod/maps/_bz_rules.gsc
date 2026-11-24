@@ -224,7 +224,8 @@ bz_get_apex_perk_price( apex_id )
 		return undefined;
 	}
 
-	return 20000;
+	// Temporary testing cap: Apex perks set to 8000 (standard: 20000).
+	return 8000;
 }
 
 bz_get_class_price( class_id )
@@ -234,7 +235,8 @@ bz_get_class_price( class_id )
 		return undefined;
 	}
 
-	return 10000;
+	// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+	return 5000;
 }
 
 bz_get_pap_upgrade_price( upgrade_id )
@@ -242,7 +244,8 @@ bz_get_pap_upgrade_price( upgrade_id )
 	id = bz_normalize_id( upgrade_id );
 	if ( id == "double_pap" )
 	{
-		return 10000;
+		// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+		return 5000;
 	}
 	if ( id == "pap_knife" || id == "pap_bowie" || id == "pap_cluster" )
 	{
@@ -301,21 +304,22 @@ bz_get_element_weapon_id_from_weapon( weapon_name )
 bz_get_element_weapon_price( item_id )
 {
 	id = bz_normalize_id( item_id );
+	// Temporary testing cap: max cost capped at 5000 (standard: 6500/7000/7500/6000).
 	if ( id == "acid_sprayer" )
 	{
-		return 6500;
+		return 5000;
 	}
 	if ( id == "cryo_cannon" )
 	{
-		return 7000;
+		return 5000;
 	}
 	if ( id == "multi_crossbow" )
 	{
-		return 7500;
+		return 5000;
 	}
 	if ( id == "blade_boomerang" )
 	{
-		return 6000;
+		return 5000;
 	}
 
 	return undefined;
@@ -334,7 +338,8 @@ bz_get_special_gear_price( item_id )
 	}
 	if ( id == "portal_grenade" )
 	{
-		return 6000;
+		// Temporary testing cap: max cost capped at 5000 (standard: 6000).
+		return 5000;
 	}
 
 	return undefined;
