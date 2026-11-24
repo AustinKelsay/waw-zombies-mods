@@ -949,3 +949,31 @@ bz_state_consume_sapper_grenade_refill( player )
 	player.bz_grenades_to_refill = 0;
 	return count;
 }
+
+// Grouped local function pointers used by _bz_stations.gsc to stay within WaW 1.7 precache budgets.
+bz_state_get_stations_api()
+{
+	api = SpawnStruct();
+	api.bz_make_purchase_result = ::bz_make_purchase_result;
+	api.bz_state_ensure_init = ::bz_state_ensure_init;
+	api.bz_state_get_class = ::bz_state_get_class;
+	api.bz_state_get_melee_slot = ::bz_state_get_melee_slot;
+	api.bz_state_get_portal_charges = ::bz_state_get_portal_charges;
+	api.bz_state_get_score_safe = ::bz_state_get_score_safe;
+	api.bz_state_has_apex = ::bz_state_has_apex;
+	api.bz_state_has_pap_upgrade = ::bz_state_has_pap_upgrade;
+	api.bz_state_has_pap_war_club = ::bz_state_has_pap_war_club;
+	api.bz_state_has_perk = ::bz_state_has_perk;
+	api.bz_state_has_perk_t2 = ::bz_state_has_perk_t2;
+	api.bz_state_owns_portal_grenade = ::bz_state_owns_portal_grenade;
+	api.bz_state_owns_war_club = ::bz_state_owns_war_club;
+	api.bz_state_sync_bowie_ownership = ::bz_state_sync_bowie_ownership;
+	api.bz_try_buy_apex = ::bz_try_buy_apex;
+	api.bz_try_buy_class = ::bz_try_buy_class;
+	api.bz_try_buy_element_weapon = ::bz_try_buy_element_weapon;
+	api.bz_try_buy_pap_upgrade = ::bz_try_buy_pap_upgrade;
+	api.bz_try_buy_perk = ::bz_try_buy_perk;
+	api.bz_try_buy_perk_t2 = ::bz_try_buy_perk_t2;
+	api.bz_try_buy_special_gear = ::bz_try_buy_special_gear;
+	return api;
+}

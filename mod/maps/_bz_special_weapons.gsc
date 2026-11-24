@@ -374,7 +374,7 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 
 bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, smash_damage )
 {
-	if ( !IsDefined( attacker ) || !IsDefined( attacker.origin ) )
+	if ( !bz_elements_enabled() || !IsDefined( attacker ) || !IsDefined( attacker.origin ) )
 	{
 		return undefined;
 	}
@@ -480,6 +480,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	if ( has_pap_wc )
 	{
 		bz_special_play_stock_fx( "war_club", smash_pos );
+		PlaySoundAtPosition( "couch_slam", smash_pos );
 		Earthquake( 0.35, 0.3, p_org, 128 );
 	}
 
@@ -1340,6 +1341,7 @@ bz_special_try_activate_portal( player )
 		}
 	}
 	portal.bz_fx_ent = fx_ent;
+	PlaySoundAtPosition( "spawn_powerup", land_pos );
 
 	charges_left = maps\_bz_state::bz_state_get_portal_charges( player );
 	fields = [];
@@ -1360,7 +1362,7 @@ bz_special_try_activate_portal( player )
 // Synchronous/testable portal tick: strictly iterates GetPlayers() so zombies are NEVER teleported.
 bz_special_portal_tick( portal, owner )
 {
-	if ( !IsDefined( portal ) || !IsDefined( portal.bz_active ) || !portal.bz_active )
+	if ( !bz_elements_enabled() || !IsDefined( portal ) || !IsDefined( portal.bz_active ) || !portal.bz_active )
 	{
 		return 0;
 	}
@@ -1406,6 +1408,7 @@ bz_special_portal_tick( portal, owner )
 				p SetPlayerAngles( dest.angles );
 			}
 			p SetTransported( 1.5 );
+			p PlayLocalSound( "powerup_grabbed" );
 			p.bz_portal_warp_lock_until = now + 1500;
 			portal.bz_teleport_count = portal.bz_teleport_count + 1;
 			warped++;
@@ -1659,6 +1662,12 @@ bz_special_ensure_player_watchers( player )
 	player thread bz_special_watch_portal_command();
 	player thread bz_special_watch_portal_notify();
 	player thread bz_special_watch_player_disconnect();
+
+	if ( !IsDefined( player.bz_special_max_ammo_watch_started ) || !player.bz_special_max_ammo_watch_started )
+	{
+		player.bz_special_max_ammo_watch_started = true;
+		player thread bz_special_watch_max_ammo();
+	}
 }
 
 // Coop-safe tactical trigger (WaW 1.7 Coop rejects NotifyOnCommand()):
@@ -1709,6 +1718,18 @@ bz_special_watch_player_disconnect()
 	self waittill( "disconnect" );
 	bz_special_destroy_player_entities( self );
 	bz_special_destroy_player_hud( self );
+}
+
+bz_special_watch_max_ammo()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "zmb_max_ammo" );
+		bz_special_on_max_ammo( self );
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1787,6 +1808,32 @@ bz_special_on_round_start( round_num )
 			}
 		}
 	}
+}
+
+bz_special_on_max_ammo( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	// Ownership checks lazily initialize state. Skip players without Base Zombies state.
+	if ( !IsDefined( player.bz_initialized ) || !player.bz_initialized ||
+		!maps\_bz_state::bz_state_owns_portal_grenade( player ) )
+	{
+		return false;
+	}
+
+	charges = maps\_bz_rules::bz_get_portal_max_charges();
+	player.bz_portal_charges = charges;
+	bz_special_update_hud( player );
+
+	fields = [];
+	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[1] = bz_log_kv( "reason", "max_ammo" );
+	fields[2] = bz_log_kv( "charges", charges );
+	bz_log_emit( "SPECIAL_PORTAL_REFILL", bz_log_join( fields ) );
+	return true;
 }
 
 bz_special_on_item_purchased( ctx )
@@ -1905,6 +1952,17 @@ bz_special_on_end_game()
 	}
 	bz_special_cleanup_all_entities();
 	bz_special_destroy_all_huds();
+
+	players = GetPlayers();
+	for ( i = 0; i < players.size; i++ )
+	{
+		player = players[i];
+		if ( IsDefined( player ) )
+		{
+			player.bz_special_watchers_started = undefined;
+			player.bz_special_max_ammo_watch_started = undefined;
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1939,4 +1997,18 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+// Local function pointers used by the gated live selftests.
+bz_special_weapons_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_special_close_portal = ::bz_special_close_portal;
+	api.bz_special_fire_blade_boomerang = ::bz_special_fire_blade_boomerang;
+	api.bz_special_fire_multi_crossbow = ::bz_special_fire_multi_crossbow;
+	api.bz_special_portal_tick = ::bz_special_portal_tick;
+	api.bz_special_push_zombie_safely = ::bz_special_push_zombie_safely;
+	api.bz_special_try_activate_portal = ::bz_special_try_activate_portal;
+	api.bz_special_war_club_smash = ::bz_special_war_club_smash;
+	return api;
 }

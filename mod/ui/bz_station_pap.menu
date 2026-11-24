@@ -1,7 +1,7 @@
 #include "ui/menudef.h"
 
 // Base Zombies - Pack-a-Punch & Double Pack-a-Punch Station Popup (Call of Duty: WaW 1.7)
-// Provides Tier 1 Pack-a-Punch (5000) and Double Pack-a-Punch (5000 - test cap) with held-weapon status.
+// Provides Tier 1 Pack-a-Punch (5000) and Double Pack-a-Punch (5000) with held-weapon status.
 // Strictly ASCII-only strings and balanced braces.
 
 {
@@ -163,7 +163,7 @@
 			decoration
 		}
 
-		// Tier 2 Double Pack-a-Punch (5000 - test cap)
+		// Tier 2 Double Pack-a-Punch (5000)
 		itemDef
 		{
 			name			"btn_pap_double"

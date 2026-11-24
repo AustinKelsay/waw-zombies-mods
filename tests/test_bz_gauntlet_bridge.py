@@ -147,7 +147,7 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 self.assertEqual(returning.taken_weapons, ["zombie_colt"])
                 self.assertCountEqual(returning.max_ammo_calls, [ACID, CRYO])
                 self.assertEqual(returning.weapon_stock[ACID], acid_stock)
-                self.assertEqual(returning.weapon_stock[CRYO], 96)
+                self.assertEqual(returning.weapon_stock[CRYO], 192 if double_ammo else 96)
                 self.assertTrue(returning.get_field("bz_single_pap_weapons")[ACID])
                 self.assertTrue(returning.get_field("bz_pap_weapons")[ACID])
                 self.assertEqual(destination.call(BRIDGE_MOD, "encode_weapons_record", returning), "ac:2,cr:0")

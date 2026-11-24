@@ -24,8 +24,10 @@ bz_selftest_start_enabled()
 	{
 		level thread bz_run_visual_tour();
 	}
+	map_name = bz_get_map_name();
 	if ( GetDvarInt( "bz_test_gauntlet_seed" ) == 1 &&
-		GetDvarInt( "gauntlet_enabled" ) == 1 && bz_get_map_name() == "nazi_zombie_prototype" )
+		GetDvarInt( "gauntlet_enabled" ) == 1 &&
+		( map_name == "nazi_zombie_prototype" || map_name == "nazi_zombie_factory" ) )
 	{
 		level thread bz_run_gauntlet_seed();
 	}
@@ -127,12 +129,13 @@ bz_run_p1_selftest()
 	bz_selftest_check( st, stations_ok, "stations_spawned" );
 
 	// 1b. Actor damage hook wired onto stock level.global_damage_func & _ads
+	hooks = bz_selftest_get_hooks_api();
 	actor_hook_ok = IsDefined( level.bz_actor_damage_hooked ) &&
 		level.bz_actor_damage_hooked &&
 		IsDefined( level.global_damage_func ) &&
-		level.global_damage_func == maps\_bz_hooks::bz_global_damage_wrapper &&
+		level.global_damage_func == hooks.bz_global_damage_wrapper &&
 		IsDefined( level.global_damage_func_ads ) &&
-		level.global_damage_func_ads == maps\_bz_hooks::bz_global_damage_ads_wrapper;
+		level.global_damage_func_ads == hooks.bz_global_damage_ads_wrapper;
 	bz_selftest_check( st, actor_hook_ok, "actor_damage_hooked" );
 
 	// Grant ample test points for full Station purchase sweep
@@ -177,13 +180,13 @@ bz_run_p1_selftest()
 	p.bz_invuln_until = 0;
 
 	// Verify round-start recharges Second Chance
-	maps\_bz_hooks::bz_on_round_start( 2 );
+	bz_on_round_start( 2 );
 	bz_selftest_check( st, IsDefined( p.bz_second_chance_ready ) && p.bz_second_chance_ready, "apex_second_chance_recharge" );
 
 	// 3. Class Altar: Swap across all 6 Classes
 	bz_on_menu_response( p, "bz_station_class", "buy_class:medic" );
 	p SetPerk( "specialty_quickrevive" );
-	medic_rev_time = maps\_bz_hooks::bz_get_revive_time( p, 3.0 );
+	medic_rev_time = bz_get_revive_time( p, 3.0 );
 	bz_selftest_check( st, bz_get_class_safe( p ) == "medic" && medic_rev_time <= 0.1, "class_medic" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:titan" );
@@ -191,14 +194,14 @@ bz_run_p1_selftest()
 	bz_selftest_check( st, bz_get_class_safe( p ) == "titan" && titan_hp == 440, "class_titan_440hp" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:sapper" );
-	sapper_nades = maps\_bz_classes::bz_sapper_get_total_grenades( p );
+	sapper_nades = bz_sapper_get_total_grenades( p );
 	// Simulate grenade draw from virtual pouch (engine clip clamped to 4 + 6 reserve = 10)
 	sapper_clip = Int( p GetWeaponAmmoClip( "stielhandgranate" ) );
 	if ( sapper_clip > 0 )
 	{
 		p SetWeaponAmmoClip( "stielhandgranate", sapper_clip - 1 );
 	}
-	sapper_after_throw = maps\_bz_classes::bz_sapper_on_grenade_thrown( p, "stielhandgranate" );
+	sapper_after_throw = bz_sapper_on_grenade_thrown( p, "stielhandgranate" );
 	traps_before = 0;
 	if ( IsDefined( level.bz_class_traps ) )
 	{
@@ -209,7 +212,7 @@ bz_run_p1_selftest()
 	{
 		wall_weap = "zombie_colt";
 	}
-	maps\_bz_hooks::bz_on_wall_buy( p, wall_weap, p.origin, true );
+	bz_on_wall_buy( p, wall_weap, p.origin, true );
 	traps_after = 0;
 	if ( IsDefined( level.bz_class_traps ) )
 	{
@@ -219,7 +222,7 @@ bz_run_p1_selftest()
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:daredevil" );
 	dd_fall = p bz_player_damage_override( undefined, undefined, 150, 0, "MOD_FALLING", "none", p.origin, ( 0, 0, 0 ), "none", 0, 0 );
-	dd_slam = maps\_bz_classes::bz_daredevil_execute_slam( p, 120, p.origin );
+	dd_slam = bz_daredevil_execute_slam( p, 120, p.origin );
 	dd_vel = p GetVelocity();
 	if ( IsDefined( dd_vel ) )
 	{
@@ -263,16 +266,16 @@ bz_run_p1_selftest()
 	live_actor_dmg_ok = false;
 	if ( IsDefined( ghost_z ) )
 	{
-		maps\_bz_classes::bz_assassin_acquire_ghost_on_zombie( p, ghost_z );
+		bz_assassin_acquire_ghost_on_zombie( p, ghost_z );
 		was_ghosted = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 1 && IsDefined( ghost_z.bz_orig_contents );
-		maps\_bz_classes::bz_assassin_restore_all_zombies( p );
+		bz_assassin_restore_all_zombies( p );
 		was_restored = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 0 && !IsDefined( ghost_z.bz_orig_contents );
 		ghost_ok = was_ghosted && was_restored;
 
 		// Verify live actor damage wrapper deals extra bonus damage safely with re-entrancy guard
 		ghost_z.maxhealth = 5000;
 		ghost_z.health = 5000;
-		ghost_z maps\_bz_hooks::bz_global_damage_wrapper( "MOD_HEAD_SHOT", "head", ghost_z.origin, p );
+		ghost_z bz_global_damage_wrapper( "MOD_HEAD_SHOT", "head", ghost_z.origin, p );
 		wait( 0.1 );
 		live_actor_dmg_ok = IsDefined( ghost_z ) && IsAlive( ghost_z ) && Int( ghost_z.health ) < 5000 && Int( ghost_z.health ) > 0;
 	}
@@ -280,8 +283,8 @@ bz_run_p1_selftest()
 	bz_selftest_check( st, live_actor_dmg_ok, "live_actor_damage_extra" );
 
 	bz_on_menu_response( p, "bz_station_class", "buy_class:broker" );
-	broker_pts = maps\_bz_hooks::bz_points_modify( p, 100, "score" );
-	broker_box = maps\_bz_hooks::bz_box_cost_modify( p, 950 );
+	broker_pts = bz_points_modify( p, 100, "score" );
+	broker_box = bz_box_cost_modify( p, 950 );
 	score_before_live = Int( p.score );
 	p maps\_zombiemode_score::add_to_player_score( 100 );
 	live_score_delta = Int( p.score ) - score_before_live;
@@ -309,9 +312,9 @@ bz_run_p1_selftest()
 		bz_selftest_check( st, IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired, "pap_native_unlock_hook" );
 
 		base_w = bz_get_weapon_safe( p );
-		if ( base_w != "" && maps\_bz_pap::bz_pap_has_native_upgrade_entry( base_w ) )
+		if ( base_w != "" && bz_pap_has_native_upgrade_entry( base_w ) )
 		{
-			base_fallthrough = !maps\_bz_pap::bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
+			base_fallthrough = !bz_pap_try_native_console_upgrade( native_trig, p, base_w, undefined, undefined );
 			bz_selftest_check( st, base_fallthrough, "pap_native_base_fallthrough" );
 		}
 
@@ -385,7 +388,7 @@ bz_run_p1_selftest()
 	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_bowie", "" ), "pap_bowie" );
 
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_cluster" );
-	cluster_res = maps\_bz_pap::bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );
+	cluster_res = bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );
 	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_cluster", "" ) && IsDefined( cluster_res ) && cluster_res.mini_count == 4 && cluster_res.self_immune, "pap_cluster" );
 
 	// 5. Verify HUD creation across all 3 Phase 1 HUD lanes
@@ -393,7 +396,7 @@ bz_run_p1_selftest()
 	bz_selftest_check( st, huds_created, "huds_created" );
 
 	// 6. Down-Reset vs Class/PaP Persistence Boundary
-	maps\_bz_hooks::bz_on_player_downed( p );
+	bz_on_player_downed( p );
 	down_reset_ok = !bz_has_perk_safe( p, "staminup" ) &&
 		!bz_has_perk_safe( p, "mule_kick" ) &&
 		!bz_state_has_perk_t2( p, "juggernog" ) &&
@@ -447,7 +450,7 @@ bz_run_p1_selftest()
 
 bz_run_p2_selftest()
 {
-	if ( !bz_enabled() || !maps\_bz_hooks::bz_elements_enabled() || GetDvarInt( "bz_test_p2_selftest" ) != 1 )
+	if ( !bz_enabled() || !bz_elements_enabled() || GetDvarInt( "bz_test_p2_selftest" ) != 1 )
 	{
 		return;
 	}
@@ -495,7 +498,7 @@ bz_run_p2_selftest()
 
 	// 1. Verify all 4 zero-FX cloned Phase 2 primaries are precached & registered in Mystery Box
 	//    with is_in_box == true and upgrade_name undefined.
-	elem_weaps = maps\_bz_hooks::bz_get_element_primary_weapons();
+	elem_weaps = bz_get_element_primary_weapons();
 	box_count = 0;
 	box_ok = IsDefined( level.bz_element_weapons_precached ) &&
 		level.bz_element_weapons_precached &&
@@ -643,25 +646,25 @@ bz_run_p2_selftest()
 		}
 
 		// 4. Acid Sprayer: puddle spawns, 40% slow (0.60x) + 50% brittle (1.50x) on live zombie
-		base_rate = maps\_bz_hooks::bz_save_zombie_base_move_rate( live_z );
-		puddle = maps\_bz_elem_new::bz_elem_new_fire_acid_sprayer( p, "bz_acid_sprayer" );
+		base_rate = bz_save_zombie_base_move_rate( live_z );
+		puddle = bz_elem_new_fire_acid_sprayer( p, "bz_acid_sprayer" );
 		acid_puddle_ok = IsDefined( puddle ) && IsDefined( puddle.anchor ) && IsDefined( puddle.fx_ent );
 		if ( acid_puddle_ok )
 		{
 			live_z ForceTeleport( puddle.origin, orig_z_ang );
-			maps\_bz_elem_new::bz_elem_new_tick_acid_puddle( puddle );
+			bz_elem_new_tick_acid_puddle( puddle );
 		}
-		acid_slow_ok = maps\_bz_elem_new::bz_elem_new_is_acid_slow_active( live_z ) &&
+		acid_slow_ok = bz_elem_new_is_acid_slow_active( live_z ) &&
 			live_z.moveplaybackrate <= ( base_rate * 0.61 ) &&
 			live_z.moveplaybackrate >= ( base_rate * 0.55 );
-		acid_brittle_ok = maps\_bz_elem_new::bz_elem_new_is_acid_brittle_active( live_z );
+		acid_brittle_ok = bz_elem_new_is_acid_brittle_active( live_z );
 		acid_brittle_dmg = bz_actor_damage_dispatch( live_z, p, p, 100, 0, "MOD_RIFLE_BULLET", "zombie_colt", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
 		bz_selftest_check( st, acid_puddle_ok && acid_slow_ok && acid_brittle_ok && acid_brittle_dmg == 150, "acid_puddle_slow_brittle_150" );
 
 		// Clean acid puddle & debuff before Cryo Cannon test
 		if ( IsDefined( puddle ) )
 		{
-			maps\_bz_elem_new::bz_elem_new_cleanup_puddle( puddle );
+			bz_elem_new_cleanup_puddle( puddle );
 		}
 		live_z.bz_acid_slow_until = 0;
 		live_z.bz_acid_brittle_until = 0;
@@ -669,7 +672,7 @@ bz_run_p2_selftest()
 
 		// 5. Cryo Cannon: freezes live zombie (moveplaybackrate == 0.01) + 2.5x shatter on follow-up hit
 		live_z.health = 50000;
-		cryo_trace = maps\_bz_elem_new::bz_elem_new_trace_forward_impact( p, 1024 );
+		cryo_trace = bz_elem_new_trace_forward_impact( p, 1024 );
 		cryo_dist = Distance( cryo_trace.start, cryo_trace.impact );
 		place_dist = 80.0;
 		if ( cryo_dist < place_dist )
@@ -683,7 +686,7 @@ bz_run_p2_selftest()
 		);
 		live_z ForceTeleport( bz_elem_new_snap_to_floor( cryo_target ), orig_z_ang );
 
-		frozen_cnt = maps\_bz_elem_new::bz_elem_new_fire_cryo_cannon( p, "bz_cryo_cannon" );
+		frozen_cnt = bz_elem_new_fire_cryo_cannon( p, "bz_cryo_cannon" );
 		cryo_frozen_ok = frozen_cnt >= 1 &&
 			bz_elem_new_is_cryo_frozen( live_z ) &&
 			live_z.moveplaybackrate <= 0.02;
@@ -791,7 +794,7 @@ bz_run_p2_selftest()
 	bz_selftest_check( st, tesla_bs_ok, "wunderwaffe_blast_shield_guard" );
 
 	// 10. Multi-Crossbow: 3 sticky bolts spawn & detonate cleanly
-	xbow_res = maps\_bz_special_weapons::bz_special_fire_multi_crossbow( p, "bz_multi_crossbow" );
+	xbow_res = bz_special_fire_multi_crossbow( p, "bz_multi_crossbow" );
 	xbow_bolts = 0;
 	if ( IsDefined( xbow_res ) && IsDefined( xbow_res.bolts ) )
 	{
@@ -813,7 +816,7 @@ bz_run_p2_selftest()
 	bz_selftest_check( st, xbow_all_detonated, "multi_crossbow_3_bolts_detonate" );
 
 	// 11. Blade Boomerang: spinning blade model spawns non-solid & returns cleanly
-	boom_res = maps\_bz_special_weapons::bz_special_fire_blade_boomerang( p, "bz_blade_boomerang" );
+	boom_res = bz_special_fire_blade_boomerang( p, "bz_blade_boomerang" );
 	boom_spawned = IsDefined( boom_res ) &&
 		IsDefined( boom_res.blade ) &&
 		boom_res.model == "viewmodel_knife_bowie";
@@ -824,7 +827,9 @@ bz_run_p2_selftest()
 
 	// 12. Portal Grenade: Coop-safe USE+MELEE watcher registered, SpawnFx portal spawns, warps player, excludes live zombie
 	watcher_ok = IsDefined( p.bz_special_watchers_started ) && p.bz_special_watchers_started;
+	portal_charges_before = maps\_bz_state::bz_state_get_portal_charges( p );
 	portal = bz_special_try_activate_portal( p );
+	portal_charges_after = maps\_bz_state::bz_state_get_portal_charges( p );
 	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent );
 	if ( portal_fx_ok )
 	{
@@ -842,16 +847,36 @@ bz_run_p2_selftest()
 		{
 			p SetOrigin( portal.origin );
 			p.bz_portal_warp_lock_until = 0;
-			maps\_bz_special_weapons::bz_special_portal_tick( portal, p );
+			bz_special_portal_tick( portal, p );
 		}
 		portal_warped = portal.bz_teleport_count >= 1;
 		if ( IsDefined( live_z ) && IsAlive( live_z ) )
 		{
 			portal_excluded_z = Distance( live_z.origin, z_portal_before ) < 16.0;
 		}
-		maps\_bz_special_weapons::bz_special_close_portal( portal );
+		bz_special_close_portal( portal );
 	}
 	bz_selftest_check( st, watcher_ok && portal_fx_ok && portal_warped && portal_excluded_z, "portal_grenade_warp_and_exclude_z" );
+
+	max_charges = maps\_bz_rules::bz_get_portal_max_charges();
+	stock_powerup_ok = IsDefined( level.bz_test_full_ammo_powerup );
+	if ( stock_powerup_ok )
+	{
+		max_drop = Spawn( "script_origin", p.origin );
+		max_drop.hint = "";
+		level thread [[ level.bz_test_full_ammo_powerup ]]( max_drop );
+		wait( 0.2 );
+		if ( IsDefined( max_drop ) )
+		{
+			max_drop Delete();
+		}
+	}
+	portal_refilled = stock_powerup_ok && maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges;
+	bz_selftest_check( st, portal_charges_before == max_charges && portal_charges_after == max_charges - 1 &&
+		portal_refilled, "portal_grenade_max_ammo_refill" );
+
+	// Apply ammo upgrades after the combat checks so their expected damage stays fixed.
+	bz_selftest_check( st, bz_test_arsenal_acid_ammo_refill( p ), "arsenal_acid_ammo_refill" );
 
 	// 13. Clean up all test entities & HUDs via end_game hook
 	bz_on_end_game();
@@ -1013,7 +1038,7 @@ bz_test_check_dog_protection( st, p, dog )
 	bz_selftest_check( st, rate >= 0.55 && dog.moveplaybackrate >= 0.55, "hellhound_cryo_rate_floor" );
 	bz_selftest_check( st, !IsDefined( dog.ignoreall ) || !dog.ignoreall, "hellhound_not_ignored" );
 	dog_origin = dog.origin;
-	pushed = maps\_bz_special_weapons::bz_special_push_zombie_safely( dog, p.origin, ( 1, 0, 0 ), 64 );
+	pushed = bz_special_push_zombie_safely( dog, p.origin, ( 1, 0, 0 ), 64 );
 	bz_selftest_check( st, !pushed && Distance( dog_origin, dog.origin ) == 0, "hellhound_push_refused" );
 
 	dog.bz_is_frozen = frozen_before;
@@ -1198,17 +1223,30 @@ bz_run_visual_tour()
 		ids[3] = "pap";
 	}
 
-	phase_count = 0;
-	for ( i = 0; i < ids.size; i++ )
+	station_count = ids.size;
+	if ( slug == "asylum" )
 	{
-		id = ids[i];
-		if ( !IsDefined( level.bz_stations ) || !IsDefined( level.bz_stations[id] ) )
+		station_count = station_count * 2;
+	}
+
+	phase_count = 0;
+	for ( i = 0; i < station_count; i++ )
+	{
+		id = ids[i % ids.size];
+		prefix = slug;
+		// Verruckt spawns the four north stations first, then the matching south stations.
+		if ( slug == "asylum" && i >= ids.size )
 		{
-			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + id );
+			prefix = "asylum_south";
+		}
+		if ( !IsDefined( level.bz_station_list ) || i >= level.bz_station_list.size ||
+			level.bz_station_list[i].id != id )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station;station=" + prefix + "_" + id );
 			return;
 		}
 
-		station = level.bz_stations[id];
+		station = level.bz_station_list[i];
 		if ( slug == "factory" )
 		{
 			bz_test_visual_pose( p, poses[i], station );
@@ -1218,19 +1256,19 @@ bz_run_visual_tour()
 		{
 			fwd = AnglesToForward( station.angles );
 			org = station.origin;
-			pos = ( org[0] + fwd[0] * 48, org[1] + fwd[1] * 48, org[2] + 8 );
+			pos = ( org[0] + fwd[0] * 58, org[1] + fwd[1] * 58, org[2] );
 			bz_test_visual_pose( p, pos, station );
 			wait( 0.8 );
 		}
 
-		prompt = maps\_bz_stations::bz_stations_format_prompt_text( id, station.display_name );
+		prompt = bz_stations_format_prompt_text( id, station.display_name );
 		if ( !IsDefined( p.bz_station_prompt_hud ) || p.bz_station_prompt_hud.alpha != 1 ||
 			p.bz_station_prompt_text != prompt )
 		{
-			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + id );
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_station_prompt;station=" + prefix + "_" + id );
 			return;
 		}
-		bz_test_visual_phase( slug + "_" + id + "_prompt" );
+		bz_test_visual_phase( prefix + "_" + id + "_prompt" );
 		phase_count++;
 		wait( 0.6 );
 	}
@@ -1294,7 +1332,7 @@ bz_run_visual_tour()
 			}
 			bz_test_visual_phase( weap_slugs[i] + "_idle" );
 			wait( 0.6 );
-			maps\_bz_hooks::bz_on_weapon_fired( p, weap );
+			bz_on_weapon_fired( p, weap );
 			if ( weap_slugs[i] == "crossbow" )
 			{
 				wait( 1.05 );
@@ -1389,7 +1427,7 @@ bz_run_visual_tour()
 		for ( i = 0; i < ids.size; i++ )
 		{
 			id = ids[i];
-			if ( !maps\_bz_stations::bz_stations_open_for_player( p, id ) )
+			if ( !bz_stations_open_for_player( p, id ) )
 			{
 				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=station_menu_disabled;station=" + id );
 				return;
@@ -1411,8 +1449,10 @@ bz_run_visual_tour()
 
 bz_run_gauntlet_seed()
 {
+	map_name = bz_get_map_name();
 	if ( !bz_enabled() || GetDvarInt( "bz_test_gauntlet_seed" ) != 1 ||
-		GetDvarInt( "gauntlet_enabled" ) != 1 || bz_get_map_name() != "nazi_zombie_prototype" )
+		GetDvarInt( "gauntlet_enabled" ) != 1 ||
+		( map_name != "nazi_zombie_prototype" && map_name != "nazi_zombie_factory" ) )
 	{
 		return;
 	}
@@ -1422,16 +1462,109 @@ bz_run_gauntlet_seed()
 	for ( tries = 0; tries < 80; tries++ )
 	{
 		p = bz_test_get_spawned_host();
+		cycle = GetDvarInt( "gauntlet_cycle" );
 		if ( IsDefined( p ) && IsDefined( p.gauntlet_points_applied ) && p.gauntlet_points_applied )
 		{
-			break;
+			if ( map_name == "nazi_zombie_factory" )
+			{
+				if ( cycle == 1 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
+				{
+					break;
+				}
+			}
+			else if ( cycle >= 2 && IsDefined( p.gauntlet_bz_restored ) && p.gauntlet_bz_restored )
+			{
+				p thread bz_run_gauntlet_wipe();
+				return;
+			}
+			else if ( cycle == 1 )
+			{
+				break;
+			}
 		}
 		p = undefined;
 		wait( 0.25 );
 	}
 	if ( !IsDefined( p ) )
 	{
-		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_points" );
+		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=no_spawned_host_with_gauntlet_state" );
+		return;
+	}
+
+	if ( map_name == "nazi_zombie_factory" )
+	{
+		native_trig = undefined;
+		for ( u_tries = 0; u_tries < 40; u_tries++ )
+		{
+			native_trig = bz_test_unlock_native_pap();
+			if ( IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired )
+			{
+				break;
+			}
+			wait( 0.1 );
+		}
+		wait( 0.15 );
+		if ( !IsDefined( native_trig ) )
+		{
+			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap_trigger" );
+			return;
+		}
+		orig_origin = p.origin;
+		orig_angles = p.angles;
+		orig_score = p.score;
+		orig_weapon = bz_get_weapon_safe( p );
+		had_colt = p HasWeapon( "zombie_colt" );
+		p.score = 50000;
+		p SetOrigin( ( -61, 495, 118 ) );
+		p SetPlayerAngles( ( 5, 90, 0 ) );
+		if ( had_colt )
+		{
+			p TakeWeapon( "zombie_colt" );
+		}
+		bz_test_equip_native_pap_colt( p );
+		for ( p_tries = 0; p_tries < 60 && ( p IsSwitchingWeapons() || bz_get_weapon_safe( p ) != "zombie_colt_upgraded" ); p_tries++ )
+		{
+			if ( p_tries == 10 && !p IsSwitchingWeapons() && bz_get_weapon_safe( p ) != "zombie_colt_upgraded" )
+			{
+				p SwitchToWeapon( "zombie_colt_upgraded" );
+			}
+			wait( 0.05 );
+		}
+		probe_cur = bz_get_weapon_safe( p );
+		p.bz_pap_console_next_ms = 0;
+		native_trig notify( "trigger", p );
+		for ( d_tries = 0; d_tries < 20 && !bz_is_double_pap_safe( p, "zombie_colt_upgraded" ); d_tries++ )
+		{
+			wait( 0.05 );
+		}
+		native_ok = bz_is_double_pap_safe( p, "zombie_colt_upgraded" );
+		p TakeWeapon( "zombie_colt_upgraded" );
+		if ( had_colt && !p HasWeapon( "zombie_colt" ) )
+		{
+			p GiveWeapon( "zombie_colt" );
+		}
+		if ( orig_weapon != "" && p HasWeapon( orig_weapon ) )
+		{
+			p SwitchToWeapon( orig_weapon );
+		}
+		else if ( p HasWeapon( "bz_acid_sprayer" ) )
+		{
+			p SwitchToWeapon( "bz_acid_sprayer" );
+		}
+		p.score = orig_score;
+		if ( IsDefined( p.old_score ) )
+		{
+			p maps\_zombiemode_score::set_player_score_hud();
+		}
+		p SetOrigin( orig_origin );
+		p SetPlayerAngles( orig_angles );
+		bz_stations_sync_player_ui( p, "" );
+		bz_pap_update_native_prompt_hud( p );
+		if ( !native_ok )
+		{
+			unlock_ok = IsDefined( level.bz_native_pap_unlock_hook_fired ) && level.bz_native_pap_unlock_hook_fired;
+			bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=missing_factory_native_pap;unlock=" + bz_bool_int( unlock_ok ) + ";cur=" + probe_cur );
+		}
 		return;
 	}
 
@@ -1446,20 +1579,7 @@ bz_run_gauntlet_seed()
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:pap_war_club" );
 
 	acid = "bz_acid_sprayer";
-	if ( p HasWeapon( acid ) )
-	{
-		single_pap = maps\_bz_stations::bz_stations_try_buy_single_pap( p, acid );
-		if ( single_pap.ok )
-		{
-			bz_on_item_purchased( p, "pap", "single_pap", single_pap, acid );
-		}
-		pap_prereq = maps\_bz_stations::bz_stations_is_weapon_pap( p, acid );
-		double_pap = maps\_bz_state::bz_try_buy_pap_upgrade( p, "double_pap", acid, pap_prereq );
-		if ( double_pap.ok )
-		{
-			bz_on_item_purchased( p, "pap", "double_pap", double_pap, acid );
-		}
-	}
+	bz_test_double_pap_element( p, acid );
 	if ( !bz_has_perk_safe( p, "staminup" ) ||
 		!bz_has_perk_safe( p, "mule_kick" ) ||
 		bz_get_class_safe( p ) != "titan" ||
@@ -1475,9 +1595,84 @@ bz_run_gauntlet_seed()
 	bz_log_emit( "GAUNTLET_BZ_SEEDED", "map=nazi_zombie_prototype;class=titan;weapons=2" );
 }
 
+bz_run_gauntlet_wipe()
+{
+	self endon( "disconnect" );
+	wait( 0.5 );
+
+	// Mirror patched stock end_game(): run Base Zombies cleanup before Gauntlet wipe
+	// so station entities, HUDs, and open menus tear down before RUN_SUMMARY/exitLevel.
+	level.intermission = true;
+	bz_on_end_game();
+	level thread maps\_gauntlet_mode::on_end_game();
+	wait( 0.05 );
+	bz_cleanup_ok = IsDefined( level.bz_end_game_notified ) && level.bz_end_game_notified &&
+		( !IsDefined( level.bz_station_list ) || level.bz_station_list.size == 0 ) &&
+		( !IsDefined( self.bz_station_open ) || !self.bz_station_open );
+	fields = [];
+	fields[0] = bz_log_kv( "map", "nazi_zombie_prototype" );
+	fields[1] = bz_log_kv( "bz_cleanup", bz_bool_int( bz_cleanup_ok ) );
+	fields[2] = bz_log_kv( "perm_empty", bz_bool_int( GetDvar( "gauntlet_bz_perm" ) == "" ) );
+	fields[3] = bz_log_kv( "perks_empty", bz_bool_int( GetDvar( "gauntlet_bz_perks" ) == "" ) );
+	fields[4] = bz_log_kv( "weapons_empty", bz_bool_int( GetDvar( "gauntlet_bz_weapons" ) == "" ) );
+	bz_log_emit( "GAUNTLET_BZ_WIPED", bz_log_join( fields ) );
+}
+
+bz_test_arsenal_acid_ammo_refill( p )
+{
+	acid = "bz_acid_sprayer";
+	if ( !p HasWeapon( acid ) )
+	{
+		return false;
+	}
+
+	bz_test_double_pap_element( p, acid );
+	bz_on_menu_response( p, "bz_station_perks", "buy_apex:double_ammo" );
+	p SetWeaponAmmoStock( acid, 0 );
+	p SetWeaponAmmoClip( acid, 0 );
+	score_before = p.score;
+	handled = bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+
+	// Acid Sprayer base reserve is 120 and its weaponfile maxAmmo is 360 (3x ceiling),
+	// so Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x must deliver a real 360-round
+	// reserve read back from the WaW 1.7 engine, and reject a repeat click as already_full.
+	target_ok = IsDefined( p.bz_pap_target_stock ) && IsDefined( p.bz_pap_target_stock[acid] ) &&
+		p.bz_pap_target_stock[acid] == 360;
+	stock_ok = p GetWeaponAmmoStock( acid ) == 360 &&
+		p GetWeaponAmmoClip( acid ) == WeaponClipSize( acid );
+	score_after_refill = p.score;
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
+	repeat_blocked = ( p.score == score_after_refill );
+
+	return handled && bz_is_double_pap_safe( p, acid ) && bz_has_apex_safe( p, "double_ammo" ) &&
+		score_after_refill == score_before - 2500 && target_ok && stock_ok && repeat_blocked;
+}
+
+bz_test_double_pap_element( p, weapon )
+{
+	if ( !p HasWeapon( weapon ) )
+	{
+		return;
+	}
+
+	single_pap = bz_stations_try_buy_single_pap( p, weapon );
+	if ( single_pap.ok )
+	{
+		bz_on_item_purchased( p, "pap", "single_pap", single_pap, weapon );
+	}
+	pap_prereq = bz_stations_is_weapon_pap( p, weapon );
+	double_pap = maps\_bz_state::bz_try_buy_pap_upgrade( p, "double_pap", weapon, pap_prereq );
+	if ( double_pap.ok )
+	{
+		bz_on_item_purchased( p, "pap", "double_pap", double_pap, weapon );
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Local Forwarding Helpers (Reduce WaW 1.7 Compiler Precache Entries)
 // ---------------------------------------------------------------------------
+
+// Cache each provider's local callbacks only when a live scenario uses them.
 
 bz_log_kv( key, value )
 {
@@ -1494,24 +1689,9 @@ bz_log_join( fields )
 	return maps\_bz_log::join_fields( fields );
 }
 
-bz_actor_damage_dispatch( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, psOffsetTime )
-{
-	return maps\_bz_hooks::bz_actor_damage_dispatch( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, psOffsetTime );
-}
-
-bz_bool_int( flag )
-{
-	return maps\_bz_hooks::bz_bool_int( flag );
-}
-
 bz_enabled()
 {
 	return maps\_bz_hooks::bz_enabled();
-}
-
-bz_get_class_safe( player )
-{
-	return maps\_bz_hooks::bz_get_class_safe( player );
 }
 
 bz_get_map_name()
@@ -1519,99 +1699,328 @@ bz_get_map_name()
 	return maps\_bz_hooks::bz_get_map_name();
 }
 
+bz_selftest_get_hooks_api()
+{
+	if ( !IsDefined( level.bz_selftest_hooks_api ) )
+	{
+		level.bz_selftest_hooks_api = maps\_bz_hooks::bz_hooks_get_selftest_api();
+	}
+	return level.bz_selftest_hooks_api;
+}
+
+bz_actor_damage_dispatch( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, psOffsetTime )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_actor_damage_dispatch ]]( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, psOffsetTime );
+}
+
+bz_bool_int( flag )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_bool_int ]]( flag );
+}
+
+bz_get_class_safe( player )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_get_class_safe ]]( player );
+}
+
 bz_get_max_primary_weapons( player )
 {
-	return maps\_bz_hooks::bz_get_max_primary_weapons( player );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_get_max_primary_weapons ]]( player );
 }
 
 bz_get_weapon_safe( player )
 {
-	return maps\_bz_hooks::bz_get_weapon_safe( player );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_get_weapon_safe ]]( player );
 }
 
 bz_has_apex_safe( player, apex_id )
 {
-	return maps\_bz_hooks::bz_has_apex_safe( player, apex_id );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_has_apex_safe ]]( player, apex_id );
 }
 
 bz_has_perk_safe( player, perk_id )
 {
-	return maps\_bz_hooks::bz_has_perk_safe( player, perk_id );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_has_perk_safe ]]( player, perk_id );
 }
 
 bz_is_dog_entity( ent )
 {
-	return maps\_bz_hooks::bz_is_dog_entity( ent );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_is_dog_entity ]]( ent );
 }
 
 bz_is_double_pap_safe( player, weapon_name )
 {
-	return maps\_bz_hooks::bz_is_double_pap_safe( player, weapon_name );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_is_double_pap_safe ]]( player, weapon_name );
 }
 
 bz_is_spawning_dog( ent )
 {
-	return maps\_bz_hooks::bz_is_spawning_dog( ent );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_is_spawning_dog ]]( ent );
 }
 
 bz_on_end_game()
 {
-	maps\_bz_hooks::bz_on_end_game();
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_end_game ]]();
 }
 
 bz_on_item_purchased( player, category, item_id, result, weapon_name )
 {
-	maps\_bz_hooks::bz_on_item_purchased( player, category, item_id, result, weapon_name );
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_item_purchased ]]( player, category, item_id, result, weapon_name );
 }
 
 bz_on_menu_response( player, menu, response )
 {
-	return maps\_bz_hooks::bz_on_menu_response( player, menu, response );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_on_menu_response ]]( player, menu, response );
 }
 
 bz_player_damage_override( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime )
 {
-	return self maps\_bz_hooks::bz_player_damage_override( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime );
+	api = bz_selftest_get_hooks_api();
+	return self [[ api.bz_player_damage_override ]]( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime );
 }
 
 bz_recompute_zombie_move_rate( zombie )
 {
-	return maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_recompute_zombie_move_rate ]]( zombie );
+}
+
+bz_global_damage_wrapper( mod, hit_location, hit_origin, player )
+{
+	api = bz_selftest_get_hooks_api();
+	self [[ api.bz_global_damage_wrapper ]]( mod, hit_location, hit_origin, player );
+}
+
+bz_on_round_start( round_num )
+{
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_round_start ]]( round_num );
+}
+
+bz_get_revive_time( reviver, base_time )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_get_revive_time ]]( reviver, base_time );
+}
+
+bz_on_wall_buy( player, weapon_name, origin, is_ammo )
+{
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_wall_buy ]]( player, weapon_name, origin, is_ammo );
+}
+
+bz_points_modify( player, amount, source )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_points_modify ]]( player, amount, source );
+}
+
+bz_box_cost_modify( player, base_cost )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_box_cost_modify ]]( player, base_cost );
+}
+
+bz_on_player_downed( player )
+{
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_player_downed ]]( player );
+}
+
+bz_elements_enabled()
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_elements_enabled ]]();
+}
+
+bz_get_element_primary_weapons()
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_get_element_primary_weapons ]]();
+}
+
+bz_save_zombie_base_move_rate( zombie )
+{
+	api = bz_selftest_get_hooks_api();
+	return [[ api.bz_save_zombie_base_move_rate ]]( zombie );
+}
+
+bz_on_weapon_fired( player, weapon_name )
+{
+	api = bz_selftest_get_hooks_api();
+	[[ api.bz_on_weapon_fired ]]( player, weapon_name );
+}
+
+bz_selftest_get_elem_new_api()
+{
+	if ( !IsDefined( level.bz_selftest_elem_new_api ) )
+	{
+		level.bz_selftest_elem_new_api = maps\_bz_elem_new::bz_elem_new_get_selftest_api();
+	}
+	return level.bz_selftest_elem_new_api;
 }
 
 bz_elem_new_is_cryo_frozen( zombie )
 {
-	return maps\_bz_elem_new::bz_elem_new_is_cryo_frozen( zombie );
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_is_cryo_frozen ]]( zombie );
 }
 
 bz_elem_new_snap_to_floor( origin )
 {
-	return maps\_bz_elem_new::bz_elem_new_snap_to_floor( origin );
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_snap_to_floor ]]( origin );
+}
+
+bz_elem_new_fire_acid_sprayer( player, weapon_name )
+{
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_fire_acid_sprayer ]]( player, weapon_name );
+}
+
+bz_elem_new_tick_acid_puddle( puddle )
+{
+	api = bz_selftest_get_elem_new_api();
+	[[ api.bz_elem_new_tick_acid_puddle ]]( puddle );
+}
+
+bz_elem_new_is_acid_slow_active( zombie )
+{
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_is_acid_slow_active ]]( zombie );
+}
+
+bz_elem_new_is_acid_brittle_active( zombie )
+{
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_is_acid_brittle_active ]]( zombie );
+}
+
+bz_elem_new_cleanup_puddle( puddle )
+{
+	api = bz_selftest_get_elem_new_api();
+	[[ api.bz_elem_new_cleanup_puddle ]]( puddle );
+}
+
+bz_elem_new_trace_forward_impact( player, range )
+{
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_trace_forward_impact ]]( player, range );
+}
+
+bz_elem_new_fire_cryo_cannon( player, weapon_name )
+{
+	api = bz_selftest_get_elem_new_api();
+	return [[ api.bz_elem_new_fire_cryo_cannon ]]( player, weapon_name );
+}
+
+bz_selftest_get_pap_api()
+{
+	if ( !IsDefined( level.bz_selftest_pap_api ) )
+	{
+		level.bz_selftest_pap_api = maps\_bz_pap::bz_pap_get_selftest_api();
+	}
+	return level.bz_selftest_pap_api;
 }
 
 bz_pap_is_weapon_papped( player, weapon_name )
 {
-	return maps\_bz_pap::bz_pap_is_weapon_papped( player, weapon_name );
+	api = bz_selftest_get_pap_api();
+	return [[ api.bz_pap_is_weapon_papped ]]( player, weapon_name );
 }
 
 bz_pap_on_native_weapon_taken( player, weapon_name )
 {
-	maps\_bz_pap::bz_pap_on_native_weapon_taken( player, weapon_name );
+	api = bz_selftest_get_pap_api();
+	[[ api.bz_pap_on_native_weapon_taken ]]( player, weapon_name );
 }
 
 bz_pap_update_native_prompt_hud( player )
 {
-	maps\_bz_pap::bz_pap_update_native_prompt_hud( player );
+	api = bz_selftest_get_pap_api();
+	[[ api.bz_pap_update_native_prompt_hud ]]( player );
+}
+
+bz_pap_has_native_upgrade_entry( weapon_name )
+{
+	api = bz_selftest_get_pap_api();
+	return [[ api.bz_pap_has_native_upgrade_entry ]]( weapon_name );
+}
+
+bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine, packa_rollers )
+{
+	api = bz_selftest_get_pap_api();
+	return [[ api.bz_pap_try_native_console_upgrade ]]( trigger, player, current_weapon, perk_machine, packa_rollers );
+}
+
+bz_pap_detonate_cluster( player, origin, weapon_name )
+{
+	api = bz_selftest_get_pap_api();
+	return [[ api.bz_pap_detonate_cluster ]]( player, origin, weapon_name );
+}
+
+bz_selftest_get_special_weapons_api()
+{
+	if ( !IsDefined( level.bz_selftest_special_weapons_api ) )
+	{
+		level.bz_selftest_special_weapons_api = maps\_bz_special_weapons::bz_special_weapons_get_selftest_api();
+	}
+	return level.bz_selftest_special_weapons_api;
 }
 
 bz_special_try_activate_portal( player )
 {
-	return maps\_bz_special_weapons::bz_special_try_activate_portal( player );
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_try_activate_portal ]]( player );
 }
 
 bz_test_pap_war_club_smash( player, hit_origin )
 {
-	return maps\_bz_special_weapons::bz_special_war_club_smash( player, undefined, hit_origin, true, 1200 );
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_war_club_smash ]]( player, undefined, hit_origin, true, 1200 );
+}
+
+bz_special_fire_multi_crossbow( player, weapon_name )
+{
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_fire_multi_crossbow ]]( player, weapon_name );
+}
+
+bz_special_fire_blade_boomerang( player, weapon_name )
+{
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_fire_blade_boomerang ]]( player, weapon_name );
+}
+
+bz_special_portal_tick( portal, owner )
+{
+	api = bz_selftest_get_special_weapons_api();
+	[[ api.bz_special_portal_tick ]]( portal, owner );
+}
+
+bz_special_close_portal( portal )
+{
+	api = bz_selftest_get_special_weapons_api();
+	[[ api.bz_special_close_portal ]]( portal );
+}
+
+bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
+{
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_push_zombie_safely ]]( zombie, attacker_org, fallback_fwd, push_dist );
 }
 
 bz_state_get_melee_slot( player )
@@ -1637,4 +2046,83 @@ bz_state_has_perk_t2( player, perk_id )
 bz_state_owns_war_club( player )
 {
 	return maps\_bz_state::bz_state_owns_war_club( player );
+}
+
+
+bz_selftest_get_classes_api()
+{
+	if ( !IsDefined( level.bz_selftest_classes_api ) )
+	{
+		level.bz_selftest_classes_api = maps\_bz_classes::bz_classes_get_selftest_api();
+	}
+	return level.bz_selftest_classes_api;
+}
+
+bz_assassin_acquire_ghost_on_zombie( player, zombie )
+{
+	api = bz_selftest_get_classes_api();
+	[[ api.bz_assassin_acquire_ghost_on_zombie ]]( player, zombie );
+}
+
+bz_assassin_restore_all_zombies( player )
+{
+	api = bz_selftest_get_classes_api();
+	[[ api.bz_assassin_restore_all_zombies ]]( player );
+}
+
+bz_daredevil_execute_slam( player, fall_height, origin )
+{
+	api = bz_selftest_get_classes_api();
+	return [[ api.bz_daredevil_execute_slam ]]( player, fall_height, origin );
+}
+
+bz_sapper_get_total_grenades( player )
+{
+	api = bz_selftest_get_classes_api();
+	return [[ api.bz_sapper_get_total_grenades ]]( player );
+}
+
+bz_sapper_on_grenade_thrown( player, weap_name )
+{
+	api = bz_selftest_get_classes_api();
+	return [[ api.bz_sapper_on_grenade_thrown ]]( player, weap_name );
+}
+
+bz_selftest_get_stations_api()
+{
+	if ( !IsDefined( level.bz_selftest_stations_api ) )
+	{
+		level.bz_selftest_stations_api = maps\_bz_stations::bz_stations_get_selftest_api();
+	}
+	return level.bz_selftest_stations_api;
+}
+
+bz_stations_format_prompt_text( station_id, display_name )
+{
+	api = bz_selftest_get_stations_api();
+	return [[ api.bz_stations_format_prompt_text ]]( station_id, display_name );
+}
+
+bz_stations_is_weapon_pap( player, weapon_name )
+{
+	api = bz_selftest_get_stations_api();
+	return [[ api.bz_stations_is_weapon_pap ]]( player, weapon_name );
+}
+
+bz_stations_open_for_player( player, station_id )
+{
+	api = bz_selftest_get_stations_api();
+	return [[ api.bz_stations_open_for_player ]]( player, station_id );
+}
+
+bz_stations_sync_player_ui( player, feedback )
+{
+	api = bz_selftest_get_stations_api();
+	[[ api.bz_stations_sync_player_ui ]]( player, feedback );
+}
+
+bz_stations_try_buy_single_pap( player, weapon_name )
+{
+	api = bz_selftest_get_stations_api();
+	return [[ api.bz_stations_try_buy_single_pap ]]( player, weapon_name );
 }

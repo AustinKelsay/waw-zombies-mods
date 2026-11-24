@@ -838,13 +838,28 @@ run_test_autoclear( round_num )
 	level.zombie_total = 0;
 
 	attempts = 0;
-	while ( attempts < 80 )
+	empty_ticks = 0;
+	while ( attempts < 120 )
 	{
-		enemies = GetAiSpeciesArray( "axis", "all" );
-		if ( enemies.size == 0 )
+		if ( IsDefined( level.round_number ) && Int( level.round_number ) != Int( round_num ) )
 		{
 			break;
 		}
+
+		enemies = GetAiSpeciesArray( "axis", "all" );
+		if ( enemies.size == 0 )
+		{
+			empty_ticks++;
+			if ( empty_ticks >= 16 )
+			{
+				break;
+			}
+			level.zombie_total = 0;
+			wait( 0.25 );
+			attempts++;
+			continue;
+		}
+		empty_ticks = 0;
 
 		attacker = undefined;
 		players = GetPlayers();

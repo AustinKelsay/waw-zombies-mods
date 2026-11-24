@@ -1,6 +1,6 @@
 // Base Zombies Phase 1 6-Class System (Call of Duty: WaW 1.7).
 // Implements Field Medic, Titan, Sapper, Daredevil, Assassin, and Broker:
-//   - 10,000 pts at the Class Altar, 1 active at a time, swappable
+//   - 5,000 pts at the Class Altar, 1 active at a time, swappable
 //   - Permanent per match (never lost on player down or bleedout)
 //   - Clean teardown of prior Class modifiers and child threads on swap
 //   - Compact ASCII Class HUD badge on the top-right lane with zero leaks
@@ -847,7 +847,11 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		return 0;
 	}
 
-	max_stock = Int( WeaponMaxAmmo( weap ) );
+	max_stock = maps\_bz_rules::bz_get_element_base_reserve( weap );
+	if ( !IsDefined( max_stock ) || Int( max_stock ) <= 0 )
+	{
+		max_stock = Int( WeaponMaxAmmo( weap ) );
+	}
 	if ( max_stock <= 0 )
 	{
 		return 0;
@@ -2260,4 +2264,16 @@ bz_normalize_id( raw_id )
 bz_state_get_class( player )
 {
 	return maps\_bz_state::bz_state_get_class( player );
+}
+
+// Local function pointers used by the gated live selftests.
+bz_classes_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_assassin_acquire_ghost_on_zombie = ::bz_assassin_acquire_ghost_on_zombie;
+	api.bz_assassin_restore_all_zombies = ::bz_assassin_restore_all_zombies;
+	api.bz_daredevil_execute_slam = ::bz_daredevil_execute_slam;
+	api.bz_sapper_get_total_grenades = ::bz_sapper_get_total_grenades;
+	api.bz_sapper_on_grenade_thrown = ::bz_sapper_on_grenade_thrown;
+	return api;
 }

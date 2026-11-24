@@ -855,24 +855,24 @@ restore_weapons_record( player, raw )
 		}
 
 		applied.weapons++;
-		if ( !pap_enabled )
+		if ( pap_enabled )
 		{
-			continue;
+			if ( rec.pap_tier >= 1 )
+			{
+				player.bz_single_pap_weapons[weapon] = true;
+				player.bz_pap_weapons[weapon] = true;
+			}
+			if ( rec.pap_tier >= 2 )
+			{
+				maps\_bz_state::bz_state_mark_weapon_double_pap( player, weapon );
+			}
+			if ( bz_is_weapon_double_pap( player, weapon ) )
+			{
+				applied.dpap++;
+			}
 		}
-		if ( rec.pap_tier >= 1 )
-		{
-			player.bz_single_pap_weapons[weapon] = true;
-			player.bz_pap_weapons[weapon] = true;
-		}
-		if ( rec.pap_tier >= 2 )
-		{
-			maps\_bz_state::bz_state_mark_weapon_double_pap( player, weapon );
-			maps\_bz_pap::bz_pap_apply_reserve_ammo( player, weapon );
-		}
-		if ( bz_is_weapon_double_pap( player, weapon ) )
-		{
-			applied.dpap++;
-		}
+		// Normalize Elemental weapon reserve to exact 1x/1.5x/2x/3x (GiveMaxAmmo fills to 3x maxAmmo).
+		maps\_bz_pap::bz_pap_apply_reserve_ammo( player, weapon );
 	}
 
 	bz_pap_update_hud( player );
@@ -1061,17 +1061,18 @@ restore_player_bz_state( player, current_map )
 
 	fields = [];
 	fields[0] = bz_log_kv( "player", player_key );
-	fields[1] = bz_log_kv( "map", map_label );
-	fields[2] = bz_log_kv( "class", cls_label );
-	fields[3] = bz_log_kv( "t1", t1_restored );
-	fields[4] = bz_log_kv( "t2", t2_restored );
-	fields[5] = bz_log_kv( "apex", apex_restored );
-	fields[6] = bz_log_kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
-	fields[7] = bz_log_kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
-	fields[8] = bz_log_kv( "melee_slot", applied_melee );
-	fields[9] = bz_log_kv( "weapons", applied_weapons_log );
-	fields[10] = bz_log_kv( "bz_weapons", applied_loadout.weapons );
-	fields[11] = bz_log_kv( "bz_dpap", applied_loadout.dpap );
+	fields[1] = bz_log_kv( "label", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[2] = bz_log_kv( "map", map_label );
+	fields[3] = bz_log_kv( "class", cls_label );
+	fields[4] = bz_log_kv( "t1", t1_restored );
+	fields[5] = bz_log_kv( "t2", t2_restored );
+	fields[6] = bz_log_kv( "apex", apex_restored );
+	fields[7] = bz_log_kv( "war_club", maps\_bz_hooks::bz_bool_int( applied_wc ) );
+	fields[8] = bz_log_kv( "pap_war_club", maps\_bz_hooks::bz_bool_int( applied_pwc ) );
+	fields[9] = bz_log_kv( "melee_slot", applied_melee );
+	fields[10] = bz_log_kv( "weapons", applied_weapons_log );
+	fields[11] = bz_log_kv( "bz_weapons", applied_loadout.weapons );
+	fields[12] = bz_log_kv( "bz_dpap", applied_loadout.dpap );
 	bz_log_emit( "GAUNTLET_BZ_RESTORED", bz_log_join( fields ) );
 	return true;
 }

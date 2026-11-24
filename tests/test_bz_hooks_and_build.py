@@ -319,6 +319,7 @@ class BzGscRuntime(GscRuntime):
         self.players: list[FakeEntity] = []
         self.emitted_events: list[str] = []
         self.player_prints: list[tuple[FakeEntity, str]] = []
+        self.played_local_sounds: list[tuple[FakeEntity, str]] = []
         self._py_callbacks: dict[str, Callable[..., Any]] = {}
         self._current_self: Any = self.level
         self._threads: list[tuple[Any, str, list[Any]]] = []
@@ -552,6 +553,11 @@ class BzGscRuntime(GscRuntime):
             if not isinstance(receiver, FakeEntity) or not receiver.is_player:
                 raise GscRuntimeError(f"line {line}: IPrintLn on non-player {receiver!r}")
             self.player_prints.append((receiver, _waw_to_str(args[0])))
+            return UNDEFINED
+        if method == "playlocalsound":
+            if not isinstance(receiver, FakeEntity) or not receiver.is_player:
+                raise GscRuntimeError(f"line {line}: PlayLocalSound on non-player {receiver!r}")
+            self.played_local_sounds.append((receiver, _waw_to_str(args[0])))
             return UNDEFINED
         if method == "setclientdvar":
             if not isinstance(receiver, FakeEntity):
@@ -1982,6 +1988,68 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("if ( maps\\_bz_hooks::bz_enabled() )", patched)
         self.assertIn('points = maps\\_bz_hooks::bz_points_modify( self, points, "score" );', patched)
 
+    def test_inject_zombiemode_powerups_hooks_notifies_max_ammo_under_bz_gate(self) -> None:
+        sample = (
+            b"full_ammo_powerup( drop_item )\n"
+            b"{\n"
+            b"\tplayers = get_players();\n"
+            b"\tfor ( i = 0; i < players.size; i++ )\n"
+            b"\t{\n"
+            b'\t\t// comment with }\n'
+            b'\t\tplayers[i] GiveMaxAmmo( "colt" );\n'
+            b"\t}\n"
+            b"\tmaps\\_zombiemode_dogs::special_dog_spawn();\n"
+            b"}\n"
+        )
+        patched = self.bm.inject_zombiemode_powerups_hooks(
+            sample,
+            rewire_dogs_module="_zombiemode_dogs_bz_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        ).decode("latin1")
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() )", patched)
+        self.assertIn("maps\\_bz_hooks::bz_notify_all_players_max_ammo();", patched)
+        self.assertIn("maps\\_zombiemode_dogs_bz_factory::special_dog_spawn();", patched)
+        code_only = "\n".join(line.split("//", 1)[0] for line in patched.splitlines())
+        self.assertEqual(code_only.count("{"), code_only.count("}"))
+
+        map_src = b'main()\n{\n\tmaps\\_zombiemode::main("spawners");\n}\n'
+        factory_map = self.bm.inject_map_hooks(
+            map_src,
+            "nazi_zombie_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        ).decode("latin1")
+        self.assertIn(
+            'if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_p2_selftest" ) == 1 ) '
+            "{ level.bz_test_full_ammo_powerup = maps\\_zombiemode_powerups_bz_factory::full_ammo_powerup; }",
+            factory_map,
+        )
+        self.assertIn(
+            "if ( maps\\_bz_hooks::bz_enabled() ) { level.bz_powerups_hooked = true; }",
+            factory_map,
+        )
+
+        # Verify spawner -> powerups -> full_ammo_powerup rewiring and polling disablement
+        spawner_src = (
+            "zombie_death_points( origin )\n{\n"
+            "\tlevel thread maps\\_zombiemode_powerups::powerup_drop( origin );\n"
+            "}\n"
+        )
+        rewired_spawner = self.bm._rewire_stock_module_refs(
+            spawner_src,
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+            rewire_spawner_module="_zombiemode_spawner_bz_factory",
+        )
+        self.assertIn("maps\\_zombiemode_powerups_bz_factory::powerup_drop", rewired_spawner)
+        self.assertNotIn("maps\\_zombiemode_powerups::", rewired_spawner)
+
+        dvars = FakeDvarStore()
+        dvars.set("bz_enabled", "1")
+        gsc = BzGscRuntime(MOD_ROOT, dvars)
+        gsc.level.set_field("bz_powerups_hooked", True)
+        gsc.call(BZ_HOOKS_MOD, "bz_init")
+        launched = [name for _, name, _ in gsc._threads]
+        self.assertNotIn("bz_watch_max_ammo_powerups", launched)
+
     def test_mod_csv_stages_bz_scripts_and_supports_future_bz_modules(self) -> None:
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
         self.assertIn("rawfile,maps/_bz_log.gsc", mod_csv)
@@ -2290,11 +2358,16 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             sources[path.name] = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
         ref_pattern = r"maps\\[a-zA-Z0-9_]+::[a-zA-Z0-9_]+"
         counts = {name: len(re.findall(ref_pattern, code)) for name, code in sources.items()}
-        for name, budget in (("_bz_hooks.gsc", 65), ("_bz_selftest.gsc", 80)):
+        budgets = {
+            "_bz_hooks.gsc": 65,
+            "_bz_selftest.gsc": 35,
+            "_bz_stations.gsc": 45,
+        }
+        for name, budget in budgets.items():
             self.assertIn(name, counts)
             with self.subTest(module=name):
                 self.assertLessEqual(counts[name], budget)
-        self.assertLessEqual(sum(counts.values()), 700, counts)
+        self.assertLessEqual(sum(counts.values()), 499, counts)
 
         selftest_path = MOD_ROOT / "maps" / "_bz_selftest.gsc"
         selftest_code = sources[selftest_path.name]
@@ -2308,6 +2381,68 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         for name, body in re.findall(r"(?ms)^(\w+)\([^\n]*\)\n\{\n(.*?)^\}", selftest_code):
             if not name.startswith("bz_run_"):
                 self.assertNotRegex(body, r"(?i)\b(?:endon|wait|waittill\w*|waitframe)\s*\(", name)
+
+    def test_tesla_powerup_drop_routes_through_patched_map_powerups_module(self) -> None:
+        tesla_src = (
+            "tesla_pvp_thread()\n{\n"
+            "\tif ( self.health - damage < 1 )\n\t{\n\t\tself.health = 1;\n\t}\n"
+            "\telse\n\t{\n\t\tself.health -= damage;\n\t}\n"
+            "}\n"
+            "tesla_arc_damage( source_enemy, player, arc_num )\n{\n"
+            "\tif ( !player.tesla_powerup_dropped )\n\t{\n"
+            "\t\tlevel thread maps\\_zombiemode_powerups::powerup_drop( self.origin );\n"
+            "\t}\n"
+            "}\n"
+        )
+        patched_tesla = self.bm.inject_zombiemode_tesla_hooks(tesla_src)
+        assert isinstance(patched_tesla, str)
+        self.assertNotIn(r"maps\_zombiemode_powerups::powerup_drop", patched_tesla)
+        self.assertIn("if ( IsDefined( level.bz_powerup_drop_fn ) )", patched_tesla)
+        self.assertIn("level thread [[ level.bz_powerup_drop_fn ]]( self.origin );", patched_tesla)
+
+        map_src = b'main()\n{\n\tmaps\\_zombiemode::main("spawners");\n}\n'
+        for slug in ("sumpf", "factory"):
+            mod_name = f"_zombiemode_powerups_bz_{slug}"
+            patched_map = self.bm.inject_map_hooks(
+                map_src,
+                f"nazi_zombie_{slug}",
+                rewire_powerups_module=mod_name,
+            ).decode("latin1")
+            self.assertIn(f"level.bz_powerup_drop_fn = maps\\{mod_name}::powerup_drop;", patched_map)
+            self.assertIn("if ( maps\\_bz_hooks::bz_enabled() ) { level.bz_powerups_hooked = true; }", patched_map)
+
+    def test_mystery_box_give_weapon_normalizes_elemental_ammo_behind_gate(self) -> None:
+        stock_src = (
+            b"treasure_chest_give_weapon( weapon_string )\n{\n"
+            b"\tif ( self HasWeapon( weapon_string ) )\n\t{\n"
+            b"\t\tself GiveMaxAmmo( weapon_string );\n"
+            b"\t\tself SwitchToWeapon( weapon_string );\n"
+            b"\t\treturn;\n\t}\n"
+            b"\tif ( primaryWeapons.size >= 2 )\n\t{\n\t\tself TakeWeapon( current_weapon );\n\t}\n"
+            b"\tself GiveWeapon( weapon_string, 0 );\n"
+            b"\tself GiveMaxAmmo( weapon_string );\n"
+            b"\tself SwitchToWeapon( weapon_string );\n}\n"
+        )
+        patched = self.bm.inject_zombiemode_weapons_hooks(stock_src).decode("latin1")
+        hook = (
+            "if ( maps\\_bz_hooks::bz_elements_enabled() ) "
+            "{ maps\\_bz_stations::bz_stations_normalize_box_element_ammo( self, weapon_string ); }"
+        )
+        self.assertEqual(patched.count(hook), 2)
+
+        # Shi No Numa calls maps\_zombiemode_weapons_sumpf::init(); rewiring must route it to the patched wrapper.
+        sumpf_zm = (
+            b"main()\n{\n\tmaps\\_zombiemode_weapons_sumpf::init();\n\tlevel thread round_think();\n}\n"
+            b"round_think()\n{\n\tround_wait();\n}\n"
+            b"end_game()\n{\n\tlevel.intermission = true;\n}\n"
+        )
+        patched_sumpf_zm = self.bm.inject_zombiemode_hooks(
+            sumpf_zm,
+            "nazi_zombie_sumpf",
+            rewire_weapons_module="_zombiemode_weapons_bz_sumpf",
+        ).decode("latin1")
+        self.assertIn(r"maps\_zombiemode_weapons_bz_sumpf::init();", patched_sumpf_zm)
+        self.assertNotIn(r"maps\_zombiemode_weapons_sumpf::", patched_sumpf_zm)
 
     def test_clientscript_callbacks_patch_stages_manifest_and_iwd(self) -> None:
         from tempfile import TemporaryDirectory
@@ -2338,7 +2473,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             raw_csc.parent.mkdir(parents=True)
             raw_csc.write_bytes(stock_1arg)
             (stage / "maps").mkdir(parents=True)
-            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.6.0-dev\"; }\n", encoding="ascii")
+            (stage / "maps" / "_bz_version.gsc").write_text("bz_get_build_id() { return \"0.7.0-dev\"; }\n", encoding="ascii")
 
             out_csc = build_mod.stage_bz_clientscript_callbacks(
                 tools, stage, steam_game=root / "steam"
@@ -2364,17 +2499,17 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         # Retail-visible client-package parity stamp across all 4 station menus
         for menu_path in sorted((MOD_ROOT / "ui").glob("bz_station_*.menu")):
             raw_menu = menu_path.read_text(encoding="latin1")
-            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.6.0-abc1234")
+            stamped = build_mod.stamp_bz_station_menu_build_parity(raw_menu, "0.7.0-abc1234")
             self.assertEqual(
                 verify_hud_menus.validate_menu_braces(stamped, filename=menu_path.name),
                 [],
                 f"Brace imbalance in stamped {menu_path.name}",
             )
-            self.assertIn('"BUILD: 0.6.0-abc1234"', stamped)
-            self.assertIn('dvarString( "bz_host_build_id" ) != "0.6.0-abc1234"', stamped)
-            self.assertIn('BUILD MISMATCH! LOCAL 0.6.0-abc1234 != HOST ', stamped)
+            self.assertIn('"BUILD: 0.7.0-abc1234"', stamped)
+            self.assertIn('dvarString( "bz_host_build_id" ) != "0.7.0-abc1234"', stamped)
+            self.assertIn('BUILD MISMATCH! LOCAL 0.7.0-abc1234 != HOST ', stamped)
             # Idempotent
-            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.6.0-abc1234"), stamped)
+            self.assertEqual(build_mod.stamp_bz_station_menu_build_parity(stamped, "0.7.0-abc1234"), stamped)
             # Tracked menu remains unstamped
             self.assertNotIn("bz_parity_mismatch", raw_menu)
 

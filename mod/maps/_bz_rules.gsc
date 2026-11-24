@@ -224,7 +224,7 @@ bz_get_apex_perk_price( apex_id )
 		return undefined;
 	}
 
-	// Temporary testing cap: Apex perks set to 8000 (standard: 20000).
+	// Apex Perks use the tuned 8,000-point cap.
 	return 8000;
 }
 
@@ -235,7 +235,7 @@ bz_get_class_price( class_id )
 		return undefined;
 	}
 
-	// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+	// Classes use the tuned 5,000-point cap.
 	return 5000;
 }
 
@@ -244,7 +244,7 @@ bz_get_pap_upgrade_price( upgrade_id )
 	id = bz_normalize_id( upgrade_id );
 	if ( id == "double_pap" )
 	{
-		// Temporary testing cap: max cost capped at 5000 (standard: 10000).
+		// Double Pack-a-Punch uses the tuned 5,000-point cap.
 		return 5000;
 	}
 	if ( id == "pap_knife" || id == "pap_bowie" || id == "pap_cluster" )
@@ -303,8 +303,13 @@ bz_get_element_weapon_id_from_weapon( weapon_name )
 
 bz_get_element_weapon_price( item_id )
 {
+	return bz_get_element_weapon_cost( item_id );
+}
+
+bz_get_element_weapon_cost( item_id )
+{
 	id = bz_normalize_id( item_id );
-	// Temporary testing cap: max cost capped at 5000 (standard: 6500/7000/7500/6000).
+	// Elemental Weapons use the tuned 5,000-point cap.
 	if ( id == "acid_sprayer" )
 	{
 		return 5000;
@@ -325,6 +330,41 @@ bz_get_element_weapon_price( item_id )
 	return undefined;
 }
 
+bz_get_element_ammo_cost( item_id )
+{
+	cost = bz_get_element_weapon_cost( item_id );
+	if ( !IsDefined( cost ) )
+	{
+		return 0;
+	}
+	return Int( cost / 2 );
+}
+
+// Canonical 1x base reserve stock for the 4 cloned Elemental Weapons.
+// Their weaponfiles set maxAmmo = 3 * base (360/288/108/60) so WaW 1.7's
+// SetWeaponAmmoStock clamp allows full Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x.
+bz_get_element_base_reserve( weapon_name )
+{
+	weap = bz_normalize_id( weapon_name );
+	if ( weap == "bz_acid_sprayer" )
+	{
+		return 120;
+	}
+	if ( weap == "bz_cryo_cannon" )
+	{
+		return 96;
+	}
+	if ( weap == "bz_multi_crossbow" )
+	{
+		return 36;
+	}
+	if ( weap == "bz_blade_boomerang" )
+	{
+		return 20;
+	}
+	return 0;
+}
+
 bz_get_special_gear_price( item_id )
 {
 	id = bz_normalize_id( item_id );
@@ -338,7 +378,7 @@ bz_get_special_gear_price( item_id )
 	}
 	if ( id == "portal_grenade" )
 	{
-		// Temporary testing cap: max cost capped at 5000 (standard: 6000).
+		// Portal Grenade uses the tuned 5,000-point cap.
 		return 5000;
 	}
 
@@ -483,7 +523,7 @@ bz_get_item_display_name( category, item_id )
 		return undefined;
 	}
 
-	if ( cat == "element_weapon" )
+	if ( cat == "element_weapon" || cat == "element_ammo" )
 	{
 		if ( id == "acid_sprayer" )
 		{
@@ -1277,4 +1317,28 @@ bz_get_portal_cooldown()
 bz_get_portal_max_charges()
 {
 	return 2;
+}
+
+// Grouped local function pointers used by _bz_stations.gsc to stay within WaW 1.7 precache budgets.
+bz_rules_get_stations_api()
+{
+	api = SpawnStruct();
+	api.bz_calc_reserve_ammo_mult = ::bz_calc_reserve_ammo_mult;
+	api.bz_get_apex_perk_ids = ::bz_get_apex_perk_ids;
+	api.bz_get_apex_perk_price = ::bz_get_apex_perk_price;
+	api.bz_get_class_ids = ::bz_get_class_ids;
+	api.bz_get_class_price = ::bz_get_class_price;
+	api.bz_get_element_ammo_cost = ::bz_get_element_ammo_cost;
+	api.bz_get_element_base_reserve = ::bz_get_element_base_reserve;
+	api.bz_get_element_weapon_ids = ::bz_get_element_weapon_ids;
+	api.bz_get_element_weapon_name = ::bz_get_element_weapon_name;
+	api.bz_get_element_weapon_price = ::bz_get_element_weapon_price;
+	api.bz_get_item_display_name = ::bz_get_item_display_name;
+	api.bz_get_pap_upgrade_price = ::bz_get_pap_upgrade_price;
+	api.bz_get_perk_t2_price = ::bz_get_perk_t2_price;
+	api.bz_get_special_gear_price = ::bz_get_special_gear_price;
+	api.bz_get_standard_perk_ids = ::bz_get_standard_perk_ids;
+	api.bz_get_standard_perk_price = ::bz_get_standard_perk_price;
+	api.bz_normalize_id = ::bz_normalize_id;
+	return api;
 }

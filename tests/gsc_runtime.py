@@ -601,6 +601,10 @@ class Parser:
             expr = self.parse_expr()
             self.expect(")")
             return expr
+        if tok.kind == "::":
+            self.pos += 1
+            fn_tok = self.expect("IDENT")
+            return Literal(f"::{fn_tok.value}")
         if tok.kind == "IDENT":
             self.pos += 1
             if self.match("::"):

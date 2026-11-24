@@ -32,7 +32,9 @@ Loading fastfile 'mod'
       dvar set bz_event BZ_EVENT|SPECIAL_BOOMERANG_THROW|player=Player0;model=viewmodel_knife_bowie;range=480;max_pierce=6;damage=350;double_pap=0
       dvar set bz_event BZ_EVENT|SPECIAL_PORTAL_OPEN|player=Player0;map=nazi_zombie_factory;x=10;y=20;z=0;duration=12;charges_left=0;fx=transporter_ambient
       dvar set bz_event BZ_EVENT|SPECIAL_PORTAL_TELEPORT|owner=Player0;target=Player0;x=-50;y=0;z=64
-      dvar set bz_event BZ_EVENT|BZ_P2_SELFTEST_PASS|map=nazi_zombie_factory;checks=15;box_weapons=4;primaries=4;titan_tesla_hp=440;acid_brittle_dmg=150;cryo_shatter_dmg=250;xbow_bolts=3;portal_warped=1;cleanup=1
+      dvar set bz_event BZ_EVENT|SPECIAL_PORTAL_REFILL|player=Player0;reason=max_ammo;charges=2
+      dvar set bz_event BZ_EVENT|STATION_PURCHASE|player=Player0;menu=bz_station_arsenal;category=element_ammo;item=acid_sprayer;status=ok;cost=2500;score=300000
+      dvar set bz_event BZ_EVENT|BZ_P2_SELFTEST_PASS|map=nazi_zombie_factory;checks=20;box_weapons=4;primaries=4;titan_tesla_hp=440;acid_brittle_dmg=150;cryo_shatter_dmg=250;xbow_bolts=3;portal_warped=1;cleanup=1
 """
 
 VALID_P2_RUN_B_CLASSIC_LOG = """
@@ -94,6 +96,19 @@ class TestVerifyBaseZombiesP2LogAnalyzers(unittest.TestCase):
         )
         _, errs = vb2.analyze_bz_p2_log(no_portal)
         self.assertTrue(any("SPECIAL_PORTAL_TELEPORT" in err for err in errs))
+
+    def test_analyze_bz_p2_log_requires_successful_refills(self) -> None:
+        for original, replacement, expected in (
+            ("category=element_ammo", "category=element_weapon", "Arsenal"),
+            ("status=ok", "status=already_full", "Arsenal"),
+            ("cost=2500", "cost=5000", "Arsenal"),
+            ("reason=max_ammo", "reason=round", "SPECIAL_PORTAL_REFILL"),
+            ("charges=2", "charges=1", "SPECIAL_PORTAL_REFILL"),
+            ("checks=20", "checks=18", "checks"),
+        ):
+            with self.subTest(original=original):
+                _, errors = vb2.analyze_bz_p2_log(VALID_P2_RUN_A_LOG.replace(original, replacement))
+                self.assertTrue(any(expected in error for error in errors), errors)
 
     def test_analyze_classic_bz_p2_isolation_log_passes_and_catches_leak(self) -> None:
         events, errors = vb2.analyze_classic_bz_p2_isolation_log(VALID_P2_RUN_B_CLASSIC_LOG)

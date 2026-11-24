@@ -1040,3 +1040,19 @@ bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
 }
+
+// Local function pointers used by the gated live selftests.
+bz_elem_new_get_selftest_api()
+{
+	api = SpawnStruct();
+	api.bz_elem_new_cleanup_puddle = ::bz_elem_new_cleanup_puddle;
+	api.bz_elem_new_fire_acid_sprayer = ::bz_elem_new_fire_acid_sprayer;
+	api.bz_elem_new_fire_cryo_cannon = ::bz_elem_new_fire_cryo_cannon;
+	api.bz_elem_new_is_acid_brittle_active = ::bz_elem_new_is_acid_brittle_active;
+	api.bz_elem_new_is_acid_slow_active = ::bz_elem_new_is_acid_slow_active;
+	api.bz_elem_new_is_cryo_frozen = ::bz_elem_new_is_cryo_frozen;
+	api.bz_elem_new_snap_to_floor = ::bz_elem_new_snap_to_floor;
+	api.bz_elem_new_tick_acid_puddle = ::bz_elem_new_tick_acid_puddle;
+	api.bz_elem_new_trace_forward_impact = ::bz_elem_new_trace_forward_impact;
+	return api;
+}
