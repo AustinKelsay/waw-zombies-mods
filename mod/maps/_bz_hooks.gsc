@@ -3136,13 +3136,19 @@ bz_run_visual_tour()
 				return;
 			}
 			p SwitchToWeapon( weap );
-			for ( r_tries = 0; r_tries < 40 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap ); r_tries++ )
+			for ( r_tries = 0; r_tries < 140 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap ); r_tries++ )
 			{
+				if ( r_tries == 20 && !p IsSwitchingWeapons() && ( p GetCurrentWeapon() ) != weap )
+				{
+					p SwitchToWeapon( weap );
+				}
 				wait( 0.05 );
 			}
-			if ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != weap )
+			cur_weap = p GetCurrentWeapon();
+			if ( p IsSwitchingWeapons() || cur_weap != weap )
 			{
-				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap );
+				bz_log_emit( "VISUAL_TOUR_FAIL", "reason=weapon_not_raised;weapon=" + weap +
+					";current=" + cur_weap + ";switching=" + bz_bool_int( p IsSwitchingWeapons() ) );
 				return;
 			}
 			bz_test_visual_phase( weap_slugs[i] + "_idle" );

@@ -241,6 +241,7 @@ def run_bz_scenario(
     settle_s: float = 2.0,
     log_dir: Path = DEFAULT_LOG_DIR,
     observe_log: Callable[[str], None] | None = None,
+    launch_cmd: str = "+devmap",
 ) -> BzScenarioResult:
     """Launch CoDWaW.exe via Proton + Xvfb, collect console.log, tear down wineserver cleanly."""
     appdata = (
@@ -293,7 +294,7 @@ def run_bz_scenario(
     ]
     for key, val in dvars:
         cmd.extend(["+set", key, str(val)])
-    cmd.extend(["+devmap", map_name])
+    cmd.extend([launch_cmd, map_name])
 
     t0 = time.monotonic()
     log_text = ""

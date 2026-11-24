@@ -247,3 +247,10 @@ class TestLiveHookGates(unittest.TestCase):
                 self.assertRegex(code, rf"level thread {name}\(\);")
             elif name.startswith("bz_test_"):
                 self.assertNotRegex(body, r"\b(?:wait|waittill|endon)\(")
+
+    def test_enhanced_gauntlet_uses_map_launch_and_bz_scenarios_use_devmap(self) -> None:
+        source = (REPO_ROOT / "scripts" / "verify_bz_coop_and_visuals.py").read_text(encoding="utf-8")
+        self.assertIn('launch_cmd="+map" if gauntlet else "+devmap"', source)
+        p1_source = (REPO_ROOT / "scripts" / "verify_base_zombies_p1.py").read_text(encoding="utf-8")
+        self.assertIn('launch_cmd: str = "+devmap"', p1_source)
+        self.assertIn("cmd.extend([launch_cmd, map_name])", p1_source)

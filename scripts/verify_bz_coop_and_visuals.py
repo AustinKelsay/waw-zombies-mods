@@ -343,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
             proton=args.proton, steam_root=args.steam_root, steam_game=args.steam_game,
             playtest_prefix=args.playtest_prefix, timeout_s=args.timeout, settle_s=0.8,
             log_dir=out_dir, observe_log=capture,
+            launch_cmd="+map" if gauntlet else "+devmap",
         )
         if capture is not None:
             result.errors.extend(capture.errors)
