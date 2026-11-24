@@ -109,6 +109,7 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
         self.hud_elems: list[SpecialHudElem] = []
         self.earthquakes: list[dict[str, Any]] = []
         self.played_fx: list[dict[str, Any]] = []
+        self.played_sounds_at_pos: list[dict[str, Any]] = []
         self.spawned_fx_entities: list[SpecialFakeEntity] = []
         self.triggered_fx_entities: list[SpecialFakeEntity] = []
         self.load_fx_calls: list[str] = []
@@ -124,6 +125,13 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
             fx_id = args[0] if len(args) > 0 else UNDEFINED
             pos = args[1] if len(args) > 1 else GscArray([0, 0, 0])
             self.played_fx.append({"fx": fx_id, "pos": (float(pos[0]), float(pos[1]), float(pos[2]))})
+            return True, UNDEFINED
+        if name_lower == "playsoundatposition":
+            alias = _waw_to_str(args[0]) if len(args) > 0 else ""
+            pos = args[1] if len(args) > 1 else GscArray([0, 0, 0])
+            self.played_sounds_at_pos.append(
+                {"alias": alias, "pos": (float(pos[0]), float(pos[1]), float(pos[2]))}
+            )
             return True, UNDEFINED
         if name_lower == "spawnfx":
             fx_id = args[0] if len(args) > 0 else UNDEFINED
@@ -308,10 +316,12 @@ def _seed_stock_effects(gsc: SpecialWeaponsGscRuntime, map_name: str) -> None:
     fx.set_item("powerup_on", "stock_fx:powerup_on")
     fx.set_item("powerup_grabbed", "stock_fx:powerup_grabbed")
     fx.set_item("powerup_grabbed_wave", "stock_fx:powerup_grabbed_wave")
+    fx.set_item("mini_nuke", "stock_fx:mini_nuke")
     if map_name == "nazi_zombie_factory":
         fx.set_item("rise_burst", "stock_fx:rise_burst")
         fx.set_item("betty_explode", "stock_fx:betty_explode")
         fx.set_item("wire_spark", "stock_fx:wire_spark")
+        fx.set_item("wire_sparks_oneshot", "stock_fx:wire_sparks_oneshot")
         fx.set_item("transporter_ambient", "stock_fx:transporter_ambient")
         fx.set_item("transporter_beam", "stock_fx:transporter_beam")
         fx.set_item("transporter_start", "stock_fx:transporter_start")
@@ -489,7 +499,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertNotEqual(z_cone.get_field("bz_stunned"), True)
         self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 96)
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
 
@@ -709,11 +719,25 @@ class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
         stuck_to_world = [b for b in bolts if b.get_field("bz_stuck_type") == "world"]
         self.assertEqual(len(stuck_to_zombie), 1)
         self.assertEqual(len(stuck_to_world), 2)
-        self.assertIs(stuck_to_zombie[0].linked_to, z_stuck)
+        # Bolts spawn near muzzle (not teleported to 300u), stagger fuses (1.00 / 1.12 / 1.24),
+        # and fly via MoveTo before linking at hit height (48.0, not feet z=0)
+        self.assertEqual(
+            [round(float(b.get_field("bz_fuse_time")), 2) for b in bolts],
+            [1.0, 1.12, 1.24],
+        )
         for b in bolts:
-            self.assertAlmostEqual(float(b.get_field("bz_fuse_time")), 1.2)
+            self.assertLess(b.get_pos()[0], 40.0)
+            self.assertGreaterEqual(float(b.get_field("bz_travel_time")), 0.05)
+            self.assertLessEqual(float(b.get_field("bz_travel_time")), 0.22)
             self.assertTrue(b.not_solid)
             self.assertEqual(b.contents, 0)
+
+        # Simulate bolt flight & stick helper for zombie bolt -> MoveTo + LinkTo at hit height 48.0
+        self.assertAlmostEqual(float(stuck_to_zombie[0].get_field("bz_stuck_z_offset")), 48.0)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", stuck_to_zombie[0])
+        self.assertEqual(len(stuck_to_zombie[0].move_calls), 1)
+        self.assertIs(stuck_to_zombie[0].linked_to, z_stuck)
+        self.assertAlmostEqual(stuck_to_zombie[0].get_pos()[2], 48.0)
 
         # Child fuse threads scheduled (zero inline wait/endon in weapon_fired)
         fuse_threads = [t for t in gsc._threads if t[1] == "bz_special_crossbow_bolt_fuse"]
@@ -760,6 +784,11 @@ class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
         self.assertEqual(player.damage_events, [])
         self.assertEqual(player.get_field("health"), 100)
         self.assertEqual(z_stuck.get_field("health"), 0)  # killed lethally
+        self.assertAlmostEqual(float(res2.get_field("center")[2]), 48.0)  # hit height, NOT feet z=0
+        self.assertTrue(
+            any(s["alias"] == "grenade_explode_default" and abs(s["pos"][2] - 48.0) < 0.1 for s in gsc.played_sounds_at_pos),
+            f"Missing explosion sound at hit height: {gsc.played_sounds_at_pos}",
+        )
         self.assertTrue(center_bolt.deleted)
         self.assertEqual(center_bolt.delete_count, 1)
         self.assertTrue(
@@ -1039,7 +1068,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertTrue(portal_fx_ent.get_field("triggered"))
         self.assertEqual(gsc.played_fx, [])
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
         self.assertTrue(
@@ -1113,6 +1142,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
                     "misc/fx_exp_raygun_impact",
                     "env/electrical/fx_elec_short_oneshot",
                     "bio/player/fx_footstep_water",
+                    "misc/fx_zombie_bloodsplat",
                 )
                 for fx in gsc_n.load_fx_calls
             ),
@@ -1291,6 +1321,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             "bz_special_on_end_game",
             "bz_special_war_club_smash",
             "bz_special_fire_multi_crossbow",
+            "bz_special_crossbow_bolt_fly_and_stick",
             "bz_special_detonate_crossbow_bolt",
             "bz_special_fire_blade_boomerang",
             "bz_special_run_boomerang_flight",
@@ -1315,6 +1346,162 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
                 _ast_contains_method_call(mod[child_fn].body, "endon"),
                 f"Child watcher {child_fn}() must hold endon() termination guard",
             )
+
+    def test_fx_audit_forbids_looping_sparks_steam_and_mini_nuke_and_uses_safe_oneshots(self) -> None:
+        source = BZ_SPECIAL_PATH.read_text(encoding="latin1")
+        code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+        for forbidden in (
+            "wire_spark",
+            "fx_zombie_wire_spark",
+            "fx_elec_wire_spark_burst",
+            "fx_zombie_elec_trail_oneshot",
+            "zombie_mainframe_steam",
+            "mini_nuke",
+        ):
+            self.assertIsNone(
+                re.search(rf'"{re.escape(forbidden)}"', code_only),
+                f"Forbidden FX token {forbidden!r} found in active _bz_special_weapons.gsc code",
+            )
+
+        # Der Riese: Boomerang prefers cached bloodsplat (never wire_spark!); Crossbow uses betty_explode
+        _dvars, gsc_dr, _p = _setup_special_env(map_name="nazi_zombie_factory")
+        boom_fx = gsc_dr.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "boomerang")
+        self.assertEqual(boom_fx, "fx:misc/fx_zombie_bloodsplat")
+        self.assertNotEqual(boom_fx, "stock_fx:wire_spark")
+
+        xbow_fx_dr = gsc_dr.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "crossbow")
+        self.assertEqual(xbow_fx_dr, "stock_fx:betty_explode")
+
+        # Without cached bloodsplat: Boomerang falls back to wire_sparks_oneshot -> powerup_grabbed (never wire_spark)
+        gsc_dr.level.set_field("bz_elem_new_fx", GscArray())
+        self.assertEqual(
+            gsc_dr.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "boomerang"),
+            "stock_fx:wire_sparks_oneshot",
+        )
+        effects_dr = gsc_dr.level.get_field("_effect")
+        effects_dr.set_item("wire_sparks_oneshot", UNDEFINED)
+        self.assertEqual(
+            gsc_dr.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "boomerang"),
+            "stock_fx:powerup_grabbed",
+        )
+
+        # Crossbow fallback chain: betty_explode -> molotov_exp -> cached fx_exp_raygun_impact (NEVER mini_nuke!)
+        effects_dr.set_item("betty_explode", UNDEFINED)
+        effects_dr.set_item("molotov_exp", "stock_fx:molotov_exp")
+        self.assertEqual(
+            gsc_dr.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "crossbow"),
+            "stock_fx:molotov_exp",
+        )
+
+        # Nacht (mini_nuke present in level._effect, no betty_explode/molotov_exp): uses cached raygun impact, NEVER mini_nuke
+        _dvars_n, gsc_n, _pn = _setup_special_env(map_name="nazi_zombie_prototype")
+        xbow_fx_nacht = gsc_n.call(BZ_SPECIAL_MOD, "bz_special_resolve_stock_fx", "crossbow")
+        self.assertEqual(xbow_fx_nacht, "fx:misc/fx_exp_raygun_impact")
+        self.assertNotEqual(xbow_fx_nacht, "stock_fx:mini_nuke")
+
+    def test_multi_crossbow_drops_sky_misses_clamps_hit_height_staggers_fuses_and_plays_audio(self) -> None:
+        _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_prototype")
+        player.set_pos(0.0, 0.0, 0.0)
+        player.set_angles(0.0, 0.0, 0.0)
+
+        z_low = SpecialFakeEntity("ZLow", ent_num=91, is_player=False)
+        z_low.set_field("health", 500)
+        z_low.set_pos(200.0, 0.0, 10.0)
+
+        z_high = SpecialFakeEntity("ZHigh", ent_num=92, is_player=False)
+        z_high.set_field("health", 500)
+        z_high.set_pos(320.0, 35.0, 10.0)
+        gsc.ai_enemies.extend([z_low, z_high])
+
+        # Left (-6 deg): sky miss (fraction=1.0, no entity) -> MUST be skipped!
+        # Center (0 deg): hits z_low near feet (z=14 -> offset 4 -> clamped to 24.0)
+        # Right (+6 deg): hits z_high high head (z=90 -> offset 80 -> clamped to 56.0)
+        def mixed_trace(start: GscArray, end: GscArray, _hit_chars: bool, _ignore: Any) -> dict[str, Any]:
+            yaw_deg = math.degrees(math.atan2(float(end[1]) - float(start[1]), float(end[0]) - float(start[0])))
+            if yaw_deg < -1.0:
+                return {"fraction": 1.0, "position": end, "entity": UNDEFINED}
+            if abs(yaw_deg) <= 1.0:
+                return {"fraction": 0.125, "position": GscArray([200.0, 0.0, 14.0]), "entity": z_low}
+            return {"fraction": 0.20, "position": GscArray([320.0, 35.0, 90.0]), "entity": z_high}
+
+        gsc.trace_handler = mixed_trace
+        res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_multi_crossbow", player, "bz_multi_crossbow")
+        bolts = res.get_field("bolts")
+        self.assertEqual(bolts.size, 2)  # Sky miss skipped cleanly!
+        self.assertEqual(res.get_field("stuck_zombies"), 2)
+        self.assertEqual(res.get_field("stuck_world"), 0)
+
+        b0 = bolts[0]
+        b1 = bolts[1]
+        self.assertAlmostEqual(float(b0.get_field("bz_fuse_time")), 1.00)
+        self.assertAlmostEqual(float(b1.get_field("bz_fuse_time")), 1.12)
+        self.assertAlmostEqual(float(b0.get_field("bz_stuck_z_offset")), 24.0)  # clamped min 24
+        self.assertAlmostEqual(float(b1.get_field("bz_stuck_z_offset")), 56.0)  # clamped max 56
+
+        # Fly & detonate both bolts -> verify detonation height = z.origin[2] + clamped offset & explosion audio
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", b0)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", b1)
+        det0 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, b0, False, 1)
+        det1 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, b1, False, 1)
+        self.assertAlmostEqual(float(det0.get_field("center")[2]), 34.0)  # 10 + 24
+        self.assertAlmostEqual(float(det1.get_field("center")[2]), 66.0)  # 10 + 56
+        self.assertEqual(len(gsc.played_sounds_at_pos), 2)
+        self.assertTrue(all(s["alias"] == "grenade_explode_default" for s in gsc.played_sounds_at_pos))
+
+        # Pure sky shot (all 3 fraction >= 0.99, no entity) -> 0 bolts spawned
+        gsc.trace_handler = lambda s, e, _hc, _ig: {"fraction": 0.995, "position": e, "entity": UNDEFINED}
+        sky_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_multi_crossbow", player, "bz_multi_crossbow")
+        self.assertEqual(sky_res.get_field("bolts").size, 0)
+
+    def test_special_weapons_skip_hidden_spawning_hellhounds_and_never_force_teleport_them(self) -> None:
+        _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")
+        p1.set_pos(0.0, 0.0, 0.0)
+        p1.set_angles(0.0, 0.0, 0.0)
+
+        dog_spawning = SpecialFakeEntity("SpawningDog", ent_num=95, is_player=False)
+        dog_spawning.set_field("health", 1000)
+        dog_spawning.set_field("animname", "zombie_dog")
+        dog_spawning.set_field("ignoreall", True)
+        dog_spawning.set_pos(80.0, 0.0, 0.0)
+
+        dog_active = SpecialFakeEntity("ActiveDog", ent_num=96, is_player=False)
+        dog_active.set_field("health", 1000)
+        dog_active.set_field("animname", "zombie_dog")
+        dog_active.set_field("ignoreall", False)
+        dog_active.set_pos(90.0, 10.0, 0.0)
+        gsc.ai_enemies.extend([dog_spawning, dog_active])
+
+        # Direct push helper refuses hidden spawning dog (zero ForceTeleport)
+        pushed = gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_push_zombie_safely",
+            dog_spawning,
+            GscArray([0.0, 0.0, 0.0]),
+            GscArray([1.0, 0.0, 0.0]),
+            112,
+        )
+        self.assertFalse(pushed)
+        self.assertEqual(dog_spawning.origin_history, [])
+
+        # PaP War Club smash skips hidden spawning dog, hits & knocks back active dog
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_war_club_smash", p1, UNDEFINED, GscArray([80.0, 0.0, 0.0]), True, 500)
+        self.assertEqual(dog_spawning.damage_events, [])
+        self.assertEqual(dog_spawning.origin_history, [])
+        self.assertIs(dog_spawning.get_field("bz_war_club_staggered"), UNDEFINED)
+        self.assertEqual(len(dog_active.damage_events), 1)
+        self.assertGreater(len(dog_active.origin_history), 0)
+
+        # Multi-Crossbow detonation skips hidden spawning dog
+        bolt = SpecialFakeEntity("DogBolt", ent_num=97, is_player=False)
+        bolt.set_pos(80.0, 0.0, 20.0)
+        bolt.set_field("bz_detonated", False)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", p1, bolt, False, 1)
+        self.assertEqual(dog_spawning.damage_events, [])
+
+        # Blade Boomerang pierce skips hidden spawning dog
+        pierced = GscArray()
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_boomerang_pierce_at", p1, GscArray([80.0, 0.0, 20.0]), 300, 6, pierced)
+        self.assertEqual(dog_spawning.damage_events, [])
 
 
 if __name__ == "__main__":
