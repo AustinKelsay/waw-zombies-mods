@@ -284,7 +284,7 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 1100, -295, 96 ),
+			( 1075, -235, 96 ),
 			( 0, 180, 0 ),
 			false,
 			false
@@ -1080,13 +1080,10 @@ bz_stations_get_element_target_stock( player, weap_name )
 bz_stations_get_element_effective_max_stock( player, weap_name )
 {
 	target_stock = bz_stations_get_element_target_stock( player, weap_name );
-	if ( IsDefined( player.bz_elem_engine_cap ) && IsDefined( player.bz_elem_engine_cap[weap_name] ) )
+	base_max = WeaponMaxAmmo( weap_name );
+	if ( IsDefined( base_max ) && Int( base_max ) > 0 && Int( base_max ) < target_stock )
 	{
-		cap = Int( player.bz_elem_engine_cap[weap_name] );
-		if ( cap > 0 && cap < target_stock )
-		{
-			return cap;
-		}
+		return Int( base_max );
 	}
 	return target_stock;
 }
@@ -1627,15 +1624,6 @@ bz_stations_refill_element_ammo( player, weap_name )
 		player.bz_pap_target_stock = [];
 	}
 	player.bz_pap_target_stock[weap_name] = target_stock;
-	actual_stock = player GetWeaponAmmoStock( weap_name );
-	if ( IsDefined( actual_stock ) && actual_stock > 0 && actual_stock < target_stock )
-	{
-		if ( !IsDefined( player.bz_elem_engine_cap ) )
-		{
-			player.bz_elem_engine_cap = [];
-		}
-		player.bz_elem_engine_cap[weap_name] = actual_stock;
-	}
 }
 
 bz_stations_try_buy_element_ammo( player, item_id, weap_name )

@@ -1225,7 +1225,7 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
                     expected,
                 )
                 self.p1.weapon_clips = {weapon: 30}
-                self.p1.weapon_stocks = {weapon: expected - 1}
+                self.p1.weapon_stocks = {weapon: 159}
                 self.p1.set_field("score", 2500)
                 cache.set_item(weapon, expected - 1)
                 self.assertTrue(

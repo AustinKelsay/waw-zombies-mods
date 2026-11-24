@@ -634,6 +634,14 @@ bz_notify_all_players_max_ammo()
 	{
 		return;
 	}
+	now = GetTime();
+	if ( IsDefined( level.bz_last_max_ammo_notify_ms ) && now >= level.bz_last_max_ammo_notify_ms &&
+		( now - level.bz_last_max_ammo_notify_ms ) < 200 )
+	{
+		return;
+	}
+	level.bz_last_max_ammo_notify_ms = now;
+
 	players = GetPlayers();
 	if ( IsDefined( players ) )
 	{
@@ -647,17 +655,16 @@ bz_notify_all_players_max_ammo()
 	}
 }
 
-// Stock WaW 1.7 _zombiemode_powerups::full_ammo_powerup() never emits "zmb_max_ammo".
-// Watch spawned full_ammo powerup script_models across all 4 stock maps and emit
-// "zmb_max_ammo" on all players right after pickup so Double Ammo, Double PaP,
-// and Sapper grenades refill cleanly without modifying era-specific powerup scripts.
+// Primary Max Ammo delivery is injected into stock _zombiemode_powerups::full_ammo_powerup().
+// Keep a 1-frame (50ms) fallback drop watcher for unpatched/unit-test environments,
+// deduplicated by bz_notify_all_players_max_ammo()'s 200ms debounce.
 bz_watch_max_ammo_powerups()
 {
 	level endon( "end_game" );
 
 	for ( ;; )
 	{
-		wait( 0.25 );
+		wait( 0.05 );
 		if ( !bz_enabled() )
 		{
 			continue;
@@ -885,6 +892,7 @@ bz_on_end_game()
 		return;
 	}
 	level.bz_end_game_notified = true;
+	level.bz_last_max_ammo_notify_ms = undefined;
 
 	players = GetPlayers();
 	for ( i = 0; i < players.size; i++ )

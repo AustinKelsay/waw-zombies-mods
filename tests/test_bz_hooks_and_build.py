@@ -1988,6 +1988,42 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("if ( maps\\_bz_hooks::bz_enabled() )", patched)
         self.assertIn('points = maps\\_bz_hooks::bz_points_modify( self, points, "score" );', patched)
 
+    def test_inject_zombiemode_powerups_hooks_notifies_max_ammo_under_bz_gate(self) -> None:
+        sample = (
+            b"full_ammo_powerup( drop_item )\n"
+            b"{\n"
+            b"\tplayers = get_players();\n"
+            b"\tfor ( i = 0; i < players.size; i++ )\n"
+            b"\t{\n"
+            b'\t\t// comment with }\n'
+            b'\t\tplayers[i] GiveMaxAmmo( "colt" );\n'
+            b"\t}\n"
+            b"\tmaps\\_zombiemode_dogs::special_dog_spawn();\n"
+            b"}\n"
+        )
+        patched = self.bm.inject_zombiemode_powerups_hooks(
+            sample,
+            rewire_dogs_module="_zombiemode_dogs_bz_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        ).decode("latin1")
+        self.assertIn("if ( maps\\_bz_hooks::bz_enabled() )", patched)
+        self.assertIn("maps\\_bz_hooks::bz_notify_all_players_max_ammo();", patched)
+        self.assertIn("maps\\_zombiemode_dogs_bz_factory::special_dog_spawn();", patched)
+        code_only = "\n".join(line.split("//", 1)[0] for line in patched.splitlines())
+        self.assertEqual(code_only.count("{"), code_only.count("}"))
+
+        map_src = b'main()\n{\n\tmaps\\_zombiemode::main("spawners");\n}\n'
+        factory_map = self.bm.inject_map_hooks(
+            map_src,
+            "nazi_zombie_factory",
+            rewire_powerups_module="_zombiemode_powerups_bz_factory",
+        ).decode("latin1")
+        self.assertIn(
+            'if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_p2_selftest" ) == 1 ) '
+            "{ level.bz_test_full_ammo_powerup = maps\\_zombiemode_powerups_bz_factory::full_ammo_powerup; }",
+            factory_map,
+        )
+
     def test_mod_csv_stages_bz_scripts_and_supports_future_bz_modules(self) -> None:
         mod_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
         self.assertIn("rawfile,maps/_bz_log.gsc", mod_csv)

@@ -185,7 +185,7 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
     for index, (map_name, cycle, stage) in enumerate(GAUNTLET_STAGES):
         start, end = flow[index * 3][0], flow[index * 3 + 1][0]
         restored_players: set[str] = set()
-        saved_players: set[str] = set()
+        last_saves: dict[str, bz.BzEvent] = {}
         for position in range(start + 1, end):
             event = timeline[position]
             if not isinstance(event, bz.BzEvent) or event.fields.get("map") != map_name:
@@ -195,13 +195,16 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
                 continue
             if event.event_type == "GAUNTLET_BZ_RESTORED" and player in players and _has_restored_seed(event):
                 restored_players.add(player)
-            if (
-                event.event_type == "GAUNTLET_BZ_SAVED"
-                and (player in restored_players or index == 0 and position > seeds[0][0])
-                and _has_seeded_perm_and_perks(event.fields.get("perm", ""), event.fields.get("perks", ""))
-                and _has_seeded_weapons(event.fields)
+            if event.event_type == "GAUNTLET_BZ_SAVED" and (
+                player in restored_players or (index == 0 and position > seeds[0][0])
             ):
-                saved_players.add(player)
+                last_saves[player] = event
+        saved_players = {
+            player
+            for player, save_event in last_saves.items()
+            if _has_seeded_perm_and_perks(save_event.fields.get("perm", ""), save_event.fields.get("perks", ""))
+            and _has_seeded_weapons(save_event.fields)
+        }
         stage_label = f"{map_name} (Cycle {cycle} Stage {stage})"
         if index > 0 and not restored_players:
             errors.append(f"Missing GAUNTLET_BZ_RESTORED with the same player's seeded loadout on {stage_label}")
@@ -211,18 +214,33 @@ def analyze_enhanced_gauntlet_log(log_text: str) -> tuple[list[bz.BzEvent], list
             break
         players = saved_players
 
+    # Der Riese stations spawn inside bz_init() right after Stage 3 transitions into Der Riese
+    # and before Der Riese's Stage Clear (flow[8] = sumpf->factory transition, flow[10] = factory clear).
+    factory_window_start, factory_window_end = flow[8][0], flow[10][0]
     factory_stations = Counter(
-        e.fields.get("station") for e in events if matches(e, "STATION_SPAWN", map="nazi_zombie_factory")
+        e.fields.get("station")
+        for e in timeline[factory_window_start + 1 : factory_window_end]
+        if isinstance(e, bz.BzEvent) and matches(e, "STATION_SPAWN", map="nazi_zombie_factory")
     )
     if factory_stations != Counter(("perks", "class", "arsenal")):
         errors.append("Expected exactly one STATION_SPAWN each for Der Riese perks, class, and arsenal")
 
     summary_position = flow[len(expected_flow) - 1][0]
     if not any(
-        matches(e, "GAUNTLET_BZ_WIPED", map=nacht, perm_empty="1", perks_empty="1", weapons_empty="1")
+        matches(
+            e,
+            "GAUNTLET_BZ_WIPED",
+            map=nacht,
+            bz_cleanup="1",
+            perm_empty="1",
+            perks_empty="1",
+            weapons_empty="1",
+        )
         for e in timeline[summary_position + 1:]
     ):
-        errors.append(f"Missing GAUNTLET_BZ_WIPED on {nacht} after RUN_SUMMARY with all three dvars empty")
+        errors.append(
+            f"Missing GAUNTLET_BZ_WIPED on {nacht} after RUN_SUMMARY with bz_cleanup=1 and all three dvars empty"
+        )
     return events, errors
 
 
@@ -352,9 +370,16 @@ def analyze_visual_tour_result(
             group = [content_hashes.get(phase) for phase in phases]
             if all(group) and len(set(group)) == 1:
                 errors.append(f"Visual tour appears frozen in the {wing} wing of Verruckt")
-        for north_phase, south_phase in zip(north, south):
-            if north_phase in content_hashes and content_hashes[north_phase] == content_hashes.get(south_phase):
-                errors.append(f"Visual tour appears frozen: {north_phase} and {south_phase} match")
+        asylum_by_hash: dict[str, list[str]] = {}
+        for phase in expected:
+            digest = content_hashes.get(phase)
+            if digest:
+                asylum_by_hash.setdefault(digest, []).append(phase)
+        for duplicate_phases in asylum_by_hash.values():
+            if len(duplicate_phases) > 1:
+                errors.append(
+                    f"Visual tour appears frozen: duplicate Verruckt station frames ({', '.join(duplicate_phases)})"
+                )
     elif slug == "factory":
         for weapon in WEAPON_SLUGS:
             group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]

@@ -532,10 +532,17 @@ def inject_map_hooks(
             f'{indent}if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_coop_selftest" ) == 1 ) '
             f"{{ level.bz_test_coop_spawn_dog = maps\\{rewire_dogs_module}::special_dog_spawn; }}{newline}"
         )
+    p2_powerup_hook = ""
+    if map_name == "nazi_zombie_factory" and rewire_powerups_module:
+        p2_powerup_hook = (
+            f'{indent}if ( maps\\_bz_hooks::bz_enabled() && GetDvarInt( "bz_test_p2_selftest" ) == 1 ) '
+            f"{{ level.bz_test_full_ammo_powerup = maps\\{rewire_powerups_module}::full_ammo_powerup; }}{newline}"
+        )
     replacement = (
         f"{indent}{PRE_HOOK_CALL}{newline}"
         f"{indent}{BZ_PRE_HOOK_CALL}{newline}"
         f"{coop_dog_hook}"
+        f"{p2_powerup_hook}"
         f"{rewired_line}{newline}"
         f"{indent}{POST_HOOK_CALL}{newline}"
         f"{indent}{BZ_POST_HOOK_CALL}{line_ending}"
@@ -1012,6 +1019,86 @@ def inject_zombiemode_dogs_hooks(
     text = _rewire_stock_module_refs(
         text,
         rewire_weapons_module=rewire_weapons_module,
+        rewire_powerups_module=rewire_powerups_module,
+    )
+    return text.encode("latin1")
+
+
+FULL_AMMO_POWERUP_DEF_RE = re.compile(
+    r"^[ \t]*full_ammo_powerup\s*\([^)]*\)\s*\{",
+    re.MULTILINE,
+)
+
+
+def _find_matching_close_brace(text: str, open_brace_idx: int) -> int:
+    """Return index of the matching '}' for text[open_brace_idx] == '{', skipping comments/strings."""
+    depth = 0
+    i = open_brace_idx
+    n = len(text)
+    in_string = False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            if ch == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            nl = text.find("\n", i + 2)
+            i = n if nl == -1 else nl + 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            if end == -1:
+                break
+            i = end + 2
+            continue
+        if ch == '"':
+            in_string = True
+            i += 1
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def inject_zombiemode_powerups_hooks(
+    script_bytes: bytes,
+    *,
+    rewire_weapons_module: str | None = None,
+    rewire_dogs_module: str | None = None,
+    rewire_powerups_module: str | None = None,
+) -> bytes:
+    """Patch stock maps/_zombiemode_powerups.gsc so full_ammo_powerup notifies Base Zombies directly."""
+    text = script_bytes.decode("latin1")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    match = FULL_AMMO_POWERUP_DEF_RE.search(text)
+    if match is None:
+        raise ValueError("Could not locate full_ammo_powerup() in _zombiemode_powerups.gsc")
+    close_idx = _find_matching_close_brace(text, match.end() - 1)
+    if close_idx == -1:
+        raise ValueError("Could not locate closing brace of full_ammo_powerup() in _zombiemode_powerups.gsc")
+
+    hook = (
+        f"{newline}"
+        f"\tif ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"\t{{{newline}"
+        f"\t\tmaps\\_bz_hooks::bz_notify_all_players_max_ammo();{newline}"
+        f"\t}}{newline}"
+    )
+    text = text[:close_idx] + hook + text[close_idx:]
+    text = _rewire_stock_module_refs(
+        text,
+        rewire_weapons_module=rewire_weapons_module,
+        rewire_dogs_module=rewire_dogs_module,
         rewire_powerups_module=rewire_powerups_module,
     )
     return text.encode("latin1")
@@ -1929,21 +2016,23 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         )
         if dogs_stock is not None:
             dogs_mod = zombiemode_dogs_module_for_map(map_name)
-            powerups_stock = try_extract_stock_script(
-                map_name, "maps/_zombiemode_powerups.gsc", steam_game, tools_root
-            )
-            if powerups_stock is not None and b"maps\\_zombiemode_dogs::" in powerups_stock:
-                powerups_mod = zombiemode_powerups_module_for_map(map_name)
-                powerups_patched = _rewire_stock_module_refs(
-                    powerups_stock.decode("latin1"),
-                    rewire_weapons_module=weapons_mod,
-                    rewire_dogs_module=dogs_mod,
-                    rewire_powerups_module=powerups_mod,
-                ).encode("latin1")
-                powerups_dst = stage_dir / "maps" / f"{powerups_mod}.gsc"
-                powerups_dst.parent.mkdir(parents=True, exist_ok=True)
-                powerups_dst.write_bytes(powerups_patched)
 
+        powerups_stock = try_extract_stock_script(
+            map_name, "maps/_zombiemode_powerups.gsc", steam_game, tools_root
+        )
+        if powerups_stock is not None:
+            powerups_mod = zombiemode_powerups_module_for_map(map_name)
+            powerups_patched = inject_zombiemode_powerups_hooks(
+                powerups_stock,
+                rewire_weapons_module=weapons_mod,
+                rewire_dogs_module=dogs_mod,
+                rewire_powerups_module=powerups_mod,
+            )
+            powerups_dst = stage_dir / "maps" / f"{powerups_mod}.gsc"
+            powerups_dst.parent.mkdir(parents=True, exist_ok=True)
+            powerups_dst.write_bytes(powerups_patched)
+
+        if dogs_stock is not None:
             dogs_patched = inject_zombiemode_dogs_hooks(
                 dogs_stock,
                 rewire_weapons_module=weapons_mod,

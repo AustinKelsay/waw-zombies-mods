@@ -857,9 +857,24 @@ bz_run_p2_selftest()
 	bz_selftest_check( st, watcher_ok && portal_fx_ok && portal_warped && portal_excluded_z, "portal_grenade_warp_and_exclude_z" );
 
 	max_charges = maps\_bz_rules::bz_get_portal_max_charges();
-	portal_refilled = maps\_bz_special_weapons::bz_special_on_max_ammo( p );
+	if ( IsDefined( level.bz_test_full_ammo_powerup ) )
+	{
+		max_drop = Spawn( "script_origin", p.origin );
+		level thread [[ level.bz_test_full_ammo_powerup ]]( max_drop );
+		wait( 0.2 );
+		if ( IsDefined( max_drop ) )
+		{
+			max_drop Delete();
+		}
+	}
+	else
+	{
+		maps\_bz_hooks::bz_notify_all_players_max_ammo();
+		wait( 0.1 );
+	}
+	portal_refilled = maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges;
 	bz_selftest_check( st, portal_charges_before == max_charges && portal_charges_after == max_charges - 1 &&
-		portal_refilled && maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges, "portal_grenade_max_ammo_refill" );
+		portal_refilled, "portal_grenade_max_ammo_refill" );
 
 	// Apply ammo upgrades after the combat checks so their expected damage stays fixed.
 	bz_selftest_check( st, bz_test_arsenal_acid_ammo_refill( p ), "arsenal_acid_ammo_refill" );
@@ -1500,16 +1515,21 @@ bz_run_gauntlet_wipe()
 	self endon( "disconnect" );
 	wait( 0.5 );
 
-	// The wipe handler notifies end_game and waits on the Run Summary overlay.
-	// Run it separately so this test can read the cleared state before exitLevel.
+	// Mirror patched stock end_game(): run Base Zombies cleanup before Gauntlet wipe
+	// so station entities, HUDs, and open menus tear down before RUN_SUMMARY/exitLevel.
 	level.intermission = true;
+	bz_on_end_game();
 	level thread maps\_gauntlet_mode::on_end_game();
 	wait( 0.05 );
+	bz_cleanup_ok = IsDefined( level.bz_end_game_notified ) && level.bz_end_game_notified &&
+		( !IsDefined( level.bz_station_list ) || level.bz_station_list.size == 0 ) &&
+		( !IsDefined( self.bz_station_open ) || !self.bz_station_open );
 	fields = [];
 	fields[0] = bz_log_kv( "map", "nazi_zombie_prototype" );
-	fields[1] = bz_log_kv( "perm_empty", bz_bool_int( GetDvar( "gauntlet_bz_perm" ) == "" ) );
-	fields[2] = bz_log_kv( "perks_empty", bz_bool_int( GetDvar( "gauntlet_bz_perks" ) == "" ) );
-	fields[3] = bz_log_kv( "weapons_empty", bz_bool_int( GetDvar( "gauntlet_bz_weapons" ) == "" ) );
+	fields[1] = bz_log_kv( "bz_cleanup", bz_bool_int( bz_cleanup_ok ) );
+	fields[2] = bz_log_kv( "perm_empty", bz_bool_int( GetDvar( "gauntlet_bz_perm" ) == "" ) );
+	fields[3] = bz_log_kv( "perks_empty", bz_bool_int( GetDvar( "gauntlet_bz_perks" ) == "" ) );
+	fields[4] = bz_log_kv( "weapons_empty", bz_bool_int( GetDvar( "gauntlet_bz_weapons" ) == "" ) );
 	bz_log_emit( "GAUNTLET_BZ_WIPED", bz_log_join( fields ) );
 }
 

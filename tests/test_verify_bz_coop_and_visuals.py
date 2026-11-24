@@ -106,7 +106,7 @@ def make_gauntlet_log() -> str:
             ))
     lines.extend((
         "GAUNTLET_EVENT|RUN_SUMMARY|cycle=2;stage=1;map=nazi_zombie_prototype",
-        "BZ_EVENT|GAUNTLET_BZ_WIPED|map=nazi_zombie_prototype;perm_empty=1;perks_empty=1;weapons_empty=1",
+        "BZ_EVENT|GAUNTLET_BZ_WIPED|map=nazi_zombie_prototype;bz_cleanup=1;perm_empty=1;perks_empty=1;weapons_empty=1",
     ))
     return "\n".join(lines)
 
@@ -142,6 +142,7 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
             ("RUN_SUMMARY", "IGNORED", "RUN_SUMMARY"),
             ("RUN_SUMMARY|cycle=2", "RUN_SUMMARY|cycle=1", "RUN_SUMMARY"),
             ("GAUNTLET_BZ_WIPED", "IGNORED", "GAUNTLET_BZ_WIPED"),
+            ("bz_cleanup=1", "bz_cleanup=0", "GAUNTLET_BZ_WIPED"),
             ("perm_empty=1", "perm_empty=0", "GAUNTLET_BZ_WIPED"),
             ("perks_empty=1", "perks_empty=0", "GAUNTLET_BZ_WIPED"),
             ("weapons_empty=1", "weapons_empty=0", "GAUNTLET_BZ_WIPED"),
@@ -167,6 +168,19 @@ class TestEnhancedGauntletAnalyzer(unittest.TestCase):
                 moved = GAUNTLET_LOG.replace(line + "\n", "") + "\n" + line
                 _, errors = verifier.analyze_enhanced_gauntlet_log(moved)
                 self.assertTrue(any(event_type in error for error in errors), errors)
+
+    def test_rejects_later_bad_save_before_clear_and_out_of_window_factory_stations(self) -> None:
+        lines = GAUNTLET_LOG.splitlines()
+        idx = next(i for i, line in enumerate(lines) if "GAUNTLET_BZ_SAVED" in line and "asylum" in line)
+        later_bad = list(lines)
+        later_bad.insert(idx + 1, lines[idx].replace("perks=su,mk|-|-", "perks=mk|-|-"))
+        _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(later_bad))
+        self.assertTrue(any("GAUNTLET_BZ_SAVED" in err and "asylum" in err for err in errors), errors)
+
+        stations = [line for line in lines if "STATION_SPAWN" in line]
+        after_wipe = [line for line in lines if line not in stations] + stations
+        _, errors = verifier.analyze_enhanced_gauntlet_log("\n".join(after_wipe))
+        self.assertTrue(any("STATION_SPAWN" in err for err in errors), errors)
 
     def test_restore_telemetry_reports_applied_state_when_destination_gates_disabled(self) -> None:
         dvars = FakeDvarStore()
@@ -249,6 +263,7 @@ class TestVisualTourAnalyzer(unittest.TestCase):
             (ASYLUM_VISUAL_PHASES[:4], "north wing"),
             (ASYLUM_VISUAL_PHASES[4:], "south wing"),
             (("asylum_class_prompt", "asylum_south_class_prompt"), "asylum_south_class_prompt"),
+            (("asylum_perks_prompt", "asylum_south_pap_prompt"), "asylum_south_pap_prompt"),
         ):
             with self.subTest(frozen_phases=frozen_phases):
                 log, frames = self.make_tour("asylum", ASYLUM_VISUAL_PHASES, frozen_phases)
