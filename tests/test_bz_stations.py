@@ -140,8 +140,8 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 self.assertEqual(tuple(by_id["arsenal"].get_field("angles")[i] for i in range(3)), (0, 225, 0))
                 self.assertNotIn("pap", by_id)
             elif map_name == "nazi_zombie_sumpf":
-                # Shi No Numa arsenal moved onto clear east upstairs floor off stairwell & railings
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (10440, 460, -492))
+                # Shi No Numa arsenal placed along open north upstairs floor line between perks and class
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (10150, 610, -492))
                 self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (10020, 610, -492))
                 self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10280, 610, -492))
                 self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10280, 410, -492))

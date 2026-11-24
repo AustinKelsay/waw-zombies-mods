@@ -280,8 +280,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 10440, 460, -492 ),
-			( 0, 180, 0 ),
+			( 10150, 610, -492 ),
+			( 0, 270, 0 ),
 			false,
 			false
 		);
