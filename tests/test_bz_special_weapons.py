@@ -494,6 +494,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
             0,
         )
         self.assertEqual(base_wc_dmg, 1250)
+        self.assertEqual(gsc.played_sounds_at_pos, [])
         self.assertEqual(len(gsc.earthquakes), 0)
         self.assertEqual(len(gsc.played_fx), 0)
         self.assertEqual(z_cone.get_pos(), (90.0, 30.0, 0.0))  # NOT knocked back by base War Club
@@ -539,6 +540,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         )
         # PaP War Club: max(150*8=1200, 1500, zhp=2500) = 2500
         self.assertEqual(pap_wc_dmg, 2500)
+        self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "couch_slam", "pos": (48.0, 0.0, 0.0)}])
         self.assertEqual(len(gsc.earthquakes), 1)
         self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.35)
         self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.3)
@@ -573,6 +575,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         )
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
         self.assertTrue(p1.has_perk("specialty_altmelee"))
+        self.assertEqual(gsc.played_local_sounds, [(p1, "cha_ching")] * 3)
         bowie_dmg = gsc.call(
             BZ_HOOKS_MOD,
             "bz_actor_damage_dispatch",
@@ -1099,6 +1102,26 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
                 self.assertEqual(gsc.emitted_events, events)
                 dvars.set(disabled_gate, "1")
 
+    def test_special_weapon_audio_is_silent_in_classic_mode(self) -> None:
+        dvars, gsc, player = _setup_special_env()
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_gear:portal_grenade")
+        portal = gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", player)
+        self.assertIsNot(portal, UNDEFINED)
+        player.set_pos(*portal.get_pos())
+        gsc.sim_time_ms += 30000  # Past cooldown with one charge available.
+        gsc.played_sounds_at_pos.clear()
+        gsc.played_local_sounds.clear()
+        dvars.set("bz_enabled", "0")
+
+        self.assertIs(
+            gsc.call(BZ_SPECIAL_MOD, "bz_special_war_club_smash", player, UNDEFINED, UNDEFINED, True, 1200),
+            UNDEFINED,
+        )
+        self.assertIs(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", player), UNDEFINED)
+        self.assertEqual(gsc.call(BZ_SPECIAL_MOD, "bz_special_portal_tick", portal, player), 0)
+        self.assertEqual(gsc.played_sounds_at_pos, [])
+        self.assertEqual(gsc.played_local_sounds, [])
+
     def test_portal_binds_actionslot2_enforces_cooldown_teleports_squad_excludes_zombies_and_cleans_up(self) -> None:
         _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")
         p1.set_pos(500.0, 500.0, 0.0)
@@ -1129,6 +1152,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
 
         # Cannot activate before purchasing Portal Grenade
         self.assertIs(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1), UNDEFINED)
+        self.assertEqual(gsc.played_sounds_at_pos, [])
 
         # Buy Portal Grenade (6000 pts) -> does NOT consume primary weapon slot or change offhand
         primaries_before = set(p1.weapons)
@@ -1173,6 +1197,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
 
         # Place thrower p1, teammate p2, AND two zombies directly inside the portal radius (<= 96 units)
         portal_pos = portal.get_pos()
+        self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "spawn_powerup", "pos": portal_pos}])
         p1.set_pos(portal_pos[0] + 10.0, portal_pos[1], portal_pos[2])
         p2.set_pos(portal_pos[0] - 20.0, portal_pos[1], portal_pos[2])
 
@@ -1199,6 +1224,10 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         )
         self.assertEqual(p1.transported_calls, [1.5])
         self.assertEqual(p2.transported_calls, [1.5])
+        self.assertEqual(
+            gsc.played_local_sounds,
+            [(p1, "cha_ching"), (p1, "powerup_grabbed"), (p2, "powerup_grabbed")],
+        )
 
         # STRICT ZOMBIE EXCLUSION: neither zombie moved at all!
         self.assertEqual(z_on_portal.get_pos(), portal_pos)

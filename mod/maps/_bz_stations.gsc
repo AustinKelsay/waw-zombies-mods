@@ -252,6 +252,43 @@ bz_stations_get_map_specs( map_name )
 			false,
 			false
 		);
+		// Verruckt: south co-op starting wing, across the electric divider.
+		specs[4] = bz_make_station_spec(
+			"perks",
+			"Specialty Perk Station",
+			"Press &&1 to open Specialty Perk Station",
+			( 940, -15, 96 ),
+			( 0, 0, 0 ),
+			false,
+			false
+		);
+		specs[5] = bz_make_station_spec(
+			"class",
+			"Class Altar",
+			"Press &&1 to open Class Altar",
+			( 940, -155, 96 ),
+			( 0, 0, 0 ),
+			false,
+			false
+		);
+		specs[6] = bz_make_station_spec(
+			"arsenal",
+			"Arsenal & Squad Station",
+			"Press &&1 to open Arsenal & Squad Station",
+			( 940, -300, 96 ),
+			( 0, 0, 0 ),
+			false,
+			false
+		);
+		specs[7] = bz_make_station_spec(
+			"pap",
+			"Pack-a-Punch Station",
+			"Press &&1 to open Pack-a-Punch Station",
+			( 1090, -365, 96 ),
+			( 0, 90, 0 ),
+			false,
+			false
+		);
 		return specs;
 	}
 
@@ -409,6 +446,7 @@ bz_stations_init()
 	level.bz_stations_initialized = true;
 
 	level.bz_stations = [];
+	level.bz_station_list = [];
 	level.bz_station_entities = [];
 	level.bz_station_prompt_huds = [];
 
@@ -550,7 +588,11 @@ bz_stations_spawn_one( map_name, spec )
 	station.model = vis;
 	station.model_name = model_name;
 
-	level.bz_stations[spec.id] = station;
+	if ( !IsDefined( level.bz_stations[spec.id] ) )
+	{
+		level.bz_stations[spec.id] = station;
+	}
+	level.bz_station_list[level.bz_station_list.size] = station;
 	level.bz_station_entities[level.bz_station_entities.size] = anchor;
 	level.bz_station_entities[level.bz_station_entities.size] = trig;
 	if ( IsDefined( vis ) )
@@ -749,27 +791,50 @@ bz_stations_is_player_in_station_range( player, st )
 	return dist <= 64.0;
 }
 
+bz_stations_get_instances()
+{
+	if ( IsDefined( level.bz_station_list ) && level.bz_station_list.size > 0 )
+	{
+		return level.bz_station_list;
+	}
+
+	// Fixture and legacy callers can populate only the primary registry.
+	stations = [];
+	if ( IsDefined( level.bz_stations ) )
+	{
+		ids = [];
+		ids[0] = "perks";
+		ids[1] = "class";
+		ids[2] = "arsenal";
+		ids[3] = "pap";
+		for ( i = 0; i < ids.size; i++ )
+		{
+			st = level.bz_stations[ids[i]];
+			if ( IsDefined( st ) )
+			{
+				stations[stations.size] = st;
+			}
+		}
+	}
+	return stations;
+}
+
 // Shared station selection for both the proximity prompt HUD and trigger interaction.
 // Uses the exact trigger_radius(origin, 64, 72) cylinder so overlapping triggers always
 // open the same station shown on the player's HUD.
 bz_stations_find_nearest_in_range( player )
 {
-	if ( !IsDefined( player ) || !IsDefined( player.origin ) || !IsDefined( level.bz_stations ) )
+	if ( !IsDefined( player ) || !IsDefined( player.origin ) )
 	{
 		return undefined;
 	}
 
 	best = undefined;
 	best_dist = 64.0;
-	ids = [];
-	ids[0] = "perks";
-	ids[1] = "class";
-	ids[2] = "arsenal";
-	ids[3] = "pap";
-	for ( i = 0; i < ids.size; i++ )
+	stations = bz_stations_get_instances();
+	for ( i = 0; i < stations.size; i++ )
 	{
-		sid = ids[i];
-		st = level.bz_stations[sid];
+		st = stations[i];
 		if ( !bz_stations_is_player_in_station_range( player, st ) )
 		{
 			continue;
@@ -788,13 +853,16 @@ bz_stations_find_nearest_in_range( player )
 // between HUD ticks cannot open a different overlapping station.
 bz_stations_resolve_use_target( player, fallback_id )
 {
-	if ( IsDefined( player ) && IsDefined( player.bz_station_prompt_id ) && player.bz_station_prompt_id != "" &&
-		IsDefined( level.bz_stations ) )
+	if ( IsDefined( player ) && IsDefined( player.bz_station_prompt_id ) && player.bz_station_prompt_id != "" )
 	{
-		shown = level.bz_stations[player.bz_station_prompt_id];
-		if ( bz_stations_is_player_in_station_range( player, shown ) )
+		stations = bz_stations_get_instances();
+		for ( i = 0; i < stations.size; i++ )
 		{
-			return shown.id;
+			st = stations[i];
+			if ( IsDefined( st ) && st.id == player.bz_station_prompt_id && bz_stations_is_player_in_station_range( player, st ) )
+			{
+				return st.id;
+			}
 		}
 	}
 	nearest = bz_stations_find_nearest_in_range( player );
@@ -875,6 +943,7 @@ bz_stations_cleanup()
 
 	level.bz_station_entities = [];
 	level.bz_stations = [];
+	level.bz_station_list = [];
 	level.bz_stations_initialized = false;
 
 	if ( IsDefined( level.bz_station_prompt_huds ) )
@@ -899,14 +968,9 @@ bz_stations_cleanup()
 			if ( IsDefined( p ) )
 			{
 				p.bz_station_prompt_hud = undefined;
+				p.bz_station_prompt_id = "";
 				p.bz_station_prompt_text = "";
-				if ( IsDefined( p.bz_station_open ) && p.bz_station_open )
-				{
-					p.bz_station_open = false;
-					p.bz_active_station_id = "";
-					p.bz_active_station_menu = "";
-					p closeMenu();
-				}
+				bz_stations_close_for_player( p );
 			}
 		}
 	}
@@ -1441,14 +1505,31 @@ bz_stations_on_player_downed( player )
 		return;
 	}
 	bz_stations_hide_prompt_hud( player );
-	if ( IsDefined( player.bz_station_open ) && player.bz_station_open )
-	{
-		player.bz_station_open = false;
-		player.bz_active_station_id = "";
-		player.bz_active_station_menu = "";
-		player closeMenu();
-	}
+	bz_stations_close_for_player( player );
 	bz_stations_sync_player_ui( player, "" );
+}
+
+bz_stations_play_sound( player, alias )
+{
+	if ( bz_enabled() && IsDefined( player ) && IsDefined( alias ) && alias != "" )
+	{
+		player PlayLocalSound( alias );
+	}
+}
+
+bz_stations_close_for_player( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.bz_station_open ) || !player.bz_station_open )
+	{
+		return false;
+	}
+
+	player.bz_station_open = false;
+	player.bz_active_station_id = "";
+	player.bz_active_station_menu = "";
+	player closeMenu();
+	bz_stations_play_sound( player, "lid_close" );
+	return true;
 }
 
 bz_stations_open_for_player( player, station_id )
@@ -1476,6 +1557,7 @@ bz_stations_open_for_player( player, station_id )
 	player.bz_active_station_menu = menu_name;
 	bz_stations_hide_prompt_hud( player );
 	player openMenu( menu_name );
+	bz_stations_play_sound( player, "lid_open" );
 
 	score = bz_state_get_score_safe( player );
 	fields = [];
@@ -1690,10 +1772,10 @@ bz_stations_on_menu_response( player, menu, response )
 	resp = bz_normalize_id( response );
 	if ( resp == "close" || resp == "back" )
 	{
-		player.bz_station_open = false;
-		player.bz_active_station_id = "";
-		player.bz_active_station_menu = "";
-		player closeMenu();
+		if ( !bz_stations_close_for_player( player ) )
+		{
+			return true;
+		}
 
 		cfields = [];
 		cfields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
@@ -1705,6 +1787,7 @@ bz_stations_on_menu_response( player, menu, response )
 	parts = StrTok( resp, ":" );
 	if ( !IsDefined( parts ) || parts.size != 2 )
 	{
+		bz_stations_play_sound( player, "no_cha_ching" );
 		bz_stations_sync_player_ui( player, "Invalid station request." );
 		return true;
 	}
@@ -1753,6 +1836,7 @@ bz_stations_on_menu_response( player, menu, response )
 	{
 		score_now = bz_state_get_score_safe( player );
 		bz_stations_emit_purchase_event( player, norm_menu, "unknown", item_id, "invalid_action", 0, score_now );
+		bz_stations_play_sound( player, "no_cha_ching" );
 		bz_stations_sync_player_ui( player, "Unknown station command." );
 		return true;
 	}
@@ -1761,6 +1845,7 @@ bz_stations_on_menu_response( player, menu, response )
 	{
 		score_now = bz_state_get_score_safe( player );
 		bz_stations_emit_purchase_event( player, norm_menu, category, item_id, "gate_disabled", 0, score_now );
+		bz_stations_play_sound( player, "no_cha_ching" );
 		bz_stations_sync_player_ui( player, "Feature disabled in this match." );
 		return true;
 	}
@@ -1848,13 +1933,18 @@ bz_stations_on_menu_response( player, menu, response )
 	feedback = bz_stations_format_feedback( category, item_id, res );
 	bz_stations_emit_purchase_event( player, norm_menu, category, item_id, res.status, res.cost, res.remaining_score );
 
-	if ( res.ok )
+	if ( res.status == "ok" )
 	{
+		bz_stations_play_sound( player, "cha_ching" );
 		if ( IsDefined( res.cost ) && Int( res.cost ) > 0 && IsDefined( player.old_score ) )
 		{
 			player maps\_zombiemode_score::set_player_score_hud();
 		}
 		maps\_bz_hooks::bz_on_item_purchased( player, category, item_id, res, weapon_name );
+	}
+	else
+	{
+		bz_stations_play_sound( player, "no_cha_ching" );
 	}
 
 	bz_stations_sync_player_ui( player, feedback );

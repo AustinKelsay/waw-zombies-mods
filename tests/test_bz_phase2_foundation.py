@@ -1162,6 +1162,8 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
                 self.assertEqual(self.p1.weapon_stocks[weapon], 160)
                 self.assertEqual(self.p1.client_dvars[pill], "FULL")
                 self.assertEqual(self.p1.client_dvars["ui_bz_feedback"], f"Refilled {display_name} ammo (-2500)")
+                self.assertEqual(self.gsc.played_local_sounds, [(self.p1, "cha_ching")] * 2)
+                self.gsc.played_local_sounds.clear()
                 self.assertIn(
                     f"BZ_EVENT|STATION_PURCHASE|player=PlayerOne;menu={menu};category=element_ammo;"
                     f"item={item_id};status=ok;cost=2500;score={score - 2500}",
@@ -1193,6 +1195,10 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
         self.assertEqual(self.p1.client_dvars["ui_bz_elem_acid_sprayer"], "AMMO 2500")
         self.assertEqual(self.p1.client_dvars["ui_bz_feedback"], "Need 2500 pts for Acid Sprayer Ammo")
         self.assertIn(event + ";status=insufficient_points;cost=2500;score=2499", self.gsc.emitted_events)
+        self.assertEqual(
+            self.gsc.played_local_sounds,
+            [(self.p1, "cha_ching"), (self.p1, "no_cha_ching"), (self.p1, "no_cha_ching")],
+        )
 
     def test_elemental_ammo_refills_scale_reserve_and_update_existing_pap_cache(self) -> None:
         self.dvars.set("bz_enabled", "1")

@@ -374,7 +374,7 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 
 bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, smash_damage )
 {
-	if ( !IsDefined( attacker ) || !IsDefined( attacker.origin ) )
+	if ( !bz_elements_enabled() || !IsDefined( attacker ) || !IsDefined( attacker.origin ) )
 	{
 		return undefined;
 	}
@@ -480,6 +480,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	if ( has_pap_wc )
 	{
 		bz_special_play_stock_fx( "war_club", smash_pos );
+		PlaySoundAtPosition( "couch_slam", smash_pos );
 		Earthquake( 0.35, 0.3, p_org, 128 );
 	}
 
@@ -1340,6 +1341,7 @@ bz_special_try_activate_portal( player )
 		}
 	}
 	portal.bz_fx_ent = fx_ent;
+	PlaySoundAtPosition( "spawn_powerup", land_pos );
 
 	charges_left = maps\_bz_state::bz_state_get_portal_charges( player );
 	fields = [];
@@ -1360,7 +1362,7 @@ bz_special_try_activate_portal( player )
 // Synchronous/testable portal tick: strictly iterates GetPlayers() so zombies are NEVER teleported.
 bz_special_portal_tick( portal, owner )
 {
-	if ( !IsDefined( portal ) || !IsDefined( portal.bz_active ) || !portal.bz_active )
+	if ( !bz_elements_enabled() || !IsDefined( portal ) || !IsDefined( portal.bz_active ) || !portal.bz_active )
 	{
 		return 0;
 	}
@@ -1406,6 +1408,7 @@ bz_special_portal_tick( portal, owner )
 				p SetPlayerAngles( dest.angles );
 			}
 			p SetTransported( 1.5 );
+			p PlayLocalSound( "powerup_grabbed" );
 			p.bz_portal_warp_lock_until = now + 1500;
 			portal.bz_teleport_count = portal.bz_teleport_count + 1;
 			warped++;

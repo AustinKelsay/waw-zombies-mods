@@ -49,6 +49,20 @@ STOCK_MAPS = (
 )
 EXPECTED_STATION_IDS = ("perks", "class", "arsenal", "pap")
 EXPECTED_FACTORY_STATION_IDS = ("perks", "class", "arsenal")
+EXPECTED_STATION_IDS_BY_MAP = {
+    "nazi_zombie_factory": EXPECTED_FACTORY_STATION_IDS,
+    "nazi_zombie_asylum": EXPECTED_STATION_IDS * 2,
+}
+VERRUCKT_STATION_PLACEMENTS = (
+    ((920, 370, 96), (0, 0, 0)),
+    ((920, 180, 96), (0, 0, 0)),
+    ((985, 295, 96), (0, 0, 0)),
+    ((1060, 180, 96), (0, 180, 0)),
+    ((940, -15, 96), (0, 0, 0)),
+    ((940, -155, 96), (0, 0, 0)),
+    ((940, -300, 96), (0, 0, 0)),
+    ((1090, -365, 96), (0, 90, 0)),
+)
 EXPECTED_MENUS = (
     "bz_station_perks",
     "bz_station_class",
@@ -107,9 +121,7 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
     def test_all_four_stock_maps_have_distinct_non_overlapping_ascii_station_specs(self) -> None:
         for map_name in STOCK_MAPS:
             specs = self.gsc.call(BZ_STATIONS_MOD, "bz_stations_get_map_specs", map_name)
-            expected_ids = (
-                EXPECTED_FACTORY_STATION_IDS if map_name == "nazi_zombie_factory" else EXPECTED_STATION_IDS
-            )
+            expected_ids = EXPECTED_STATION_IDS_BY_MAP.get(map_name, EXPECTED_STATION_IDS)
             self.assertEqual(
                 specs.size,
                 len(expected_ids),
@@ -225,6 +237,12 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.player, "bz_station_perks", "buy_perk:staminup")
         )
         self.assertEqual(self.gsc.emitted_events, [])
+        self.assertFalse(self.gsc.call(BZ_STATIONS_MOD, "bz_stations_open_for_player", self.player, "perks"))
+        self.assertFalse(
+            self.gsc.call(BZ_STATIONS_MOD, "bz_stations_on_menu_response", self.player, "bz_station_perks", "close")
+        )
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_play_sound", self.player, "lid_open")
+        self.assertEqual(self.gsc.played_local_sounds, [])
 
     def test_auto_registration_precaches_menus_spawns_expected_stations_and_cleans_up_on_end_game(self) -> None:
         self._enable_all_phase1()
@@ -259,7 +277,7 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(all(e.deleted for e in self.gsc.spawned_entities))
 
-        # Non-Factory maps (Nacht, Verruckt, Shi No Numa) still spawn all 4 stations including standalone pap
+        # Non-Factory maps still spawn standalone PaP in each starting area.
         for non_factory in ("nazi_zombie_prototype", "nazi_zombie_asylum", "nazi_zombie_sumpf"):
             dvars2 = FakeDvarStore()
             gsc2 = BzGscRuntime(MOD_ROOT, dvars2)
@@ -274,7 +292,36 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             stations2 = gsc2.level.get_field("bz_stations")
             for sid in EXPECTED_STATION_IDS:
                 self.assertIsNot(stations2[sid], UNDEFINED, f"Station {sid} did not spawn on {non_factory}")
-            self.assertEqual(len(gsc2.spawned_entities), 12, f"Expected 12 entities on {non_factory}")
+            expected_ids = EXPECTED_STATION_IDS_BY_MAP.get(non_factory, EXPECTED_STATION_IDS)
+            self.assertEqual(len(gsc2.spawned_entities), len(expected_ids) * 3, non_factory)
+
+    def test_verruckt_spawns_eight_stations_preserves_north_primaries_and_cleans_up(self) -> None:
+        self._enable_all_phase1()
+        self.gsc.level.set_field("script", "nazi_zombie_asylum")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_init")
+        primaries = self.gsc.level.get_field("bz_stations")
+        instances = self.gsc.level.get_field("bz_station_list").to_list()
+        self.assertEqual(tuple(st.get_field("id") for st in instances), EXPECTED_STATION_IDS * 2)
+        for i, (station, (origin, angles)) in enumerate(zip(instances, VERRUCKT_STATION_PLACEMENTS)):
+            with self.subTest(station=i):
+                self.assertEqual(tuple(station.get_field("origin").to_list()), origin)
+                self.assertEqual(tuple(station.get_field("angles").to_list()), angles)
+                self.assertIs(primaries[station.get_field("id")], instances[i % 4])
+
+        south_origins = [station.get_field("origin") for station in instances[4:]]
+        for i, origin in enumerate(south_origins):
+            for other in south_origins[i + 1:]:
+                self.assertGreaterEqual(_vec_dist(origin, other), 128.0)
+
+        tracked = self.gsc.level.get_field("bz_station_entities").to_list()
+        expected = [st.get_field(part) for st in instances for part in ("anchor", "trigger", "model")]
+        self.assertEqual(tracked, expected)
+        self.assertEqual(len({id(ent) for ent in tracked}), 24)
+        self.assertTrue(all(not ent.deleted for ent in tracked))
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
+        self.assertTrue(all(ent.deleted for ent in tracked))
+        for field in ("bz_station_entities", "bz_stations", "bz_station_list"):
+            self.assertEqual(self.gsc.level.get_field(field).size, 0)
 
     def test_spawned_station_models_are_non_solid_with_zero_contents_across_all_maps(self) -> None:
         for map_name in STOCK_MAPS:
@@ -290,7 +337,7 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             gsc.call(BZ_HOOKS_MOD, "bz_init")
 
             models = [e for e in gsc.spawned_entities if e.classname == "script_model"]
-            expected_count = 3 if map_name == "nazi_zombie_factory" else 4
+            expected_count = len(EXPECTED_STATION_IDS_BY_MAP.get(map_name, EXPECTED_STATION_IDS))
             self.assertEqual(
                 len(models),
                 expected_count,
@@ -411,6 +458,51 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
         self.assertTrue(triggers)
         self.assertTrue(all(trig.get_field("radius") == 64 for trig in triggers))
+
+    def test_verruckt_prompts_and_use_resolve_each_wing(self) -> None:
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_cleanup")
+        self.gsc.level.set_field("script", "nazi_zombie_asylum")
+        self.gsc.call(BZ_STATIONS_MOD, "bz_stations_init")
+        instances = self.gsc.level.get_field("bz_station_list")
+        for i, (origin, _) in enumerate(VERRUCKT_STATION_PLACEMENTS):
+            sid = EXPECTED_STATION_IDS[i % 4]
+            with self.subTest(station=sid, origin=origin):
+                self.update_at(origin)
+                hud = self.player.get_field("bz_station_prompt_hud")
+                self.assertEqual(hud.get_field("alpha"), 1)
+                self.assertTrue(hud.get_field("text").startswith(f"[{sid.upper()}]"))
+                self.assertEqual(self.player.get_field("bz_station_prompt_id"), sid)
+                self.assertIs(
+                    self.gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", self.player), instances[i]
+                )
+                self.assertEqual(
+                    self.gsc.call(BZ_STATIONS_MOD, "bz_stations_resolve_use_target", self.player, "fallback"), sid
+                )
+
+        # Simulate overlapping instances to distinguish the south HUD preference from the nearest fallback.
+        self.update_at((940, -15, 96))
+        instances[5].set_field("origin", GscArray([940, -65, 96]))
+        self.player.set_field("origin", GscArray([940, -55, 96]))
+        self.assertIs(
+            self.gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", self.player), instances[5]
+        )
+        self.assertEqual(
+            self.gsc.call(BZ_STATIONS_MOD, "bz_stations_resolve_use_target", self.player, "class"), "perks"
+        )
+
+    def test_station_selection_falls_back_to_primary_registry(self) -> None:
+        perks = self.gsc.level.get_field("bz_stations")["perks"]
+        for station_list in (UNDEFINED, GscArray()):
+            with self.subTest(station_list=station_list):
+                self.gsc.level.set_field("bz_station_list", station_list)
+                self.update_at((-140, 460, 24))
+                self.assertEqual(self.player.get_field("bz_station_prompt_id"), "perks")
+                self.assertIs(
+                    self.gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", self.player), perks
+                )
+                self.assertEqual(
+                    self.gsc.call(BZ_STATIONS_MOD, "bz_stations_resolve_use_target", self.player, "class"), "perks"
+                )
 
     def test_overlapping_verruckt_triggers_open_same_nearest_station_as_hud(self) -> None:
         class _StopTriggerLoop(Exception):
@@ -594,6 +686,11 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         self.assertEqual(self.p1.closed_menus, 1)
         self.assertEqual(self.p2.closed_menus, 0)
         self.assertFalse(self.p1.get_field("bz_station_open"))
+        self.assertTrue(
+            self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "close")
+        )
+        self.assertEqual(self.p1.closed_menus, 1)
+        self.assertEqual(self.gsc.played_local_sounds, [(self.p1, "lid_open"), (self.p1, "lid_close")])
 
     def test_valid_purchases_deduct_score_dispatch_item_purchased_and_sync_ui(self) -> None:
         purchased_log: list[tuple[str, str, str, int, str]] = []
@@ -702,6 +799,7 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
                 ("PlayerOne", "pap", "pap_cluster", 5000, "thompson"),
             ],
         )
+        self.assertEqual(self.gsc.played_local_sounds, [(self.p1, "cha_ching")] * 10)
         self.assertIn(
             "BZ_EVENT|STATION_PURCHASE|player=PlayerOne;menu=bz_station_perks;category=perk;item=staminup;status=ok;cost=2000;score=48000",
             self.gsc.emitted_events,
@@ -749,6 +847,12 @@ class TestBzStationUiSyncAndPurchases(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_perk:ap")
         self.assertEqual(self.p1.get_field("score"), 47000)
         self.assertEqual(hook_calls, ["ap"])
+        self.assertEqual(
+            self.gsc.played_local_sounds,
+            [(self.p2, "no_cha_ching")]
+            + [(self.p1, "no_cha_ching")] * 5
+            + [(self.p1, "cha_ching"), (self.p1, "no_cha_ching")],
+        )
 
 
 SCRIPT_MENU_RESP_RE = re.compile(r'scriptMenuResponse\s+"([^"]+)"\s*;')
