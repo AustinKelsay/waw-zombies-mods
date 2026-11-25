@@ -487,13 +487,52 @@ class TestCouncilRound5Fixes(unittest.TestCase):
             "PlayerLastStand()\n{\n\tif( player_all_players_in_laststand() )\n\t{\n\t\treturn;\n\t}\n}\n"
             "revive_trigger_think()\n{\n\tself endon ( \"disconnect\" );\n\tself endon ( \"zombified\" );\n"
             "\twhile ( 1 )\n\t{\n\t\twait ( 0.1 );\n\t\tself.revivetrigger setHintString( \"\" );\n\t}\n}\n"
-            "revive_do_revive( playerBeingRevived, reviverGun )\n{\n\treviveTime = 3;\n}\n"
+            "revive_do_revive( playerBeingRevived, reviverGun )\n{\n\treviveTime = 3;\n\trevived = false;\n"
+            "\tif ( isdefined( self.reviveProgressBar ) )\n\t{\n\t\tself.reviveProgressBar destroyElem();\n\t}\n"
+            "\tif ( isdefined( self.reviveTextHud ) )\n\t{\n\t\tself.reviveTextHud destroy();\n\t}\n"
+            "\tif ( !revived )\n\t{\n\t\tplayerBeingRevived stoprevive( self );\n\t}\n"
+            "\tplayerBeingRevived.revivetrigger setHintString( \"revive\" );\n"
+            "\tplayerBeingRevived.revivetrigger.beingRevived = 0;\n"
+            "\treturn revived;\n}\n"
             "revive_success( reviver )\n{\n\tself reviveplayer();\n\tself laststand_giveback_player_weapons();\n}\n"
         )
         patched = build_mod.inject_laststand_hooks(synthetic_laststand.encode("latin1")).decode("latin1")
         self.assertNotIn("stop_revive_trigger", patched)
         self.assertIn("if ( !IsDefined( self.revivetrigger ) ) { return; }", patched)
+        self.assertIn("if ( !IsDefined( playerBeingRevived ) || !IsDefined( playerBeingRevived.revivetrigger ) )", patched)
         self.assertIn("maps\\_bz_perks::bz_perks_on_player_revived( self, reviver );", patched)
+
+        # S1 runtime proof: execute patched revive_do_revive() after Stage Clear deletes
+        # playerBeingRevived.revivetrigger -> destroys HUD and returns false without touching
+        # stoprevive or the deleted trigger so caller runs revive_give_back_weapons().
+        s1_calls: list[str] = []
+
+        class ActiveReviverRuntime(GauntletBzRuntime):
+            def _exec_method(self, receiver, method, args, line):
+                if method in ("destroyelem", "destroy", "stoprevive", "sethintstring"):
+                    s1_calls.append(method)
+                    if method == "sethintstring" and receiver is UNDEFINED:
+                        raise RuntimeError("dereferenced deleted revivetrigger!")
+                    return UNDEFINED
+                return super()._exec_method(receiver, method, args, line)
+
+        s1_rt = ActiveReviverRuntime(MOD_ROOT, _make_enhanced_dvars())
+        s1_rt._modules["maps/_laststand"] = BzGscParser(
+            tokenize(patched, filename="maps/_laststand"), filename="maps/_laststand"
+        ).parse_module()
+        s1_rt.call(BZ_HOOKS_MOD, "bz_init")
+        reviver = _make_player(s1_rt, "1", "Reviver")
+        downed = _make_player(s1_rt, "2", "Downed")
+        reviver.set_field("reviveprogressbar", FakeEntity("bar", ent_num=70, is_player=False))
+        reviver.set_field("revivetexthud", FakeEntity("txt", ent_num=71, is_player=False))
+        downed.set_field("revivetrigger", UNDEFINED)  # deleted by Stage Clear mid-revive
+        s1_calls.clear()
+        res = s1_rt.call_on(reviver, "maps/_laststand", "revive_do_revive", downed, "thompson")
+        self.assertFalse(res)
+        self.assertIn("destroyelem", s1_calls)
+        self.assertIn("destroy", s1_calls)
+        self.assertNotIn("stoprevive", s1_calls)
+        self.assertNotIn("sethintstring", s1_calls)
 
         # Downed player at Stage Clear gets weapons restored via laststand_giveback_player_weapons before snapshot.
         class GivebackRuntime(GauntletBzRuntime):

@@ -1057,6 +1057,13 @@ protect_players_for_stage_clear()
 			{
 				player maps\_laststand::laststand_giveback_player_weapons();
 			}
+			// Run the idempotent BZ revive strip synchronously before snapshot_all_players_points()
+			// so excess Mule Kick weapons cannot survive into the next Stage ledger if WaW defers
+			// the notified watcher thread until the next frame.
+			if ( maps\_bz_hooks::bz_enabled() )
+			{
+				maps\_bz_perks::bz_perks_on_player_revived( player, player );
+			}
 			player notify( "player_revived" );
 			player.ignoreme = false;
 		}

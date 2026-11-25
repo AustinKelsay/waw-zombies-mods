@@ -1319,38 +1319,78 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
     text = text[: all_match.start()] + solo_hook + text[all_match.end() :]
 
     # 4. Exit revive_trigger_think() cleanly once Gauntlet Stage Clear deletes revivetrigger
-    #    without aborting an active reviver mid-revive (so revive_do_revive exits via !is_reviving
+    #    without aborting an active reviver mid-revive (so revive_do_revive unwinds cleanly
     #    and revive_give_back_weapons() still removes the syrette and restores weapon cycling).
+    rt_def_re = re.compile(r"^revive_trigger_think[ \t]*\([ \t]*\)[ \t]*\r?\n\{", re.MULTILINE | re.IGNORECASE)
+    rt_match = rt_def_re.search(text)
+    if rt_match is None:
+        raise ValueError("Could not locate revive_trigger_think() in _laststand.gsc")
+    rt_next = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=rt_match.end())
+    rt_end = rt_next.start() if rt_next is not None else len(text)
+    rt_body = text[rt_match.start() : rt_end]
     hint_clear_re = re.compile(
         r'^(?P<indent>[ \t]*)self\.revivetrigger[ \t]+setHintString[ \t]*\([ \t]*""[ \t]*\);(?P<trailing>[ \t]*)\r?$',
         re.MULTILINE | re.IGNORECASE,
     )
-    h_match = hint_clear_re.search(text)
-    if h_match is not None:
-        h_indent = h_match.group("indent")
-        h_orig = h_match.group(0).rstrip("\r")
-        h_ending = "\r" if h_match.group(0).endswith("\r") else ""
-        h_hook = f"{h_indent}if ( !IsDefined( self.revivetrigger ) ) {{ return; }}{newline}{h_orig}{h_ending}"
-        text = text[: h_match.start()] + h_hook + text[h_match.end() :]
+    h_match = hint_clear_re.search(rt_body)
+    if h_match is None:
+        raise ValueError("Could not locate self.revivetrigger setHintString(\"\") in revive_trigger_think()")
+    h_indent = h_match.group("indent")
+    h_orig = h_match.group(0).rstrip("\r")
+    h_ending = "\r" if h_match.group(0).endswith("\r") else ""
+    h_hook = f"{h_indent}if ( !IsDefined( self.revivetrigger ) ) {{ return; }}{newline}{h_orig}{h_ending}"
+    rt_body = rt_body[: h_match.start()] + h_hook + rt_body[h_match.end() :]
+    text = text[: rt_match.start()] + rt_body + text[rt_end:]
 
-    # 5. Strip excess Mule Kick weapons AFTER stock revive_success() gives back saved weapons.
+    # 5. Guard revive_do_revive() post-loop cleanup so deleting revivetrigger during an active
+    #    revive (e.g. Gauntlet Stage Clear) never dereferences a deleted trigger before returning
+    #    false to the caller's revive_give_back_weapons() cleanup.
+    do_rev_re = re.compile(r"^revive_do_revive[ \t]*\([^)]*\)[ \t]*\r?\n\{", re.MULTILINE | re.IGNORECASE)
+    do_match = do_rev_re.search(text)
+    if do_match is None:
+        raise ValueError("Could not locate revive_do_revive() in _laststand.gsc")
+    do_next = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=do_match.end())
+    do_end = do_next.start() if do_next is not None else len(text)
+    do_body = text[do_match.start() : do_end]
+    not_revived_re = re.compile(
+        r"^(?P<indent>[ \t]*)if[ \t]*\([ \t]*!revived[ \t]*\)(?P<trailing>[ \t]*)\r?$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    nr_match = not_revived_re.search(do_body)
+    if nr_match is None:
+        raise ValueError("Could not locate if ( !revived ) cleanup in revive_do_revive()")
+    nr_indent = nr_match.group("indent")
+    nr_orig = nr_match.group(0).rstrip("\r")
+    nr_ending = "\r" if nr_match.group(0).endswith("\r") else ""
+    nr_hook = (
+        f"{nr_indent}if ( !IsDefined( playerBeingRevived ) || !IsDefined( playerBeingRevived.revivetrigger ) ){newline}"
+        f"{nr_indent}{{{newline}"
+        f"{nr_indent}\treturn false;{newline}"
+        f"{nr_indent}}}{newline}"
+        f"{nr_orig}{nr_ending}"
+    )
+    do_body = do_body[: nr_match.start()] + nr_hook + do_body[nr_match.end() :]
+    text = text[: do_match.start()] + do_body + text[do_end:]
+
+    # 6. Strip excess Mule Kick weapons AFTER stock revive_success() gives back saved weapons.
     giveback_re = re.compile(
         r"^(?P<indent>[ \t]*)self[ \t]+laststand_giveback_player_weapons\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
         re.MULTILINE | re.IGNORECASE,
     )
     gb_match = giveback_re.search(text)
-    if gb_match is not None:
-        gb_indent = gb_match.group("indent")
-        gb_orig = gb_match.group(0).rstrip("\r")
-        gb_ending = "\r" if gb_match.group(0).endswith("\r") else ""
-        gb_hook = (
-            f"{gb_orig}{newline}"
-            f"{gb_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
-            f"{gb_indent}{{{newline}"
-            f"{gb_indent}\tmaps\\_bz_perks::bz_perks_on_player_revived( self, reviver );{newline}"
-            f"{gb_indent}}}{gb_ending}"
-        )
-        text = text[: gb_match.start()] + gb_hook + text[gb_match.end() :]
+    if gb_match is None:
+        raise ValueError("Could not locate self laststand_giveback_player_weapons(); in _laststand.gsc")
+    gb_indent = gb_match.group("indent")
+    gb_orig = gb_match.group(0).rstrip("\r")
+    gb_ending = "\r" if gb_match.group(0).endswith("\r") else ""
+    gb_hook = (
+        f"{gb_orig}{newline}"
+        f"{gb_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+        f"{gb_indent}{{{newline}"
+        f"{gb_indent}\tmaps\\_bz_perks::bz_perks_on_player_revived( self, reviver );{newline}"
+        f"{gb_indent}}}{gb_ending}"
+    )
+    text = text[: gb_match.start()] + gb_hook + text[gb_match.end() :]
 
     return text.encode("latin1")
 
@@ -2545,11 +2585,14 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
                     target_path.unlink(missing_ok=True)
             except OSError as exc:
                 restore_errors.append(f"{target_path}: {exc}")
-        if restore_errors and primary_exc is None:
-            raise RuntimeError(
+        if restore_errors:
+            err_msg = (
                 "Failed to restore raw UI overlay / manifests after linking: "
                 + "; ".join(restore_errors)
             )
+            if primary_exc is None:
+                raise RuntimeError(err_msg)
+            print(f"WARNING: {err_msg}", file=sys.stderr)
 
 
 def stage_dlc_iwd_weapon_files(
