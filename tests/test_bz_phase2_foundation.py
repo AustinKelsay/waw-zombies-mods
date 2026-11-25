@@ -585,9 +585,9 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             self.assertEqual(blade["adsFire"], "0")
             self.assertEqual(blade["fireSound"], "foley_throw")
             self.assertEqual(blade["fireSoundPlayer"], "foley_throw")
-            self.assertEqual(blade["idleAnim"], "viewmodel_zombie_perksacola_idle")
-            self.assertEqual(blade["fireAnim"], "viewmodel_bowie_slash")
-            self.assertEqual(blade["lastShotAnim"], "viewmodel_bowie_slash")
+            self.assertEqual(blade["idleAnim"], "viewmodel_germangrenade_idle")
+            self.assertEqual(blade["fireAnim"], "viewmodel_germangrenade_throw")
+            self.assertEqual(blade["lastShotAnim"], "viewmodel_germangrenade_throw")
             self.assertEqual(blade["cancelAutoHolsterWhenEmpty"], "1")
             self.assertEqual(blade["raiseAnim"], "viewmodel_zombie_bowie")
             self.assertEqual(blade["reloadAnim"], "viewmodel_zombie_bowie")
@@ -717,6 +717,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 "viewmodel_fg42_reload",
                 "viewmodel_fg42_ads_up",
                 "viewmodel_fg42_ads_fire",
+                "viewmodel_germangrenade_idle",
+                "viewmodel_germangrenade_throw",
                 "viewmodel_zombie_perksacola_idle",
                 "viewmodel_zombie_perksacola_lower",
                 "viewmodel_zombie_bowie",
@@ -751,7 +753,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     (stage_dir / "weapons" / "sp" / "bz_blade_boomerang").read_text(encoding="latin1")
                 )
             )
-            self.assertEqual(blade["fireAnim"], "viewmodel_bowie_slash")
+            self.assertEqual(blade["idleAnim"], "viewmodel_germangrenade_idle")
+            self.assertEqual(blade["fireAnim"], "viewmodel_germangrenade_throw")
             self.assertEqual(blade["reloadAnim"], "viewmodel_zombie_bowie")
             # Missing optional adsUpAnim cleared to ""
             self.assertEqual(blade["adsUpAnim"], "")
