@@ -535,10 +535,12 @@ monitor_player_score_cache( cache )
 			if ( IsDefined( self.gauntlet_points_applied ) && self.gauntlet_points_applied )
 			{
 				cache.score = get_player_score_safe( self );
+				cache.points_sampled = true;
 			}
 			if ( IsDefined( self.gauntlet_perks_applied ) && self.gauntlet_perks_applied )
 			{
 				cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
+				cache.perks_sampled = true;
 			}
 			if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
 			{
@@ -566,8 +568,20 @@ watch_player_disconnect()
 	cache = SpawnStruct();
 	cache.guid = get_player_guid( self );
 	cache.name = get_player_name( self );
-	cache.score = get_player_score_safe( self );
-	cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
+	cache.score = 0;
+	cache.points_sampled = false;
+	if ( IsDefined( self.gauntlet_points_applied ) && self.gauntlet_points_applied )
+	{
+		cache.score = get_player_score_safe( self );
+		cache.points_sampled = true;
+	}
+	cache.perks = [];
+	cache.perks_sampled = false;
+	if ( IsDefined( self.gauntlet_perks_applied ) && self.gauntlet_perks_applied )
+	{
+		cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
+		cache.perks_sampled = true;
+	}
 	cache.bz_perm = "";
 	cache.bz_perks = "";
 	cache.bz_weapons = "";
@@ -587,21 +601,28 @@ watch_player_disconnect()
 
 	self waittill( "disconnect" );
 
-	if ( IsDefined( self ) && IsDefined( self.score ) )
+	if ( IsDefined( self ) && IsDefined( self.gauntlet_points_applied ) && self.gauntlet_points_applied && IsDefined( self.score ) )
 	{
 		live_score = Int( self.score );
 		if ( live_score >= 0 )
 		{
 			cache.score = live_score;
+			cache.points_sampled = true;
 		}
 	}
 
 	player_key = maps\_gauntlet_state::make_player_key( cache.guid, cache.name );
 	if ( player_key != "" )
 	{
-		maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
+		if ( IsDefined( cache.points_sampled ) && cache.points_sampled )
+		{
+			maps\_gauntlet_state::record_player_points( cache.guid, cache.name, cache.score );
+		}
 		maps\_gauntlet_state::mark_player_disconnected( cache.guid, cache.name );
-		maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
+		if ( IsDefined( cache.perks_sampled ) && cache.perks_sampled )
+		{
+			maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
+		}
 		if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( cache.bz_sampled ) && cache.bz_sampled )
 		{
 			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks, cache.bz_weapons );
@@ -639,6 +660,10 @@ watch_late_joining_players( start_round, current_map )
 		level waittill( "connecting", player );
 		if ( IsDefined( player ) )
 		{
+			if ( GetDvarInt( "bz_enabled" ) == 1 && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
+			{
+				player.gauntlet_bz_restore_pending = true;
+			}
 			level thread apply_player_starting_points_threaded( player, start_round, current_map, true );
 		}
 	}
@@ -658,6 +683,11 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 	if ( !IsDefined( player ) )
 	{
 		return;
+	}
+
+	if ( GetDvarInt( "bz_enabled" ) == 1 && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
+	{
+		player.gauntlet_bz_restore_pending = true;
 	}
 
 	register_player_tracking( player );
@@ -724,6 +754,37 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 	if ( GetDvarInt( "bz_enabled" ) == 1 )
 	{
 		maps\_bz_gauntlet_bridge::restore_player_bz_state( player, current_map );
+		if ( IsDefined( player.gauntlet_bz_restore_pending ) && player.gauntlet_bz_restore_pending )
+		{
+			player.bz_deferred_restore_fn = maps\_bz_gauntlet_bridge::restore_player_bz_state;
+			player.bz_deferred_restore_map = current_map;
+			if ( !IsDefined( player.gauntlet_bz_deferred ) || !player.gauntlet_bz_deferred )
+			{
+				player.gauntlet_bz_deferred = true;
+				level thread restore_player_bz_when_alive( player, current_map );
+			}
+		}
+	}
+}
+
+restore_player_bz_when_alive( player, current_map )
+{
+	player endon( "disconnect" );
+	level endon( "end_game" );
+	level endon( "gauntlet_stage_clear" );
+
+	while ( IsDefined( player ) && ( !IsAlive( player ) || is_player_spectating( player ) ) )
+	{
+		player waittill( "spawned_player" );
+	}
+
+	if ( IsDefined( player ) )
+	{
+		player.gauntlet_bz_deferred = false;
+		if ( IsDefined( player.gauntlet_bz_restore_pending ) && player.gauntlet_bz_restore_pending )
+		{
+			maps\_bz_gauntlet_bridge::restore_player_bz_state( player, current_map );
+		}
 	}
 }
 
@@ -949,6 +1010,11 @@ checkpoint_all_players_points()
 		maps\_gauntlet_perks::snapshot_player_perks( player, get_current_map_name() );
 		if ( GetDvarInt( "bz_enabled" ) == 1 )
 		{
+			if ( ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) &&
+				maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) )
+			{
+				player.gauntlet_bz_restore_pending = true;
+			}
 			maps\_bz_gauntlet_bridge::snapshot_player_bz_state( player, get_current_map_name() );
 		}
 	}
@@ -972,14 +1038,33 @@ protect_players_for_stage_clear()
 
 		if ( IsAlive( player ) && player maps\_laststand::player_is_in_laststand() )
 		{
-			player notify( "player_revived" );
-			player reviveplayer();
-			maps\_utility::setClientSysState( "lsm", "0", player );
+			// Delete revivetrigger cleanly so stock _laststand::revive_do_revive() unwinds
+			// naturally (restoring any active reviver's weapons/offhands/cycling) and
+			// revive_trigger_think() exits via our injected !IsDefined(self.revivetrigger) guard.
+			player.beingrevived = false;
 			if ( IsDefined( player.revivetrigger ) )
 			{
+				player.revivetrigger.beingRevived = 0;
 				player.revivetrigger Delete();
 				player.revivetrigger = undefined;
 			}
+			player reviveplayer();
+			maps\_utility::setClientSysState( "lsm", "0", player );
+			// Give back stock Last Stand saved weapons BEFORE player_revived and the Stage Clear
+			// snapshot so Elemental Weapons and Mule Kick revive-strip ordering both see the
+			// restored loadout rather than the temporary Last Stand pistol.
+			if ( IsDefined( player.weaponInventory ) )
+			{
+				player maps\_laststand::laststand_giveback_player_weapons();
+			}
+			// Run the idempotent BZ revive strip synchronously before snapshot_all_players_points()
+			// so excess Mule Kick weapons cannot survive into the next Stage ledger if WaW defers
+			// the notified watcher thread until the next frame.
+			if ( maps\_bz_hooks::bz_enabled() )
+			{
+				maps\_bz_perks::bz_perks_on_player_revived( player, player );
+			}
+			player notify( "player_revived" );
 			player.ignoreme = false;
 		}
 
@@ -1025,12 +1110,19 @@ snapshot_all_players_points( current_map )
 		maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
 
 		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
+		if ( GetDvarInt( "bz_enabled" ) == 1 &&
+			( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) &&
+			maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) )
+		{
+			player.gauntlet_bz_restore_pending = true;
+		}
 	}
 	maps\_bz_gauntlet_bridge::save_all_players_bz_state( current_map );
 }
 
 handle_stage_clear( completed_round )
 {
+	level.gauntlet_stage_clearing = true;
 	current_map = get_current_map_name();
 	prev_state = level.gauntlet_state;
 	prev_info = level.gauntlet_stage_info;

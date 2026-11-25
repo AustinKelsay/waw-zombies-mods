@@ -498,7 +498,14 @@ encode_weapons_record( player )
 		return "";
 	}
 
+	is_downed = IsDefined( player.revivetrigger ) ||
+		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
+		( IsDefined( player.in_last_stand ) && player.in_last_stand );
 	primaries = player GetWeaponsListPrimaries();
+	if ( is_downed && IsDefined( player.weaponInventory ) && player.weaponInventory.size > 0 )
+	{
+		primaries = player.weaponInventory;
+	}
 	if ( !IsDefined( primaries ) )
 	{
 		return "";
@@ -705,11 +712,27 @@ snapshot_player_bz_state( player, current_map )
 	}
 
 	perm_str = encode_perm_record( player );
-	perks_str = encode_perks_record( player );
-	weapons_str = "";
-	if ( bz_elements_enabled() )
+	if ( IsDefined( player.gauntlet_bz_restore_pending ) && player.gauntlet_bz_restore_pending )
 	{
-		weapons_str = encode_weapons_record( player );
+		if ( perm_str == "" )
+		{
+			perm_str = get_dvar_entry( "gauntlet_bz_perm", player_key );
+		}
+		perks_str = get_dvar_entry( "gauntlet_bz_perks", player_key );
+		weapons_str = "";
+		if ( bz_elements_enabled() )
+		{
+			weapons_str = get_dvar_entry( "gauntlet_bz_weapons", player_key );
+		}
+	}
+	else
+	{
+		perks_str = encode_perks_record( player );
+		weapons_str = "";
+		if ( bz_elements_enabled() )
+		{
+			weapons_str = encode_weapons_record( player );
+		}
 	}
 	record_player_bz_state( guid, name, perm_str, perks_str, weapons_str );
 
@@ -905,77 +928,91 @@ restore_player_bz_state( player, current_map )
 	perm = parse_perm_record( perm_raw );
 	perks = parse_perks_record( perks_raw );
 
-	// 1. Restore permanent-per-Run BZ progression (Class, PaP melee/cluster, Special gear).
-	if ( perm.class_id != "" && maps\_bz_hooks::bz_classes_enabled() )
+	// 1. Restore permanent-per-Run BZ progression (Class, PaP melee/cluster, Special gear) once.
+	if ( !IsDefined( player.gauntlet_bz_perm_restored ) || !player.gauntlet_bz_perm_restored )
 	{
-		player.bz_class = perm.class_id;
-		maps\_bz_classes::bz_class_apply( player, perm.class_id );
-		maps\_bz_classes::bz_class_update_hud( player );
-	}
+		if ( perm.class_id != "" && maps\_bz_hooks::bz_classes_enabled() )
+		{
+			player.bz_class = perm.class_id;
+			maps\_bz_classes::bz_class_apply( player, perm.class_id );
+			maps\_bz_classes::bz_class_update_hud( player );
+		}
 
-	if ( bz_pap_enabled() )
-	{
-		if ( perm.pap_knife )
+		if ( bz_pap_enabled() )
 		{
-			player.bz_pap_knife = true;
+			if ( perm.pap_knife )
+			{
+				player.bz_pap_knife = true;
+			}
+			if ( perm.pap_bowie )
+			{
+				player.bz_pap_bowie = true;
+			}
+			if ( perm.pap_cluster )
+			{
+				player.bz_pap_cluster = true;
+				maps\_bz_pap::bz_pap_ensure_player_watchers( player );
+			}
+			if ( perm.pap_knife || perm.pap_bowie || perm.pap_cluster )
+			{
+				bz_pap_update_hud( player );
+			}
 		}
-		if ( perm.pap_bowie )
-		{
-			player.bz_pap_bowie = true;
-		}
-		if ( perm.pap_cluster )
-		{
-			player.bz_pap_cluster = true;
-			maps\_bz_pap::bz_pap_ensure_player_watchers( player );
-		}
-		if ( perm.pap_knife || perm.pap_bowie || perm.pap_cluster )
-		{
-			bz_pap_update_hud( player );
-		}
-	}
 
-	if ( perm.owns_bowie )
-	{
-		player.bz_owns_bowie = true;
-		player.bz_has_bowie = true;
-	}
+		if ( perm.owns_bowie )
+		{
+			player.bz_owns_bowie = true;
+			player.bz_has_bowie = true;
+		}
 
-	if ( bz_elements_enabled() )
-	{
-		if ( perm.owns_war_club )
+		if ( bz_elements_enabled() )
 		{
-			player.bz_owns_war_club = true;
+			if ( perm.owns_war_club )
+			{
+				player.bz_owns_war_club = true;
+			}
+			if ( perm.pap_war_club )
+			{
+				player.bz_pap_war_club = true;
+			}
+			if ( perm.owns_portal_grenade )
+			{
+				player.bz_owns_portal_grenade = true;
+				player.bz_portal_charges = maps\_bz_rules::bz_get_portal_max_charges();
+			}
+			if ( perm.melee_slot == "war_club" && perm.owns_war_club )
+			{
+				player.bz_melee_slot = "war_club";
+			}
+			else if ( perm.melee_slot == "bowie" && perm.owns_bowie )
+			{
+				player.bz_melee_slot = "bowie";
+			}
+			else
+			{
+				player.bz_melee_slot = "knife";
+			}
+			maps\_bz_special_weapons::bz_special_sync_melee_slot_perk( player );
+			maps\_bz_special_weapons::bz_special_ensure_player_watchers( player );
+			maps\_bz_special_weapons::bz_special_update_hud( player );
 		}
-		if ( perm.pap_war_club )
-		{
-			player.bz_pap_war_club = true;
-		}
-		if ( perm.owns_portal_grenade )
-		{
-			player.bz_owns_portal_grenade = true;
-			player.bz_portal_charges = maps\_bz_rules::bz_get_portal_max_charges();
-		}
-		if ( perm.melee_slot == "war_club" && perm.owns_war_club )
-		{
-			player.bz_melee_slot = "war_club";
-		}
-		else if ( perm.melee_slot == "bowie" && perm.owns_bowie )
+		else if ( perm.owns_bowie )
 		{
 			player.bz_melee_slot = "bowie";
+			player SetPerk( "specialty_altmelee" );
+			player.has_altmelee = true;
 		}
-		else
-		{
-			player.bz_melee_slot = "knife";
-		}
-		maps\_bz_special_weapons::bz_special_sync_melee_slot_perk( player );
-		maps\_bz_special_weapons::bz_special_ensure_player_watchers( player );
-		maps\_bz_special_weapons::bz_special_update_hud( player );
+
+		player.gauntlet_bz_perm_restored = true;
 	}
-	else if ( perm.owns_bowie )
+
+	// Defer alive-only BZ perks & Elemental Weapons until the player actually spawns
+	// alive so mid-Stage reconnecting spectators never lose carried perks or weapons.
+	if ( !bz_gauntlet_player_is_alive_non_spectator( player ) )
 	{
-		player.bz_melee_slot = "bowie";
-		player SetPerk( "specialty_altmelee" );
-		player.has_altmelee = true;
+		player.gauntlet_bz_restore_pending = true;
+		maps\_bz_stations::bz_stations_sync_player_ui( player );
+		return false;
 	}
 
 	// 2. Restore alive-only BZ perks (Standard + Tier 2 + Apex).
@@ -983,7 +1020,7 @@ restore_player_bz_state( player, current_map )
 	t2_restored = 0;
 	apex_restored = 0;
 
-	if ( maps\_bz_hooks::bz_perks_enabled() && bz_gauntlet_player_is_alive_non_spectator( player ) )
+	if ( maps\_bz_hooks::bz_perks_enabled() )
 	{
 		maps\_bz_perks::bz_perks_sync_stock_perks( player );
 
@@ -1024,11 +1061,15 @@ restore_player_bz_state( player, current_map )
 	//    and sync per-player station menu dvars with carried-over/floored Gauntlet points.
 	maps\_bz_hooks::bz_recompute_player_speed( player );
 	maps\_bz_hooks::bz_recompute_player_max_health( player );
-	if ( bz_gauntlet_player_is_alive_non_spectator( player ) && IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
+	if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
 	{
-		player.health = Int( player.maxhealth );
+		restored_max = Int( player.maxhealth );
+		player.health = restored_max;
+		player.maxhealth = restored_max;
 	}
 	maps\_bz_stations::bz_stations_sync_player_ui( player );
+	player.gauntlet_bz_restore_pending = false;
+	player.bz_deferred_restore_fn = undefined;
 	player.gauntlet_bz_restored = true;
 
 	map_label = "";

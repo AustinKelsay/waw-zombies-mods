@@ -621,6 +621,103 @@ bz_stations_spawn_one( map_name, spec )
 	return station;
 }
 
+bz_stations_is_player_downed( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.is_in_laststand ) && player.is_in_laststand )
+	{
+		return true;
+	}
+	if ( IsDefined( player.in_last_stand ) && player.in_last_stand )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_stations_is_match_locked()
+{
+	if ( IsDefined( level.intermission ) && level.intermission )
+	{
+		return true;
+	}
+	if ( IsDefined( level.gauntlet_stage_cleared ) && level.gauntlet_stage_cleared )
+	{
+		return true;
+	}
+	if ( IsDefined( level.gauntlet_stage_clearing ) && level.gauntlet_stage_clearing )
+	{
+		return true;
+	}
+	return false;
+}
+
+bz_stations_is_held_primary( player, weapon_name )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+
+	norm = bz_normalize_id( weapon_name );
+	if ( norm == "" || norm == "none" )
+	{
+		return false;
+	}
+	if ( IsSubStr( norm, "perk_bottle" ) ||
+		norm == "zombie_knuckle_crack" ||
+		norm == "mine_bouncing_betty" ||
+		norm == "stielhandgranate" ||
+		norm == "fraggrenade" ||
+		norm == "zombie_cymbal_monkey" ||
+		norm == "molotov" ||
+		norm == "syrette" ||
+		norm == "knife" ||
+		norm == "bowie_knife" )
+	{
+		return false;
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( IsDefined( primaries ) )
+	{
+		for ( i = 0; i < primaries.size; i++ )
+		{
+			if ( bz_normalize_id( primaries[i] ) == norm )
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bz_stations_set_client_dvar_cached( player, key, val )
+{
+	if ( !IsDefined( player ) || !IsDefined( key ) || key == "" )
+	{
+		return;
+	}
+	str_val = "" + val;
+	if ( !IsDefined( player.bz_ui_dvar_cache ) )
+	{
+		player.bz_ui_dvar_cache = [];
+	}
+	if ( IsDefined( player.bz_ui_dvar_cache[key] ) && player.bz_ui_dvar_cache[key] == str_val )
+	{
+		return;
+	}
+	player.bz_ui_dvar_cache[key] = str_val;
+	player SetClientDvar( key, str_val );
+}
+
 bz_station_trigger_think()
 {
 	level endon( "end_game" );
@@ -629,7 +726,7 @@ bz_station_trigger_think()
 	for ( ;; )
 	{
 		self.trigger waittill( "trigger", player );
-		if ( !IsDefined( player ) || !IsPlayer( player ) || !IsAlive( player ) )
+		if ( !IsDefined( player ) || !IsPlayer( player ) || !IsAlive( player ) || bz_stations_is_player_downed( player ) || bz_stations_is_match_locked() )
 		{
 			continue;
 		}
@@ -881,9 +978,8 @@ bz_stations_update_prompt_hud( player )
 	}
 	if ( !bz_enabled() || !IsAlive( player ) || !IsDefined( player.origin ) ||
 		!IsDefined( level.bz_stations ) ||
-		IsDefined( player.revivetrigger ) ||
-		( IsDefined( player.is_in_laststand ) && player.is_in_laststand ) ||
-		( IsDefined( player.in_last_stand ) && player.in_last_stand ) ||
+		bz_stations_is_player_downed( player ) ||
+		bz_stations_is_match_locked() ||
 		( IsDefined( player.bz_station_open ) && player.bz_station_open ) )
 	{
 		bz_stations_hide_prompt_hud( player );
@@ -1127,10 +1223,10 @@ bz_stations_sync_player_ui( player, feedback )
 	active_class = [[ state.bz_state_get_class ]]( player );
 	weapon_name = bz_stations_get_player_weapon_safe( player );
 
-	player SetClientDvar( "ui_bz_score", "POINTS: " + score );
+	bz_stations_set_client_dvar_cached( player, "ui_bz_score", "POINTS: " + score );
 	if ( active_class == "" )
 	{
-		player SetClientDvar( "ui_bz_class", "CLASS: NONE" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_class", "CLASS: NONE" );
 	}
 	else
 	{
@@ -1139,7 +1235,7 @@ bz_stations_sync_player_ui( player, feedback )
 		{
 			cls_name = active_class;
 		}
-		player SetClientDvar( "ui_bz_class", "CLASS: " + cls_name );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_class", "CLASS: " + cls_name );
 	}
 
 	// Standard Perks & Perk Tier 2 status dvars
@@ -1151,33 +1247,33 @@ bz_stations_sync_player_ui( player, feedback )
 		p_cost = [[ rules.bz_get_standard_perk_price ]]( pid );
 		if ( has_t1 )
 		{
-			player SetClientDvar( "ui_bz_perk_" + pid, "OWNED" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_perk_" + pid, "OWNED" );
 		}
 		else if ( score >= p_cost )
 		{
-			player SetClientDvar( "ui_bz_perk_" + pid, "BUY " + p_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_perk_" + pid, "BUY " + p_cost );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_perk_" + pid, "NEED " + p_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_perk_" + pid, "NEED " + p_cost );
 		}
 
 		t2_cost = [[ rules.bz_get_perk_t2_price ]]( pid );
 		if ( [[ state.bz_state_has_perk_t2 ]]( player, pid ) )
 		{
-			player SetClientDvar( "ui_bz_t2_" + pid, "OWNED" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_t2_" + pid, "OWNED" );
 		}
 		else if ( !has_t1 )
 		{
-			player SetClientDvar( "ui_bz_t2_" + pid, "REQ TIER 1" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_t2_" + pid, "REQ TIER 1" );
 		}
 		else if ( score >= t2_cost )
 		{
-			player SetClientDvar( "ui_bz_t2_" + pid, "UPGRADE " + t2_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_t2_" + pid, "UPGRADE " + t2_cost );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_t2_" + pid, "NEED " + t2_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_t2_" + pid, "NEED " + t2_cost );
 		}
 	}
 
@@ -1189,15 +1285,15 @@ bz_stations_sync_player_ui( player, feedback )
 		a_cost = [[ rules.bz_get_apex_perk_price ]]( aid );
 		if ( bz_state_has_apex( player, aid ) )
 		{
-			player SetClientDvar( "ui_bz_apex_" + aid, "OWNED" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_apex_" + aid, "OWNED" );
 		}
 		else if ( score >= a_cost )
 		{
-			player SetClientDvar( "ui_bz_apex_" + aid, "BUY " + a_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_apex_" + aid, "BUY " + a_cost );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_apex_" + aid, "NEED " + a_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_apex_" + aid, "NEED " + a_cost );
 		}
 	}
 
@@ -1209,117 +1305,118 @@ bz_stations_sync_player_ui( player, feedback )
 		c_cost = [[ rules.bz_get_class_price ]]( cid );
 		if ( active_class == cid )
 		{
-			player SetClientDvar( "ui_bz_class_" + cid, "ACTIVE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_class_" + cid, "ACTIVE" );
 		}
 		else if ( score >= c_cost )
 		{
 			if ( active_class != "" )
 			{
-				player SetClientDvar( "ui_bz_class_" + cid, "SWAP " + c_cost );
+				bz_stations_set_client_dvar_cached( player, "ui_bz_class_" + cid, "SWAP " + c_cost );
 			}
 			else
 			{
-				player SetClientDvar( "ui_bz_class_" + cid, "SELECT " + c_cost );
+				bz_stations_set_client_dvar_cached( player, "ui_bz_class_" + cid, "SELECT " + c_cost );
 			}
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_class_" + cid, "NEED " + c_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_class_" + cid, "NEED " + c_cost );
 		}
 	}
 
 	// Pack-a-Punch & Arsenal status dvars
+	valid_primary = bz_stations_is_held_primary( player, weapon_name );
 	if ( weapon_name == "" )
 	{
-		player SetClientDvar( "ui_bz_pap_weapon", "WEAPON: NONE" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_weapon", "WEAPON: NONE" );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_weapon", "WEAPON: " + weapon_name );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_weapon", "WEAPON: " + weapon_name );
 	}
 
-	is_pap = bz_stations_is_weapon_pap( player, weapon_name );
-	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weapon_name );
+	is_pap = valid_primary && bz_stations_is_weapon_pap( player, weapon_name );
+	is_dpap = valid_primary && bz_state_has_pap_upgrade( player, "double_pap", weapon_name );
 
-	if ( weapon_name == "" )
+	if ( weapon_name == "" || !valid_primary )
 	{
-		player SetClientDvar( "ui_bz_pap_single_pap", "NO WEAPON" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_single_pap", "NO WEAPON" );
 	}
 	else if ( is_pap )
 	{
-		player SetClientDvar( "ui_bz_pap_single_pap", "UPGRADED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_single_pap", "UPGRADED" );
 	}
 	else if ( score >= 5000 )
 	{
-		player SetClientDvar( "ui_bz_pap_single_pap", "UPGRADE 5000" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_single_pap", "UPGRADE 5000" );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_single_pap", "NEED 5000" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_single_pap", "NEED 5000" );
 	}
 
 	dpap_cost = bz_get_pap_upgrade_price( "double_pap" );
 	if ( is_dpap )
 	{
-		player SetClientDvar( "ui_bz_pap_double_pap", "MAXED (II)" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_double_pap", "MAXED (II)" );
 	}
 	else if ( !is_pap )
 	{
-		player SetClientDvar( "ui_bz_pap_double_pap", "REQ PAP" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_double_pap", "REQ PAP" );
 	}
 	else if ( score >= dpap_cost )
 	{
-		player SetClientDvar( "ui_bz_pap_double_pap", "UPGRADE " + dpap_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_double_pap", "UPGRADE " + dpap_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_double_pap", "NEED " + dpap_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_double_pap", "NEED " + dpap_cost );
 	}
 
 	knife_cost = bz_get_pap_upgrade_price( "pap_knife" );
 	if ( bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_knife", "OWNED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_knife", "OWNED" );
 	}
 	else if ( score >= knife_cost )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_knife", "BUY " + knife_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_knife", "BUY " + knife_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_pap_knife", "NEED " + knife_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_knife", "NEED " + knife_cost );
 	}
 
 	bowie_cost = bz_get_pap_upgrade_price( "pap_bowie" );
 	if ( bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_bowie", "OWNED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_bowie", "OWNED" );
 	}
 	else if ( !bz_stations_player_has_bowie( player ) )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_bowie", "REQ BOWIE" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_bowie", "REQ BOWIE" );
 	}
 	else if ( score >= bowie_cost )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_bowie", "BUY " + bowie_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_bowie", "BUY " + bowie_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_pap_bowie", "NEED " + bowie_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_bowie", "NEED " + bowie_cost );
 	}
 
 	cluster_cost = bz_get_pap_upgrade_price( "pap_cluster" );
 	if ( bz_state_has_pap_upgrade( player, "pap_cluster", weapon_name ) )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_cluster", "OWNED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_cluster", "OWNED" );
 	}
 	else if ( score >= cluster_cost )
 	{
-		player SetClientDvar( "ui_bz_pap_pap_cluster", "BUY " + cluster_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_cluster", "BUY " + cluster_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_pap_pap_cluster", "NEED " + cluster_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_pap_cluster", "NEED " + cluster_cost );
 	}
 
 	// Phase 2 Elemental & Special Arsenal status dvars
@@ -1332,26 +1429,26 @@ bz_stations_sync_player_ui( player, feedback )
 		e_weap = bz_get_element_weapon_name( eid );
 		if ( !elements_on )
 		{
-			player SetClientDvar( "ui_bz_elem_" + eid, "DISABLED" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "DISABLED" );
 		}
 		else if ( IsDefined( e_weap ) && player HasWeapon( e_weap ) )
 		{
 			if ( bz_stations_is_element_ammo_full( player, e_weap ) )
 			{
-				player SetClientDvar( "ui_bz_elem_" + eid, "FULL" );
+				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "FULL" );
 			}
 			else
 			{
-				player SetClientDvar( "ui_bz_elem_" + eid, "AMMO " + bz_get_element_ammo_cost( eid ) );
+				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "AMMO " + bz_get_element_ammo_cost( eid ) );
 			}
 		}
 		else if ( score >= e_cost )
 		{
-			player SetClientDvar( "ui_bz_elem_" + eid, "BUY " + e_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "BUY " + e_cost );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_elem_" + eid, "NEED " + e_cost );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "NEED " + e_cost );
 		}
 	}
 
@@ -1366,121 +1463,121 @@ bz_stations_sync_player_ui( player, feedback )
 	{
 		if ( has_pap_wc )
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP WAR CLUB" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: PAP WAR CLUB" );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: WAR CLUB" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: WAR CLUB" );
 		}
 	}
 	else if ( melee_slot == "bowie" )
 	{
 		if ( bz_state_has_pap_upgrade( player, "pap_bowie", weapon_name ) )
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP BOWIE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: PAP BOWIE" );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: BOWIE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: BOWIE" );
 		}
 	}
 	else
 	{
 		if ( bz_state_has_pap_upgrade( player, "pap_knife", weapon_name ) )
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: PAP KNIFE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: PAP KNIFE" );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_melee_slot", "MELEE: KNIFE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_melee_slot", "MELEE: KNIFE" );
 		}
 	}
 
 	wc_cost = bz_get_special_gear_price( "war_club" );
 	if ( !elements_on )
 	{
-		player SetClientDvar( "ui_bz_gear_war_club", "DISABLED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_war_club", "DISABLED" );
 	}
 	else if ( owns_wc )
 	{
 		if ( melee_slot == "war_club" )
 		{
-			player SetClientDvar( "ui_bz_gear_war_club", "EQUIPPED" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_gear_war_club", "EQUIPPED" );
 		}
 		else
 		{
-			player SetClientDvar( "ui_bz_gear_war_club", "EQUIP FREE" );
+			bz_stations_set_client_dvar_cached( player, "ui_bz_gear_war_club", "EQUIP FREE" );
 		}
 	}
 	else if ( score >= wc_cost )
 	{
-		player SetClientDvar( "ui_bz_gear_war_club", "BUY " + wc_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_war_club", "BUY " + wc_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_gear_war_club", "NEED " + wc_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_war_club", "NEED " + wc_cost );
 	}
 
 	pap_wc_cost = bz_get_special_gear_price( "pap_war_club" );
 	if ( !elements_on )
 	{
-		player SetClientDvar( "ui_bz_gear_pap_war_club", "DISABLED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "DISABLED" );
 	}
 	else if ( has_pap_wc )
 	{
-		player SetClientDvar( "ui_bz_gear_pap_war_club", "OWNED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "OWNED" );
 	}
 	else if ( !owns_wc )
 	{
-		player SetClientDvar( "ui_bz_gear_pap_war_club", "REQ WAR CLUB" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "REQ WAR CLUB" );
 	}
 	else if ( score >= pap_wc_cost )
 	{
-		player SetClientDvar( "ui_bz_gear_pap_war_club", "BUY " + pap_wc_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "BUY " + pap_wc_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_gear_pap_war_club", "NEED " + pap_wc_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "NEED " + pap_wc_cost );
 	}
 
 	if ( !elements_on )
 	{
-		player SetClientDvar( "ui_bz_gear_equip_bowie", "DISABLED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "DISABLED" );
 	}
 	else if ( !owns_bowie )
 	{
-		player SetClientDvar( "ui_bz_gear_equip_bowie", "REQ BOWIE" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "REQ BOWIE" );
 	}
 	else if ( melee_slot == "bowie" )
 	{
-		player SetClientDvar( "ui_bz_gear_equip_bowie", "EQUIPPED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "EQUIPPED" );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_gear_equip_bowie", "EQUIP FREE" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "EQUIP FREE" );
 	}
 
 	portal_cost = bz_get_special_gear_price( "portal_grenade" );
 	if ( !elements_on )
 	{
-		player SetClientDvar( "ui_bz_portal", "DISABLED" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_portal", "DISABLED" );
 	}
 	else if ( owns_portal )
 	{
-		player SetClientDvar( "ui_bz_portal", "READY (" + portal_charges + ")" );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_portal", "READY (" + portal_charges + ")" );
 	}
 	else if ( score >= portal_cost )
 	{
-		player SetClientDvar( "ui_bz_portal", "BUY " + portal_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_portal", "BUY " + portal_cost );
 	}
 	else
 	{
-		player SetClientDvar( "ui_bz_portal", "NEED " + portal_cost );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_portal", "NEED " + portal_cost );
 	}
 
 	if ( IsDefined( feedback ) )
 	{
-		player SetClientDvar( "ui_bz_feedback", "" + feedback );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_feedback", "" + feedback );
 	}
 }
 
@@ -1495,6 +1592,7 @@ bz_stations_on_player_connect( player )
 		return;
 	}
 	bz_state_ensure_init( player );
+	player.bz_ui_dvar_cache = [];
 	player.bz_station_open = false;
 	player.bz_active_station_id = "";
 	player.bz_active_station_menu = "";
@@ -1583,7 +1681,7 @@ bz_stations_close_for_player( player )
 
 bz_stations_open_for_player( player, station_id )
 {
-	if ( !bz_enabled() || !IsDefined( player ) )
+	if ( !bz_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_stations_is_player_downed( player ) || bz_stations_is_match_locked() )
 	{
 		return false;
 	}
@@ -1625,7 +1723,7 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 	cost = 5000;
 	norm = bz_normalize_id( weapon_name );
 
-	if ( norm == "" || norm == "none" )
+	if ( norm == "" || norm == "none" || !bz_stations_is_held_primary( player, norm ) )
 	{
 		return bz_make_purchase_result( "missing_prereq", "single_pap", cost, score );
 	}
@@ -1711,13 +1809,47 @@ bz_stations_give_element_primary( player, weap_name )
 	if ( IsDefined( primaries ) && primaries.size >= max_primaries )
 	{
 		cur = bz_stations_get_player_weapon_safe( player );
-		if ( cur != "" && player HasWeapon( cur ) )
+		cur_is_primary = false;
+		if ( cur != "" )
 		{
+			for ( pi = 0; pi < primaries.size; pi++ )
+			{
+				if ( bz_normalize_id( primaries[pi] ) == cur )
+				{
+					cur_is_primary = true;
+					break;
+				}
+			}
+		}
+		removed_weap = "";
+		if ( cur_is_primary && player HasWeapon( cur ) )
+		{
+			removed_weap = cur;
 			player TakeWeapon( cur );
 		}
 		else if ( primaries.size > 0 )
 		{
+			removed_weap = bz_normalize_id( primaries[primaries.size - 1] );
 			player TakeWeapon( primaries[primaries.size - 1] );
+		}
+		if ( removed_weap != "" )
+		{
+			if ( IsDefined( player.bz_pap_weapons ) )
+			{
+				player.bz_pap_weapons[removed_weap] = false;
+			}
+			if ( IsDefined( player.bz_single_pap_weapons ) )
+			{
+				player.bz_single_pap_weapons[removed_weap] = false;
+			}
+			if ( IsDefined( player.bz_double_pap_weapons ) )
+			{
+				player.bz_double_pap_weapons[removed_weap] = false;
+			}
+			if ( IsDefined( player.bz_overflow_reserve ) )
+			{
+				player.bz_overflow_reserve[removed_weap] = 0;
+			}
 		}
 	}
 
@@ -1847,6 +1979,18 @@ bz_stations_on_menu_response( player, menu, response )
 		return true;
 	}
 
+	if ( !IsAlive( player ) || bz_stations_is_player_downed( player ) || bz_stations_is_match_locked() )
+	{
+		bz_stations_close_for_player( player );
+		score_now = bz_state_get_score_safe( player );
+		bz_stations_emit_purchase_event( player, norm_menu, "blocked", resp, "unavailable", 0, score_now );
+		if ( !bz_stations_is_match_locked() )
+		{
+			bz_stations_play_sound( player, "no_cha_ching" );
+		}
+		return true;
+	}
+
 	parts = StrTok( resp, ":" );
 	if ( !IsDefined( parts ) || parts.size != 2 )
 	{
@@ -1946,7 +2090,7 @@ bz_stations_on_menu_response( player, menu, response )
 			has_prereq = true;
 			if ( item_id == "double_pap" )
 			{
-				has_prereq = bz_stations_is_weapon_pap( player, weapon_name );
+				has_prereq = bz_stations_is_held_primary( player, weapon_name ) && bz_stations_is_weapon_pap( player, weapon_name );
 			}
 			else if ( item_id == "pap_bowie" )
 			{

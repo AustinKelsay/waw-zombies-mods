@@ -927,8 +927,7 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(self.gsc.call(BZ_HOOKS_MOD, "bz_get_max_primary_weapons", self.p1), 4)
         self.assertEqual(self.p1.primary_weapons, ["colt", "thompson_upgraded", "stg44", "zombie_mg42"])
 
-        # Player 1 goes down (stock engine also strips stock perks on down)
-        self.p1.clear_perks()
+        # Player 1 goes down (station-bought stock specialties must be unset by BZ down reset)
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_downed", self.p1)
 
         # 3rd and 4th weapons stripped cleanly; switched to a surviving primary

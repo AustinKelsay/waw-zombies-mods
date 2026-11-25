@@ -622,7 +622,9 @@ apply_single_perk_to_player( player, perk )
 			maps\_bz_hooks::bz_recompute_player_max_health( player );
 			if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
 			{
-				player.health = Int( player.maxhealth );
+				restored_max = Int( player.maxhealth );
+				player.health = restored_max;
+				player.maxhealth = restored_max;
 			}
 		}
 	}

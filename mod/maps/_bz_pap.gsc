@@ -211,6 +211,17 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 	target_stock = Int( Int( base_max ) * ammo_mult );
 	player SetWeaponAmmoStock( weap, target_stock );
 	player.bz_pap_target_stock[weap] = target_stock;
+	engine_max = Int( WeaponMaxAmmo( weap ) );
+	overflow = 0;
+	if ( engine_max > 0 && target_stock > engine_max )
+	{
+		overflow = target_stock - engine_max;
+	}
+	if ( !IsDefined( player.bz_overflow_reserve ) )
+	{
+		player.bz_overflow_reserve = [];
+	}
+	player.bz_overflow_reserve[weap] = overflow;
 	return target_stock;
 }
 
@@ -467,6 +478,23 @@ bz_pap_play_console_upgrade_fx( trigger, perk_machine, packa_rollers )
 	}
 }
 
+bz_pap_is_match_locked()
+{
+	if ( IsDefined( level.intermission ) && level.intermission )
+	{
+		return true;
+	}
+	if ( IsDefined( level.gauntlet_stage_cleared ) && level.gauntlet_stage_cleared )
+	{
+		return true;
+	}
+	if ( IsDefined( level.gauntlet_stage_clearing ) && level.gauntlet_stage_clearing )
+	{
+		return true;
+	}
+	return false;
+}
+
 // Synchronous hook called from stock Der Riese vending_upgrade() right BEFORE
 // the stock zombie_include_weapons[*_upgraded] check.
 // Returns true when this console interaction was consumed (Double PaP, scripted
@@ -476,6 +504,10 @@ bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine
 	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsPlayer( player ) )
 	{
 		return false;
+	}
+	if ( bz_pap_is_match_locked() || !IsAlive( player ) || bz_pap_player_is_downed( player ) )
+	{
+		return true;
 	}
 
 	if ( IsDefined( trigger ) )
@@ -1177,7 +1209,7 @@ bz_pap_update_native_prompt_hud( player )
 		bz_pap_hide_native_prompt_hud( player );
 		return;
 	}
-	if ( !IsAlive( player ) || bz_pap_player_is_downed( player ) || !IsDefined( player.origin ) || !bz_pap_is_native_console_unlocked() || bz_pap_is_native_console_busy() )
+	if ( !IsAlive( player ) || bz_pap_player_is_downed( player ) || bz_pap_is_match_locked() || !IsDefined( player.origin ) || !bz_pap_is_native_console_unlocked() || bz_pap_is_native_console_busy() )
 	{
 		bz_pap_hide_native_prompt_hud( player );
 		return;
@@ -1308,10 +1340,80 @@ bz_pap_ensure_player_watchers( player )
 	player thread bz_pap_watch_grenade_throws();
 	player thread bz_pap_watch_weapon_switch();
 	player thread bz_pap_watch_max_ammo();
+	player thread bz_pap_watch_overflow_reserve();
 	player thread bz_pap_watch_player_disconnect();
 	if ( bz_get_map_name() == "nazi_zombie_factory" )
 	{
 		player thread bz_pap_watch_native_console_prompt();
+	}
+}
+
+bz_pap_drain_overflow_reserve( player )
+{
+	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsDefined( player.bz_overflow_reserve ) )
+	{
+		return 0;
+	}
+	if ( !IsAlive( player ) || bz_pap_player_is_downed( player ) )
+	{
+		return 0;
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) || primaries.size == 0 )
+	{
+		return 0;
+	}
+
+	transferred = 0;
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		w = primaries[i];
+		norm_w = bz_normalize_id( w );
+		if ( norm_w == "" || !IsDefined( player.bz_overflow_reserve[norm_w] ) )
+		{
+			continue;
+		}
+		overflow = Int( player.bz_overflow_reserve[norm_w] );
+		if ( overflow <= 0 )
+		{
+			continue;
+		}
+
+		engine_max = Int( WeaponMaxAmmo( w ) );
+		if ( engine_max <= 0 )
+		{
+			continue;
+		}
+		cur_stock = Int( player GetWeaponAmmoStock( w ) );
+		missing = engine_max - cur_stock;
+		if ( missing > 0 )
+		{
+			grant = missing;
+			if ( grant > overflow )
+			{
+				grant = overflow;
+			}
+			player SetWeaponAmmoStock( w, cur_stock + grant );
+			player.bz_overflow_reserve[norm_w] = overflow - grant;
+			transferred = transferred + grant;
+		}
+	}
+	return transferred;
+}
+
+bz_pap_watch_overflow_reserve()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.15 );
+		if ( bz_pap_enabled() && GetDvarInt( "bz_perks_enabled" ) != 1 )
+		{
+			bz_pap_drain_overflow_reserve( self );
+		}
 	}
 }
 
@@ -1395,6 +1497,104 @@ bz_pap_track_cluster_grenade( grenade, weapon_name )
 	bz_pap_detonate_cluster( self, last_origin, weapon_name );
 }
 
+bz_pap_prune_unheld_weapons( player )
+{
+	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_pap_player_is_downed( player ) )
+	{
+		return 0;
+	}
+	if ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" )
+	{
+		return 0;
+	}
+	if ( bz_pap_is_native_console_busy() )
+	{
+		return 0;
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) || primaries.size == 0 )
+	{
+		return 0;
+	}
+
+	held = [];
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		w = bz_normalize_id( primaries[i] );
+		if ( w != "" && w != "none" )
+		{
+			held[w] = true;
+		}
+	}
+
+	pruned = 0;
+	if ( IsDefined( player.bz_pap_weapons ) )
+	{
+		keys = GetArrayKeys( player.bz_pap_weapons );
+		for ( i = 0; i < keys.size; i++ )
+		{
+			k = keys[i];
+			if ( IsDefined( player.bz_pap_weapons[k] ) && player.bz_pap_weapons[k] && !IsDefined( held[k] ) )
+			{
+				player.bz_pap_weapons[k] = false;
+				pruned++;
+			}
+		}
+	}
+	if ( IsDefined( player.bz_single_pap_weapons ) )
+	{
+		keys = GetArrayKeys( player.bz_single_pap_weapons );
+		for ( i = 0; i < keys.size; i++ )
+		{
+			k = keys[i];
+			if ( IsDefined( player.bz_single_pap_weapons[k] ) && player.bz_single_pap_weapons[k] && !IsDefined( held[k] ) )
+			{
+				player.bz_single_pap_weapons[k] = false;
+				pruned++;
+			}
+		}
+	}
+	if ( IsDefined( player.bz_double_pap_weapons ) )
+	{
+		keys = GetArrayKeys( player.bz_double_pap_weapons );
+		for ( i = 0; i < keys.size; i++ )
+		{
+			k = keys[i];
+			if ( IsDefined( player.bz_double_pap_weapons[k] ) && player.bz_double_pap_weapons[k] && !IsDefined( held[k] ) )
+			{
+				player.bz_double_pap_weapons[k] = false;
+				pruned++;
+			}
+		}
+	}
+	if ( IsDefined( player.bz_pap_target_stock ) )
+	{
+		keys = GetArrayKeys( player.bz_pap_target_stock );
+		for ( i = 0; i < keys.size; i++ )
+		{
+			k = keys[i];
+			if ( !IsDefined( held[k] ) )
+			{
+				player.bz_pap_target_stock[k] = undefined;
+			}
+		}
+	}
+	if ( IsDefined( player.bz_overflow_reserve ) )
+	{
+		keys = GetArrayKeys( player.bz_overflow_reserve );
+		for ( i = 0; i < keys.size; i++ )
+		{
+			k = keys[i];
+			if ( !IsDefined( held[k] ) )
+			{
+				player.bz_overflow_reserve[k] = 0;
+			}
+		}
+	}
+	return pruned;
+}
+
 bz_pap_watch_weapon_switch()
 {
 	self endon( "disconnect" );
@@ -1405,6 +1605,7 @@ bz_pap_watch_weapon_switch()
 		self waittill( "weapon_change" );
 		if ( bz_pap_enabled() )
 		{
+			bz_pap_prune_unheld_weapons( self );
 			bz_pap_update_hud( self );
 			if ( bz_get_map_name() == "nazi_zombie_factory" )
 			{

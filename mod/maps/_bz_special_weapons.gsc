@@ -906,10 +906,22 @@ bz_special_array_contains_entity( arr, target )
 	return false;
 }
 
-bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
+bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list, blade )
 {
 	hits = 0;
-	if ( pierced_list.size >= max_pierce )
+	use_entity_list = IsDefined( blade );
+	if ( use_entity_list )
+	{
+		if ( !IsDefined( blade.bz_pierced ) )
+		{
+			blade.bz_pierced = [];
+		}
+		if ( blade.bz_pierced.size >= max_pierce )
+		{
+			return 0;
+		}
+	}
+	else if ( !IsDefined( pierced_list ) || pierced_list.size >= max_pierce )
 	{
 		return 0;
 	}
@@ -922,7 +934,14 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 
 	for ( i = 0; i < enemies.size; i++ )
 	{
-		if ( pierced_list.size >= max_pierce )
+		if ( use_entity_list )
+		{
+			if ( blade.bz_pierced.size >= max_pierce )
+			{
+				break;
+			}
+		}
+		else if ( pierced_list.size >= max_pierce )
 		{
 			break;
 		}
@@ -931,7 +950,14 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 		{
 			continue;
 		}
-		if ( bz_special_array_contains_entity( pierced_list, z ) )
+		if ( use_entity_list )
+		{
+			if ( bz_special_array_contains_entity( blade.bz_pierced, z ) )
+			{
+				continue;
+			}
+		}
+		else if ( bz_special_array_contains_entity( pierced_list, z ) )
 		{
 			continue;
 		}
@@ -945,7 +971,21 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list )
 
 		if ( hdist <= 56.0 && dz <= 72.0 )
 		{
-			pierced_list[pierced_list.size] = z;
+			target_pos = ( z.origin[0], z.origin[1], z.origin[2] + 40.0 );
+			los = BulletTrace( pos, target_pos, false, player );
+			if ( IsDefined( los ) && IsDefined( los["fraction"] ) && los["fraction"] < 0.99 )
+			{
+				continue;
+			}
+
+			if ( use_entity_list )
+			{
+				blade.bz_pierced[blade.bz_pierced.size] = z;
+			}
+			else
+			{
+				pierced_list[pierced_list.size] = z;
+			}
 			final_blade_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, dmg, "MOD_PROJECTILE", "bz_blade_boomerang", player, pos );
 			z.bz_in_damage_dispatch = true;
 			z.bz_damage_dispatch_time = GetTime();
@@ -1062,7 +1102,9 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 
 	steps = 8;
 	step_dt = 0.05;
-	pierced = [];
+	// Store pierced list on blade entity so WaW 1.7 GSC mutates it by reference
+	// across steps (GSC passes plain arrays by value).
+	blade.bz_pierced = [];
 	outbound_hits = 0;
 	return_hits = 0;
 
@@ -1073,6 +1115,7 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	}
 
 	// Outbound leg: start_pos -> apex
+	prev_pos = start_pos;
 	for ( s = 1; s <= steps; s++ )
 	{
 		if ( !IsDefined( blade ) || ( IsDefined( blade.bz_special_deleted ) && blade.bz_special_deleted ) )
@@ -1085,13 +1128,36 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			start_pos[1] + ( ( apex[1] - start_pos[1] ) * t ),
 			start_pos[2] + ( ( apex[2] - start_pos[2] ) * t )
 		);
+		step_tr = BulletTrace( prev_pos, pos, false, player );
+		if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
+		{
+			safe_f = step_tr["fraction"] - 0.05;
+			if ( safe_f < 0.0 )
+			{
+				safe_f = 0.0;
+			}
+			pos = (
+				prev_pos[0] + ( ( pos[0] - prev_pos[0] ) * safe_f ),
+				prev_pos[1] + ( ( pos[1] - prev_pos[1] ) * safe_f ),
+				prev_pos[2] + ( ( pos[2] - prev_pos[2] ) * safe_f )
+			);
+			blade MoveTo( pos, step_dt );
+			blade RotateYaw( 720, step_dt );
+			outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
+			prev_pos = pos;
+			apex = pos;
+			wait( step_dt );
+			break;
+		}
 		blade MoveTo( pos, step_dt );
 		blade RotateYaw( 720, step_dt );
-		outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced );
+		outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
+		prev_pos = pos;
 		wait( step_dt );
 	}
 
-	// Return leg: curves smoothly back to player's hand
+	// Return leg: curves smoothly back to player's hand (clamped against side walls)
+	prev_pos = apex;
 	for ( s = 1; s <= steps; s++ )
 	{
 		if ( !IsDefined( blade ) || ( IsDefined( blade.bz_special_deleted ) && blade.bz_special_deleted ) )
@@ -1110,16 +1176,50 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			apex[1] + ( ( catch_pos[1] - apex[1] ) * t ) + ( right[1] * curve ),
 			apex[2] + ( ( catch_pos[2] - apex[2] ) * t )
 		);
+		step_tr = BulletTrace( prev_pos, pos, false, player );
+		if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
+		{
+			// Slide along the unobstructed direct path toward player instead of clipping through a side wall.
+			direct_pos = (
+				apex[0] + ( ( catch_pos[0] - apex[0] ) * t ),
+				apex[1] + ( ( catch_pos[1] - apex[1] ) * t ),
+				apex[2] + ( ( catch_pos[2] - apex[2] ) * t )
+			);
+			direct_tr = BulletTrace( prev_pos, direct_pos, false, player );
+			if ( IsDefined( direct_tr ) && IsDefined( direct_tr["fraction"] ) && direct_tr["fraction"] < 1.0 )
+			{
+				safe_f = direct_tr["fraction"] - 0.05;
+				if ( safe_f < 0.0 )
+				{
+					safe_f = 0.0;
+				}
+				pos = (
+					prev_pos[0] + ( ( direct_pos[0] - prev_pos[0] ) * safe_f ),
+					prev_pos[1] + ( ( direct_pos[1] - prev_pos[1] ) * safe_f ),
+					prev_pos[2] + ( ( direct_pos[2] - prev_pos[2] ) * safe_f )
+				);
+			}
+			else
+			{
+				pos = direct_pos;
+			}
+		}
 		blade MoveTo( pos, step_dt );
 		blade RotateYaw( 720, step_dt );
-		return_hits = return_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced );
+		return_hits = return_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
+		prev_pos = pos;
 		wait( step_dt );
 	}
 
+	pierce_total = 0;
+	if ( IsDefined( blade ) && IsDefined( blade.bz_pierced ) )
+	{
+		pierce_total = blade.bz_pierced.size;
+	}
 	deleted = bz_special_untrack_and_delete_entity( blade );
 
 	res = SpawnStruct();
-	res.pierce_count = pierced.size;
+	res.pierce_count = pierce_total;
 	res.outbound_hits = outbound_hits;
 	res.return_hits = return_hits;
 	res.damage = dmg;

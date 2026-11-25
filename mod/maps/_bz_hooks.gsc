@@ -791,6 +791,11 @@ bz_on_player_spawned( player )
 
 	bz_recompute_player_speed( player );
 	bz_recompute_player_max_health( player );
+
+	if ( IsDefined( player.gauntlet_bz_restore_pending ) && player.gauntlet_bz_restore_pending && IsDefined( player.bz_deferred_restore_fn ) )
+	{
+		[[ player.bz_deferred_restore_fn ]]( player, player.bz_deferred_restore_map );
+	}
 }
 
 bz_on_player_downed( player )
@@ -1674,6 +1679,8 @@ bz_recompute_player_max_health( player )
 		{
 			player.health = max_hp;
 		}
+		// WaW 1.7 resets player.maxhealth back to 100 whenever player.health is written.
+		player.maxhealth = max_hp;
 	}
 	return max_hp;
 }

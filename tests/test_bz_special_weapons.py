@@ -915,8 +915,11 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
             all_zombies.append(z)
         gsc.ai_enemies.extend(all_zombies)
 
-        # Wall at x = 420 -> fraction = 400 / 520 (~0.77) stops outbound before 520
+        # Wall at x = 420 -> fraction = 400 / 520 (~0.77) stops outbound before 520,
+        # while unobstructed traces in front of the wall (x < 420) pass with fraction 1.0.
         def wall_stop_trace(start: GscArray, end: GscArray, _hit_chars: bool, _ignore: Any) -> dict[str, Any]:
+            if max(float(start[0]), float(end[0])) < 420.0:
+                return {"fraction": 1.0, "position": end}
             return {
                 "fraction": 0.77,
                 "position": GscArray([420.0, float(start[1]), float(start[2])]),

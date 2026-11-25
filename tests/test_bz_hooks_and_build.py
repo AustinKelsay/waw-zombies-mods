@@ -1724,7 +1724,8 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("user.score >= maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
         self.assertIn("user.score < maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
         self.assertIn(
-            "user maps\\_zombiemode_score::minus_to_player_score( maps\\_bz_hooks::bz_box_cost_modify( user, cost ) );",
+            "user.bz_last_box_cost = maps\\_bz_hooks::bz_box_cost_modify( user, cost ); "
+            "user maps\\_zombiemode_score::minus_to_player_score( user.bz_last_box_cost );",
             dlc_patched,
         )
         # Wall-buy cabinet in weapon_spawn_think() must remain untouched!
@@ -2096,6 +2097,14 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             "\t\treturn;\n"
             "\t}\n"
             "}\n"
+            "revive_trigger_think()\n"
+            "{\n"
+            "\twhile ( 1 )\n"
+            "\t{\n"
+            "\t\twait ( 0.1 );\n"
+            "\t\tself.revivetrigger setHintString( \"\" );\n"
+            "\t}\n"
+            "}\n"
             "revive_do_revive( playerBeingRevived, reviverGun )\n"
             "{\n"
             "\treviveTime = 3;\n"
@@ -2103,16 +2112,27 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             "\t{\n"
             "\t\treviveTime = reviveTime / 2;\n"
             "\t}\n"
+            "\tif ( !revived )\n"
+            "\t{\n"
+            "\t\tplayerBeingRevived stoprevive( self );\n"
+            "\t}\n"
+            "\tplayerBeingRevived.revivetrigger setHintString( \"\" );\n"
+            "\tplayerBeingRevived.revivetrigger.beingRevived = 0;\n"
+            "\treturn revived;\n"
             "}\n"
             "revive_success( reviver )\n"
             "{\n"
             "\tself reviveplayer();\n"
+            "\tself laststand_giveback_player_weapons();\n"
             "}\n"
         ).encode("latin1")
         patched_ls = self.bm.inject_laststand_hooks(synthetic_ls).decode("latin1")
         self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", patched_ls)
         self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", patched_ls)
         self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", patched_ls)
+        self.assertIn("if ( !IsDefined( self.revivetrigger ) ) { return; }", patched_ls)
+        self.assertIn("if ( !IsDefined( playerBeingRevived ) || !IsDefined( playerBeingRevived.revivetrigger ) )", patched_ls)
+        self.assertIn("maps\\_bz_perks::bz_perks_on_player_revived( self, reviver );", patched_ls)
         self.assertIn("\tself reviveplayer();", patched_ls)
 
         # Real installed stock scripts (runs on plebdev-ultra when WaW fastfiles exist)
@@ -2130,6 +2150,8 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 wp_patched = self.bm.inject_zombiemode_weapons_hooks(wp).decode("latin1")
                 self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, false )", wp_patched)
                 self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, true )", wp_patched)
+                if m in ("nazi_zombie_asylum", "nazi_zombie_sumpf", "nazi_zombie_factory"):
+                    self.assertIn("bz_refund = maps\\_bz_hooks::bz_box_cost_modify(", wp_patched)
 
             sc = self.bm.extract_stock_script(
                 "nazi_zombie_factory", "maps/_zombiemode_score.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT
@@ -2147,6 +2169,9 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             self.assertIn("reviveTime = maps\\_bz_hooks::bz_get_revive_time( self, 3.0 );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_apply_revive_completed( reviver, self );", ls_patched)
             self.assertIn("maps\\_bz_perks::bz_perks_try_consume_solo_revive( self )", ls_patched)
+            self.assertIn("if ( !IsDefined( self.revivetrigger ) ) { return; }", ls_patched)
+            self.assertIn("if ( !IsDefined( playerBeingRevived ) || !IsDefined( playerBeingRevived.revivetrigger ) )", ls_patched)
+            self.assertIn("maps\\_bz_perks::bz_perks_on_player_revived( self, reviver );", ls_patched)
 
             # Real stock _zombiemode_perks.gsc: Factory hooks native PaP console; Verruckt & Sumpf skip cleanly
             fp = self.bm.extract_stock_script(
