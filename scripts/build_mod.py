@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import os
 import re
@@ -2674,24 +2676,76 @@ def build_iwd(stage_dir: Path) -> Path:
     return dist_iwd
 
 
+@contextmanager
+def _deploy_mod_lock(mod_dir: Path):
+    """Serialize concurrent deploy_mod() runs targeting the same mod directory (A9/S9)."""
+    lock_path = mod_dir / ".deploy.lock"
+    with lock_path.open("a+b") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def deploy_mod(dist_dir: Path, appdata: Path) -> list[Path]:
-    """Atomically deploy mod.ff and waw_gauntlet.iwd to <appdata>/mods/waw_gauntlet/."""
+    """Atomically deploy mod.ff and waw_gauntlet.iwd to <appdata>/mods/waw_gauntlet/.
+
+    Serializes overlapping deployments targeting the same mod directory, stages both
+    artifacts before replacing either destination, and rolls back any completed
+    replacement if a subsequent replace fails so mod.ff and waw_gauntlet.iwd never mismatch.
+    """
     if not appdata.is_dir():
         raise FileNotFoundError(f"World at War AppData folder is missing: {appdata}")
 
-    mod_dir = appdata / "mods" / MOD_NAME
-    mod_dir.mkdir(parents=True, exist_ok=True)
-    installed: list[Path] = []
-    for artifact_name in ("mod.ff", f"{MOD_NAME}.iwd"):
+    artifact_names = ("mod.ff", f"{MOD_NAME}.iwd")
+    sources: list[tuple[str, Path]] = []
+    for artifact_name in artifact_names:
         src = dist_dir / artifact_name
         if not src.is_file():
             raise FileNotFoundError(f"Missing built mod artifact: {src}")
-        dest = mod_dir / artifact_name
+        sources.append((artifact_name, src))
+
+    mod_dir = appdata / "mods" / MOD_NAME
+    mod_dir.mkdir(parents=True, exist_ok=True)
+
+    installed: list[Path] = []
+    replaced: list[tuple[Path, Path | None]] = []
+    with _deploy_mod_lock(mod_dir):
         with TemporaryDirectory(dir=mod_dir) as tmp:
-            staged = Path(tmp) / artifact_name
-            shutil.copyfile(src, staged)
-            staged.replace(dest)
-        installed.append(dest)
+            tmp_dir = Path(tmp)
+            staged_pairs: list[tuple[Path, Path, Path | None]] = []
+            for artifact_name, src in sources:
+                dest = mod_dir / artifact_name
+                staged = tmp_dir / artifact_name
+                shutil.copyfile(src, staged)
+                backup: Path | None = None
+                if dest.is_file():
+                    backup = tmp_dir / f"{artifact_name}.bak"
+                    shutil.copyfile(dest, backup)
+                staged_pairs.append((staged, dest, backup))
+
+            try:
+                for staged, dest, backup in staged_pairs:
+                    staged.replace(dest)
+                    replaced.append((dest, backup))
+                    installed.append(dest)
+            except BaseException:
+                restore_errors: list[str] = []
+                for dest, backup in reversed(replaced):
+                    try:
+                        if backup is not None and backup.is_file():
+                            backup.replace(dest)
+                        else:
+                            dest.unlink(missing_ok=True)
+                    except OSError as exc:
+                        restore_errors.append(f"{dest}: {exc}")
+                if restore_errors:
+                    print(
+                        "WARNING: Failed to roll back partial mod deployment: " + "; ".join(restore_errors),
+                        file=sys.stderr,
+                    )
+                raise
     return installed
 
 

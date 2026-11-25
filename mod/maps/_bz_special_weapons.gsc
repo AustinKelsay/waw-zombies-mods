@@ -1010,11 +1010,31 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	eye = player GetEye();
 	angles = player GetPlayerAngles();
 	fwd = AnglesToForward( angles );
-	start_pos = (
+	raw_start = (
 		eye[0] + ( fwd[0] * 24.0 ),
 		eye[1] + ( fwd[1] * 24.0 ),
 		eye[2] + ( fwd[2] * 24.0 )
 	);
+
+	// A5/S5: Trace from eye to the 24-unit launch point first so thin cover at point-blank
+	// keeps both launch position and apex on the player's side of the wall.
+	start_pos = raw_start;
+	blocked_at_start = false;
+	tr_start = BulletTrace( eye, raw_start, false, player );
+	if ( IsDefined( tr_start ) && IsDefined( tr_start["fraction"] ) && tr_start["fraction"] < 1.0 )
+	{
+		blocked_at_start = true;
+		safe_start_frac = tr_start["fraction"] - 0.15;
+		if ( safe_start_frac < 0.0 )
+		{
+			safe_start_frac = 0.0;
+		}
+		start_pos = (
+			eye[0] + ( fwd[0] * 24.0 * safe_start_frac ),
+			eye[1] + ( fwd[1] * 24.0 * safe_start_frac ),
+			eye[2] + ( fwd[2] * 24.0 * safe_start_frac )
+		);
+	}
 
 	max_range = 520.0;
 	raw_end = (
@@ -1023,20 +1043,24 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 		start_pos[2] + ( fwd[2] * max_range )
 	);
 
-	apex = raw_end;
-	tr = BulletTrace( start_pos, raw_end, false, player );
-	if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
+	apex = start_pos;
+	if ( !blocked_at_start )
 	{
-		safe_frac = tr["fraction"] - 0.05;
-		if ( safe_frac < 0.0 )
+		apex = raw_end;
+		tr = BulletTrace( start_pos, raw_end, false, player );
+		if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
 		{
-			safe_frac = 0.0;
+			safe_frac = tr["fraction"] - 0.05;
+			if ( safe_frac < 0.0 )
+			{
+				safe_frac = 0.0;
+			}
+			apex = (
+				start_pos[0] + ( ( raw_end[0] - start_pos[0] ) * safe_frac ),
+				start_pos[1] + ( ( raw_end[1] - start_pos[1] ) * safe_frac ),
+				start_pos[2] + ( ( raw_end[2] - start_pos[2] ) * safe_frac )
+			);
 		}
-		apex = (
-			start_pos[0] + ( ( raw_end[0] - start_pos[0] ) * safe_frac ),
-			start_pos[1] + ( ( raw_end[1] - start_pos[1] ) * safe_frac ),
-			start_pos[2] + ( ( raw_end[2] - start_pos[2] ) * safe_frac )
-		);
 	}
 
 	map_name = maps\_bz_hooks::bz_get_map_name();
@@ -1265,9 +1289,31 @@ bz_special_snap_to_floor( origin, ignore_ent )
 	return origin;
 }
 
+bz_special_player_is_downed( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.is_in_laststand ) && player.is_in_laststand )
+	{
+		return true;
+	}
+	if ( IsDefined( player.in_last_stand ) && player.in_last_stand )
+	{
+		return true;
+	}
+	return false;
+}
+
 bz_special_get_spawn_points()
 {
-	spawns = GetEntArray( "initial_spawn_points", "targetname" );
+	// S1: Stock WaW 1.7 maps store initial_spawn_points as script structs (via common_scripts\utility::getstructarray).
+	spawns = common_scripts\utility::getstructarray( "initial_spawn_points", "targetname" );
 	if ( IsDefined( spawns ) && spawns.size > 0 )
 	{
 		return spawns;
@@ -1275,6 +1321,11 @@ bz_special_get_spawn_points()
 	if ( IsDefined( level.initial_spawn_points ) && level.initial_spawn_points.size > 0 )
 	{
 		return level.initial_spawn_points;
+	}
+	spawns = GetEntArray( "initial_spawn_points", "targetname" );
+	if ( IsDefined( spawns ) && spawns.size > 0 )
+	{
+		return spawns;
 	}
 	spawns = GetEntArray( "info_player_start", "classname" );
 	if ( IsDefined( spawns ) && spawns.size > 0 )
@@ -1287,25 +1338,98 @@ bz_special_get_spawn_points()
 bz_special_resolve_spawn_destination( player, slot_index )
 {
 	spawns = bz_special_get_spawn_points();
-	base_org = ( 0, 0, 64 );
+	base_org = undefined;
 	base_ang = undefined;
 
 	if ( spawns.size > 0 )
 	{
-		idx = Int( slot_index ) % spawns.size;
-		if ( idx < 0 )
+		chosen = undefined;
+		map_name = maps\_bz_hooks::bz_get_map_name();
+		// S1/O4/F7: On Verruckt (nazi_zombie_asylum), honor the player's stock-assigned spawn wing
+		// (player.respawn_point -> player.spawn_side -> closest to bz_initial_spawn_origin) so Portal
+		// Grenade never warps a player across the locked power door to the opposite wing.
+		if ( map_name == "nazi_zombie_asylum" && IsDefined( player ) )
 		{
-			idx = 0;
+			if ( IsDefined( player.respawn_point ) && IsDefined( player.respawn_point.origin ) )
+			{
+				chosen = player.respawn_point;
+			}
+			else if ( IsDefined( player.spawn_side ) && player.spawn_side != "" )
+			{
+				side_spawns = [];
+				for ( si = 0; si < spawns.size; si++ )
+				{
+					cand = spawns[si];
+					if ( IsDefined( cand ) && IsDefined( cand.origin ) &&
+						IsDefined( cand.script_noteworthy ) && cand.script_noteworthy == player.spawn_side )
+					{
+						side_spawns[side_spawns.size] = cand;
+					}
+				}
+				if ( side_spawns.size > 0 )
+				{
+					sidx = Int( slot_index ) % side_spawns.size;
+					if ( sidx < 0 )
+					{
+						sidx = 0;
+					}
+					chosen = side_spawns[sidx];
+				}
+			}
+			if ( !IsDefined( chosen ) && IsDefined( player.bz_initial_spawn_origin ) )
+			{
+				best_dist = 9999999.0;
+				for ( si = 0; si < spawns.size; si++ )
+				{
+					cand = spawns[si];
+					if ( !IsDefined( cand ) || !IsDefined( cand.origin ) )
+					{
+						continue;
+					}
+					d = Distance( player.bz_initial_spawn_origin, cand.origin );
+					if ( d < best_dist )
+					{
+						best_dist = d;
+						chosen = cand;
+					}
+				}
+			}
 		}
-		sp = spawns[idx];
-		if ( IsDefined( sp ) && IsDefined( sp.origin ) )
+		if ( !IsDefined( chosen ) )
 		{
-			base_org = sp.origin;
+			idx = Int( slot_index ) % spawns.size;
+			if ( idx < 0 )
+			{
+				idx = 0;
+			}
+			chosen = spawns[idx];
 		}
-		if ( IsDefined( sp ) && IsDefined( sp.angles ) )
+		if ( IsDefined( chosen ) && IsDefined( chosen.origin ) )
 		{
-			base_ang = sp.angles;
+			base_org = chosen.origin;
 		}
+		if ( IsDefined( chosen ) && IsDefined( chosen.angles ) )
+		{
+			base_ang = chosen.angles;
+		}
+	}
+	else if ( IsDefined( player ) && IsDefined( player.respawn_point ) && IsDefined( player.respawn_point.origin ) )
+	{
+		base_org = player.respawn_point.origin;
+		if ( IsDefined( player.respawn_point.angles ) )
+		{
+			base_ang = player.respawn_point.angles;
+		}
+	}
+	else if ( IsDefined( player ) && IsDefined( player.bz_initial_spawn_origin ) )
+	{
+		base_org = player.bz_initial_spawn_origin;
+		base_ang = player.bz_initial_spawn_angles;
+	}
+
+	if ( !IsDefined( base_org ) )
+	{
+		return undefined;
 	}
 
 	// Anti-stack ring offset so Co-op teammates never clip inside each other at spawn
@@ -1357,7 +1481,7 @@ bz_special_resolve_spawn_destination( player, slot_index )
 
 bz_special_try_activate_portal( player )
 {
-	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) )
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_special_player_is_downed( player ) )
 	{
 		return undefined;
 	}
@@ -1488,7 +1612,7 @@ bz_special_portal_tick( portal, owner )
 	for ( i = 0; i < players.size; i++ )
 	{
 		p = players[i];
-		if ( !IsDefined( p ) || !IsPlayer( p ) || !IsAlive( p ) || !IsDefined( p.origin ) )
+		if ( !IsDefined( p ) || !IsPlayer( p ) || !IsAlive( p ) || bz_special_player_is_downed( p ) || !IsDefined( p.origin ) )
 		{
 			continue;
 		}
@@ -1502,6 +1626,10 @@ bz_special_portal_tick( portal, owner )
 		{
 			slot = p GetEntityNumber();
 			dest = bz_special_resolve_spawn_destination( p, slot );
+			if ( !IsDefined( dest ) || !IsDefined( dest.origin ) )
+			{
+				continue;
+			}
 			p SetOrigin( dest.origin );
 			if ( IsDefined( dest.angles ) )
 			{
@@ -1782,6 +1910,7 @@ bz_special_watch_portal_command()
 	{
 		if ( bz_elements_enabled() &&
 			IsAlive( self ) &&
+			!bz_special_player_is_downed( self ) &&
 			( !IsDefined( self.bz_station_open ) || !self.bz_station_open ) &&
 			maps\_bz_state::bz_state_owns_portal_grenade( self ) &&
 			self UseButtonPressed() &&
@@ -1878,6 +2007,18 @@ bz_special_on_player_spawned( player )
 	{
 		return;
 	}
+	if ( !IsDefined( player.bz_initial_spawn_origin ) &&
+		IsAlive( player ) &&
+		!bz_special_player_is_downed( player ) &&
+		( !IsDefined( player.sessionstate ) || player.sessionstate != "spectator" ) &&
+		IsDefined( player.origin ) )
+	{
+		player.bz_initial_spawn_origin = player.origin;
+		if ( IsDefined( player.angles ) )
+		{
+			player.bz_initial_spawn_angles = player.angles;
+		}
+	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_special_sync_melee_slot_perk( player );
 	bz_special_ensure_player_watchers( player );
@@ -1901,10 +2042,26 @@ bz_special_on_round_start( round_num )
 		for ( i = 0; i < players.size; i++ )
 		{
 			p = players[i];
-			if ( IsDefined( p ) && maps\_bz_state::bz_state_owns_portal_grenade( p ) )
+			if ( IsDefined( p ) )
 			{
-				maps\_bz_state::bz_state_on_round_start( p );
-				bz_special_update_hud( p );
+				if ( ( !IsDefined( round_num ) || Int( round_num ) <= 1 ) &&
+					!IsDefined( p.bz_initial_spawn_origin ) &&
+					IsAlive( p ) &&
+					!bz_special_player_is_downed( p ) &&
+					( !IsDefined( p.sessionstate ) || p.sessionstate != "spectator" ) &&
+					IsDefined( p.origin ) )
+				{
+					p.bz_initial_spawn_origin = p.origin;
+					if ( IsDefined( p.angles ) )
+					{
+						p.bz_initial_spawn_angles = p.angles;
+					}
+				}
+				if ( maps\_bz_state::bz_state_owns_portal_grenade( p ) )
+				{
+					maps\_bz_state::bz_state_on_round_start( p );
+					bz_special_update_hud( p );
+				}
 			}
 		}
 	}

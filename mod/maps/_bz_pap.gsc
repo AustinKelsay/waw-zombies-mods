@@ -289,6 +289,17 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 		player GiveWeapon( native_weap );
 		player GiveMaxAmmo( native_weap );
 		player SwitchToWeapon( native_weap );
+		// S6: Preserve Mule Kick acquisition slot by replacing base weapon in-place.
+		if ( IsDefined( player.bz_primary_weapon_order ) )
+		{
+			for ( oi = 0; oi < player.bz_primary_weapon_order.size; oi++ )
+			{
+				if ( IsDefined( player.bz_primary_weapon_order[oi] ) && bz_normalize_id( player.bz_primary_weapon_order[oi] ) == weap )
+				{
+					player.bz_primary_weapon_order[oi] = native_weap;
+				}
+			}
+		}
 		bz_pap_apply_reserve_ammo( player, native_weap );
 	}
 	else
@@ -536,6 +547,23 @@ bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine
 	// Case A: Base stock native-upgradable weapon -> fall straight through to 100% stock Der Riese PaP.
 	if ( has_native_upgrade && !is_papped )
 	{
+		// A8/S12: Capture base weapon and its Mule Kick slot index before stock takes the gun
+		// so bz_pap_on_native_weapon_taken() reinserts the upgraded weapon at its original slot
+		// without overwriting intervening weapon swaps/acquisitions made while in the rollers.
+		player.bz_native_pap_pending_base = weap;
+		player.bz_native_pap_pending_upgrade = bz_pap_resolve_native_upgrade( weap );
+		player.bz_native_pap_pending_index = -1;
+		if ( IsDefined( player.bz_primary_weapon_order ) )
+		{
+			for ( si = 0; si < player.bz_primary_weapon_order.size; si++ )
+			{
+				if ( IsDefined( player.bz_primary_weapon_order[si] ) && bz_normalize_id( player.bz_primary_weapon_order[si] ) == weap )
+				{
+					player.bz_native_pap_pending_index = si;
+					break;
+				}
+			}
+		}
 		return false;
 	}
 
@@ -621,6 +649,75 @@ bz_pap_on_native_weapon_taken( player, weapon_name )
 	if ( weap == "" )
 	{
 		return;
+	}
+
+	// A8/S12: Restore Mule Kick acquisition slot in-place when stock Der Riese console returns
+	// the upgraded weapon while preserving any intervening swaps/acquisitions to other guns.
+	if ( IsDefined( player.bz_native_pap_pending_base ) && player.bz_native_pap_pending_base != "" )
+	{
+		pending_base = player.bz_native_pap_pending_base;
+		pending_upg = "";
+		if ( IsDefined( player.bz_native_pap_pending_upgrade ) )
+		{
+			pending_upg = player.bz_native_pap_pending_upgrade;
+		}
+		pending_idx = -1;
+		if ( IsDefined( player.bz_native_pap_pending_index ) )
+		{
+			pending_idx = Int( player.bz_native_pap_pending_index );
+		}
+		if ( ( pending_upg == "" || pending_upg == weap ) && IsDefined( player.bz_primary_weapon_order ) )
+		{
+			cur_order = player.bz_primary_weapon_order;
+			// Replace pending_base in-place if still present; otherwise remove any duplicate of
+			// weap and insert weap at pending_idx within the current acquisition order.
+			replaced = false;
+			cleaned = [];
+			for ( oi = 0; oi < cur_order.size; oi++ )
+			{
+				entry_w = cur_order[oi];
+				if ( !IsDefined( entry_w ) )
+				{
+					continue;
+				}
+				norm_e = bz_normalize_id( entry_w );
+				if ( norm_e == pending_base )
+				{
+					cleaned[cleaned.size] = weap;
+					replaced = true;
+				}
+				else if ( norm_e != weap )
+				{
+					cleaned[cleaned.size] = entry_w;
+				}
+			}
+			if ( replaced )
+			{
+				player.bz_primary_weapon_order = cleaned;
+			}
+			else if ( pending_idx >= 0 )
+			{
+				insert_at = pending_idx;
+				if ( insert_at > cleaned.size )
+				{
+					insert_at = cleaned.size;
+				}
+				new_order = [];
+				for ( ni = 0; ni < insert_at; ni++ )
+				{
+					new_order[new_order.size] = cleaned[ni];
+				}
+				new_order[new_order.size] = weap;
+				for ( ni = insert_at; ni < cleaned.size; ni++ )
+				{
+					new_order[new_order.size] = cleaned[ni];
+				}
+				player.bz_primary_weapon_order = new_order;
+			}
+		}
+		player.bz_native_pap_pending_base = undefined;
+		player.bz_native_pap_pending_upgrade = undefined;
+		player.bz_native_pap_pending_index = undefined;
 	}
 
 	bz_pap_apply_reserve_ammo( player, weap );

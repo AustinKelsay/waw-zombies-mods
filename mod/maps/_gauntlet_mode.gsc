@@ -274,13 +274,15 @@ on_stage_init()
 	init_fields[5] = maps\_gauntlet_log::kv( "run_id", state.run_id );
 	maps\_gauntlet_log::emit( "STAGE_INIT", maps\_gauntlet_log::join_fields( init_fields ) );
 
+	// Start late-join listener BEFORE the synchronous initial pass (which may wait up to
+	// 5s per player for stock initialization) so a co-op teammate connecting during that
+	// window cannot slip between the initial GetPlayers() snapshot and the listener.
+	level thread watch_late_joining_players( stage_info.start_round, current_map );
+
 	// Apply carried-over / floored starting points to all already-connected players
 	// synchronously once stock onPlayerSpawned finishes score initialization, so no
 	// round combat can race with score restoration.
 	apply_connected_players_starting_points( stage_info.start_round, current_map );
-
-	// Also handle players who connect later during this Stage (Co-op reconnectors / late joiners).
-	level thread watch_late_joining_players( stage_info.start_round, current_map );
 
 	// Downstream extension seam (#5 Cycle 2+ high-round setup & Prep Phase, #8 persistent HUD).
 	on_stage_ready( state, stage_info );
@@ -696,6 +698,17 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 	{
 		return;
 	}
+	if ( IsDefined( player.gauntlet_points_initializing ) && player.gauntlet_points_initializing )
+	{
+		return;
+	}
+	player.gauntlet_points_initializing = true;
+	// A1/S2: Mark stock perks as deferred before the initialization wait so a round-end
+	// checkpoint firing mid-wait never overwrites saved stock perks with [].
+	if ( !IsDefined( player.gauntlet_perks_applied ) || !player.gauntlet_perks_applied )
+	{
+		player.gauntlet_perks_deferred = true;
+	}
 
 	// Wait until stock onPlayerSpawned sets player.initialized = true so stock
 	// zombie_score_start initialization cannot overwrite carried-over points.
@@ -1005,8 +1018,23 @@ checkpoint_all_players_points()
 		register_player_tracking( player );
 		guid = get_player_guid( player );
 		name = get_player_name( player );
-		pts = get_player_score_safe( player );
-		maps\_gauntlet_state::record_player_points( guid, name, pts );
+		// A1/S2/A6: Preserve carried points and perks if this player is still mid-init
+		// (or reconnecting before apply_player_starting_points has completed).
+		points_pending = ( !IsDefined( player.gauntlet_points_applied ) || !player.gauntlet_points_applied ) &&
+			( ( IsDefined( player.gauntlet_points_initializing ) && player.gauntlet_points_initializing ) ||
+			  maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) );
+		if ( points_pending )
+		{
+			if ( !IsDefined( player.gauntlet_perks_applied ) || !player.gauntlet_perks_applied )
+			{
+				player.gauntlet_perks_deferred = true;
+			}
+		}
+		else
+		{
+			pts = get_player_score_safe( player );
+			maps\_gauntlet_state::record_player_points( guid, name, pts );
+		}
 		maps\_gauntlet_perks::snapshot_player_perks( player, get_current_map_name() );
 		if ( GetDvarInt( "bz_enabled" ) == 1 )
 		{
@@ -1094,20 +1122,32 @@ snapshot_all_players_points( current_map )
 		guid = get_player_guid( player );
 		name = get_player_name( player );
 		player_key = maps\_gauntlet_state::make_player_key( guid, name );
-		pts = get_player_score_safe( player );
+		points_pending = ( !IsDefined( player.gauntlet_points_applied ) || !player.gauntlet_points_applied ) &&
+			( ( IsDefined( player.gauntlet_points_initializing ) && player.gauntlet_points_initializing ) ||
+			  maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) );
+		if ( points_pending )
+		{
+			if ( !IsDefined( player.gauntlet_perks_applied ) || !player.gauntlet_perks_applied )
+			{
+				player.gauntlet_perks_deferred = true;
+			}
+		}
+		else
+		{
+			pts = get_player_score_safe( player );
+			maps\_gauntlet_state::record_player_points( guid, name, pts );
 
-		maps\_gauntlet_state::record_player_points( guid, name, pts );
+			fields = [];
+			fields[0] = maps\_gauntlet_log::kv( "player", player_key );
+			fields[1] = maps\_gauntlet_log::kv( "points", pts );
+			fields[2] = maps\_gauntlet_log::kv( "map", current_map );
+			maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
+		}
 
 		if ( is_player_spectating( player ) )
 		{
 			maps\_gauntlet_state::mark_player_spectator( guid, name );
 		}
-
-		fields = [];
-		fields[0] = maps\_gauntlet_log::kv( "player", player_key );
-		fields[1] = maps\_gauntlet_log::kv( "points", pts );
-		fields[2] = maps\_gauntlet_log::kv( "map", current_map );
-		maps\_gauntlet_log::emit( "POINTS_SAVED", maps\_gauntlet_log::join_fields( fields ) );
 
 		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
 		if ( GetDvarInt( "bz_enabled" ) == 1 &&
