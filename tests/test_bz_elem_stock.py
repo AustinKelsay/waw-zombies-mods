@@ -1012,6 +1012,7 @@ class TestEnhancedFlamethrower(unittest.TestCase):
                         "env/electrical/fx_elec_short_oneshot",
                         "bio/player/fx_footstep_water",
                         "misc/fx_zombie_bloodsplat",
+                        "weapon/grenade/fx_trail_rifle_grenade",
                     )
                     for fx in gsc.fx_loads
                 ),

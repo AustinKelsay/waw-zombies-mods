@@ -1165,6 +1165,93 @@ bz_get_cryo_shatter_mult()
 	return 2.50;
 }
 
+bz_calc_acid_direct_damage( round_num, zombie_health, is_pap, is_dpap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	pct = 0.25;
+	floor_dmg = 140;
+	if ( bz_is_true( is_dpap ) )
+	{
+		pct = 0.60;
+		floor_dmg = 450;
+	}
+	else if ( bz_is_true( is_pap ) )
+	{
+		pct = 0.40;
+		floor_dmg = 280;
+	}
+
+	dmg = Int( zhp * pct );
+	if ( dmg < floor_dmg )
+	{
+		dmg = floor_dmg;
+	}
+	return dmg;
+}
+
+bz_calc_acid_tick_damage( round_num, zombie_health, is_pap, is_dpap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	pct = 0.08;
+	floor_dmg = 45;
+	if ( bz_is_true( is_dpap ) )
+	{
+		pct = 0.20;
+		floor_dmg = 140;
+	}
+	else if ( bz_is_true( is_pap ) )
+	{
+		pct = 0.13;
+		floor_dmg = 85;
+	}
+
+	dmg = Int( zhp * pct );
+	if ( dmg < floor_dmg )
+	{
+		dmg = floor_dmg;
+	}
+	return dmg;
+}
+
+bz_calc_cryo_blast_damage( round_num, zombie_health, is_pap, is_dpap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	pct = 0.45;
+	floor_dmg = 350;
+	if ( bz_is_true( is_dpap ) )
+	{
+		pct = 0.90;
+		floor_dmg = 1200;
+	}
+	else if ( bz_is_true( is_pap ) )
+	{
+		pct = 0.65;
+		floor_dmg = 700;
+	}
+
+	dmg = Int( zhp * pct );
+	if ( dmg < floor_dmg )
+	{
+		dmg = floor_dmg;
+	}
+	return dmg;
+}
+
+bz_calc_crossbow_impact_damage( round_num, zombie_health, is_double_pap )
+{
+	zhp = bz_resolve_zombie_health( round_num, zombie_health );
+	dmg = Int( zhp * 0.55 );
+	if ( dmg < 500 )
+	{
+		dmg = 500;
+	}
+	if ( bz_is_true( is_double_pap ) )
+	{
+		dmg = Int( dmg * 1.75 );
+	}
+	return dmg;
+}
+
 bz_get_wunderwaffe_stun_duration()
 {
 	return 3.5;

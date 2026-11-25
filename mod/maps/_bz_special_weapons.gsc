@@ -198,7 +198,7 @@ bz_special_resolve_stock_fx( kind )
 		{
 			return level._effect["molotov_exp"];
 		}
-		ray_fx = maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
+		ray_fx = bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
 		if ( IsDefined( ray_fx ) )
 		{
 			return ray_fx;
@@ -210,9 +210,19 @@ bz_special_resolve_stock_fx( kind )
 		return undefined;
 	}
 
+	if ( kind == "crossbow_trail" )
+	{
+		trail_fx = bz_elem_new_get_cached_fx( "weapon/grenade/fx_trail_rifle_grenade" );
+		if ( IsDefined( trail_fx ) )
+		{
+			return trail_fx;
+		}
+		return undefined;
+	}
+
 	if ( kind == "boomerang" || kind == "boomerang_hit" )
 	{
-		blood_fx = maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_zombie_bloodsplat" );
+		blood_fx = bz_elem_new_get_cached_fx( "misc/fx_zombie_bloodsplat" );
 		if ( IsDefined( blood_fx ) )
 		{
 			return blood_fx;
@@ -229,7 +239,7 @@ bz_special_resolve_stock_fx( kind )
 		{
 			return level._effect["powerup_grabbed"];
 		}
-		return maps\_bz_elem_new::bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
+		return bz_elem_new_get_cached_fx( "misc/fx_exp_raygun_impact" );
 	}
 
 	if ( kind == "boomerang_trail" )
@@ -522,9 +532,21 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 
 	eye = player GetEye();
 	base_angles = player GetPlayerAngles();
-	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, "bz_multi_crossbow" );
+	is_dpap = bz_state_is_weapon_double_pap( player, "bz_multi_crossbow" );
 	round_num = bz_special_get_current_round();
 	max_range = 1600;
+
+	// Hip-fire sweeps a 3-bolt crowd fan (-6, 0, +6 deg); scoped ADS tightens to a
+	// precision 3-bolt skewer cluster (-2.5, 0, +2.5 deg).
+	spread_step = 6.0;
+	is_ads = false;
+	if ( player AdsButtonPressed() )
+	{
+		spread_step = 2.5;
+		is_ads = true;
+	}
+
+	PlaySoundAtPosition( "attack_whoosh", eye );
 
 	bolts = [];
 	stuck_zombies = 0;
@@ -532,7 +554,7 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 
 	for ( i = 0; i < bolt_count; i++ )
 	{
-		yaw_offset = ( i - ( ( bolt_count - 1 ) * 0.5 ) ) * 6.0;
+		yaw_offset = ( i - ( ( bolt_count - 1 ) * 0.5 ) ) * spread_step;
 		bolt_angles = ( base_angles[0], base_angles[1] + yaw_offset, base_angles[2] );
 		dir = AnglesToForward( bolt_angles );
 		trace_end = (
@@ -572,18 +594,18 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 		}
 
 		travel_dist = Distance( spawn_pos, impact_pos );
-		travel_time = travel_dist / 2400.0;
+		travel_time = travel_dist / 2600.0;
 		if ( travel_time < 0.05 )
 		{
 			travel_time = 0.05;
 		}
-		if ( travel_time > 0.22 )
+		if ( travel_time > 0.20 )
 		{
-			travel_time = 0.22;
+			travel_time = 0.20;
 		}
 
-		// Staggered triple-bang cascade: 1.00s, 1.12s, 1.24s.
-		fuse_sec = 1.00 + ( bolts.size * 0.12 );
+		// Snappy staggered tactical explosive-tip fuse: 0.65s, 0.77s, 0.89s.
+		fuse_sec = 0.65 + ( bolts.size * 0.12 );
 
 		bolt = Spawn( "script_model", spawn_pos );
 		bolt.angles = bolt_angles;
@@ -596,8 +618,10 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 		bolt.bz_impact_pos = impact_pos;
 		bolt.bz_travel_time = travel_time;
 		bolt.bz_fuse_time = fuse_sec;
+		bolt.bz_round_num = round_num;
 		bolt.bz_arrived = false;
 		bolt.bz_detonated = false;
+		bolt.bz_impact_applied = false;
 		bolt.bz_is_double_pap = is_dpap;
 		bolt.bz_stuck_entity = undefined;
 		bolt.bz_stuck_z_offset = 0.0;
@@ -636,28 +660,51 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 			stuck_world++;
 		}
 
+		bz_special_play_stock_fx( "crossbow_trail", spawn_pos );
 		bz_special_track_entity( bolt );
 		bolts[bolts.size] = bolt;
 		player thread bz_special_crossbow_bolt_fuse( bolt, is_dpap, round_num );
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "bolts", bolts.size );
 	fields[2] = bz_log_kv( "stuck_zombies", stuck_zombies );
 	fields[3] = bz_log_kv( "stuck_world", stuck_world );
-	fields[4] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	fields[4] = bz_log_kv( "ads", bz_bool_int( is_ads ) );
+	fields[5] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
 	bz_log_emit( "SPECIAL_CROSSBOW_FIRE", bz_log_join( fields ) );
 
 	res = SpawnStruct();
 	res.bolts = bolts;
 	res.stuck_zombies = stuck_zombies;
 	res.stuck_world = stuck_world;
+	res.ads = is_ads;
 	res.double_pap = is_dpap;
 	return res;
 }
 
-// Synchronous/testable bolt flight & stick helper (zero endon() inside; called from child thread).
+bz_special_crossbow_pin_timer( pin_sec, expected_until )
+{
+	self endon( "death" );
+	level endon( "end_game" );
+
+	wait( pin_sec );
+	if ( IsDefined( self ) )
+	{
+		if ( IsDefined( expected_until ) && IsDefined( self.bz_crossbow_pin_until ) && self.bz_crossbow_pin_until > expected_until )
+		{
+			return;
+		}
+		self.bz_crossbow_pin_until = 0;
+		if ( IsAlive( self ) )
+		{
+			bz_recompute_zombie_move_rate( self );
+		}
+	}
+}
+
+// Synchronous/testable bolt flight, piercing impact & stick helper (zero endon() inside; called from child thread).
 bz_special_crossbow_bolt_fly_and_stick( bolt )
 {
 	if ( !IsDefined( bolt ) || ( IsDefined( bolt.bz_special_deleted ) && bolt.bz_special_deleted ) )
@@ -700,17 +747,68 @@ bz_special_crossbow_bolt_fly_and_stick( bolt )
 	bolt.bz_arrived = true;
 	if ( IsDefined( bolt.bz_stuck_entity ) && IsAlive( bolt.bz_stuck_entity ) && IsDefined( bolt.bz_stuck_entity.origin ) )
 	{
+		stuck_z = bolt.bz_stuck_entity;
 		z_off = 40.0;
 		if ( IsDefined( bolt.bz_stuck_z_offset ) && bolt.bz_stuck_z_offset > 0.0 )
 		{
 			z_off = bolt.bz_stuck_z_offset;
 		}
-		bolt.origin = (
-			bolt.bz_stuck_entity.origin[0],
-			bolt.bz_stuck_entity.origin[1],
-			bolt.bz_stuck_entity.origin[2] + z_off
+		hit_pos = (
+			stuck_z.origin[0],
+			stuck_z.origin[1],
+			stuck_z.origin[2] + z_off
 		);
-		bolt LinkTo( bolt.bz_stuck_entity );
+		bolt.origin = hit_pos;
+		bolt.bz_impact_pos = hit_pos;
+
+		if ( !IsDefined( bolt.bz_impact_applied ) || !bolt.bz_impact_applied )
+		{
+			bolt.bz_impact_applied = true;
+			r = bz_special_get_current_round();
+			if ( IsDefined( bolt.bz_round_num ) && Int( bolt.bz_round_num ) > 0 )
+			{
+				r = Int( bolt.bz_round_num );
+			}
+			dpap = IsDefined( bolt.bz_is_double_pap ) && bolt.bz_is_double_pap;
+			zhp = bz_special_get_round_zombie_health( r );
+			raw_impact = maps\_bz_rules::bz_calc_crossbow_impact_damage( r, zhp, dpap );
+			final_impact = bz_elem_new_apply_status_damage_mult( stuck_z, raw_impact, "MOD_PROJECTILE", "bz_multi_crossbow", bolt.bz_owner, hit_pos );
+
+			stuck_z.bz_in_damage_dispatch = true;
+			stuck_z.bz_damage_dispatch_time = GetTime();
+			stuck_z DoDamage( final_impact, hit_pos, bolt.bz_owner );
+			bolt.bz_impact_damage = final_impact;
+
+			bz_special_play_stock_fx( "boomerang_hit", hit_pos );
+			PlaySoundAtPosition( "impact_wood_flesh", hit_pos );
+
+			if ( IsAlive( stuck_z ) && !bz_special_is_hidden_spawning_dog( stuck_z ) )
+			{
+				bolt LinkTo( stuck_z );
+				bz_save_zombie_base_move_rate( stuck_z );
+				pin_until = GetTime() + 350;
+				if ( !IsDefined( stuck_z.bz_crossbow_pin_until ) || stuck_z.bz_crossbow_pin_until < pin_until )
+				{
+					stuck_z.bz_crossbow_pin_until = pin_until;
+				}
+				bz_recompute_zombie_move_rate( stuck_z );
+				stuck_z thread bz_special_crossbow_pin_timer( 0.35, stuck_z.bz_crossbow_pin_until );
+			}
+			else
+			{
+				// Lethal skewer: keep bolt pinned at hit_pos instead of linked to a dying corpse.
+				bolt.bz_stuck_entity = undefined;
+				bolt.origin = hit_pos;
+			}
+		}
+		else if ( IsAlive( stuck_z ) )
+		{
+			bolt LinkTo( stuck_z );
+		}
+	}
+	else if ( IsDefined( dest ) )
+	{
+		PlaySoundAtPosition( "impact_wood_hard", dest );
 	}
 
 	return travel_time;
@@ -727,7 +825,7 @@ bz_special_crossbow_bolt_fuse( bolt, is_double_pap, round_num )
 
 	travel_time = bz_special_crossbow_bolt_fly_and_stick( bolt );
 
-	fuse = 1.00;
+	fuse = 0.65;
 	if ( IsDefined( bolt.bz_fuse_time ) && bolt.bz_fuse_time > 0.0 )
 	{
 		fuse = bolt.bz_fuse_time;
@@ -793,7 +891,7 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 
 	zombie_hp = bz_special_get_round_zombie_health( r );
 	bolt_dmg = maps\_bz_rules::bz_calc_crossbow_bolt_damage( r, zombie_hp, dpap );
-	radius = 160;
+	radius = 112;
 
 	hits = 0;
 	enemies = GetAiSpeciesArray( "axis", "all" );
@@ -808,7 +906,7 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 			}
 			if ( Distance( z.origin, center ) <= radius )
 			{
-				final_bolt_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, bolt_dmg, "MOD_EXPLOSIVE", "bz_multi_crossbow", player, center );
+				final_bolt_dmg = bz_elem_new_apply_status_damage_mult( z, bolt_dmg, "MOD_EXPLOSIVE", "bz_multi_crossbow", player, center );
 				z.bz_in_damage_dispatch = true;
 				z.bz_damage_dispatch_time = GetTime();
 				z DoDamage( final_bolt_dmg, center, player );
@@ -846,18 +944,18 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 
 	bz_special_play_stock_fx( "crossbow", center );
 	PlaySoundAtPosition( "grenade_explode_default", center );
-	Earthquake( 0.25, 0.25, center, 192 );
+	Earthquake( 0.22, 0.22, center, 160 );
 
 	// Emit telemetry BEFORE deleting bolt so bolt Delete() firing notify("death")
 	// inside bz_special_crossbow_bolt_fuse() cannot abort telemetry emission.
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "round", r );
 	fields[2] = bz_log_kv( "damage", bolt_dmg );
 	fields[3] = bz_log_kv( "radius", radius );
 	fields[4] = bz_log_kv( "hits", hits );
-	fields[5] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( dpap ) );
-	fields[6] = bz_log_kv( "self_immune", maps\_bz_hooks::bz_bool_int( self_immune ) );
+	fields[5] = bz_log_kv( "double_pap", bz_bool_int( dpap ) );
+	fields[6] = bz_log_kv( "self_immune", bz_bool_int( self_immune ) );
 	bz_log_emit( "SPECIAL_CROSSBOW_DETONATE", bz_log_join( fields ) );
 
 	if ( IsDefined( bolt.bz_stuck_entity ) )
@@ -969,9 +1067,9 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list, blad
 			dz = 0 - dz;
 		}
 
-		if ( hdist <= 56.0 && dz <= 72.0 )
+		if ( hdist <= 64.0 && dz <= 72.0 )
 		{
-			target_pos = ( z.origin[0], z.origin[1], z.origin[2] + 40.0 );
+			target_pos = ( z.origin[0], z.origin[1], z.origin[2] + 44.0 );
 			los = BulletTrace( pos, target_pos, false, player );
 			if ( IsDefined( los ) && IsDefined( los["fraction"] ) && los["fraction"] < 0.99 )
 			{
@@ -986,11 +1084,12 @@ bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, pierced_list, blad
 			{
 				pierced_list[pierced_list.size] = z;
 			}
-			final_blade_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, dmg, "MOD_PROJECTILE", "bz_blade_boomerang", player, pos );
+			final_blade_dmg = bz_elem_new_apply_status_damage_mult( z, dmg, "MOD_PROJECTILE", "bz_blade_boomerang", player, target_pos );
 			z.bz_in_damage_dispatch = true;
 			z.bz_damage_dispatch_time = GetTime();
-			z DoDamage( final_blade_dmg, pos, player );
-			bz_special_play_stock_fx( "boomerang", pos );
+			z DoDamage( final_blade_dmg, target_pos, player );
+			bz_special_play_stock_fx( "boomerang", target_pos );
+			PlaySoundAtPosition( "melee_knife_hit_body", target_pos );
 			hits++;
 		}
 	}
@@ -1063,16 +1162,17 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 		}
 	}
 
-	map_name = maps\_bz_hooks::bz_get_map_name();
+	map_name = bz_get_map_name();
 	model_name = bz_special_get_boomerang_model( map_name );
 	round_num = bz_special_get_current_round();
 	zombie_hp = bz_special_get_round_zombie_health( round_num );
-	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, "bz_blade_boomerang" );
+	is_dpap = bz_state_is_weapon_double_pap( player, "bz_blade_boomerang" );
 	dmg = maps\_bz_rules::bz_calc_boomerang_damage( round_num, zombie_hp, is_dpap );
 	max_pierce = maps\_bz_rules::bz_get_boomerang_max_pierce();
 
+	// Tilt blade flat horizontally (roll 85 deg) so RotateYaw spins it visibly like a thrown boomerang.
 	blade = Spawn( "script_model", start_pos );
-	blade.angles = angles;
+	blade.angles = ( angles[0], angles[1], 85.0 );
 	blade SetModel( model_name );
 	blade SetContents( 0 );
 	blade NotSolid();
@@ -1080,14 +1180,16 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	blade.bz_owner = player;
 	bz_special_track_entity( blade );
 
+	PlaySoundAtPosition( "attack_whoosh", start_pos );
+
 	actual_range = Int( Distance( start_pos, apex ) );
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "model", model_name );
 	fields[2] = bz_log_kv( "range", actual_range );
 	fields[3] = bz_log_kv( "max_pierce", max_pierce );
 	fields[4] = bz_log_kv( "damage", dmg );
-	fields[5] = bz_log_kv( "double_pap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
+	fields[5] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
 	bz_log_emit( "SPECIAL_BOOMERANG_THROW", bz_log_join( fields ) );
 
 	player thread bz_special_boomerang_flight_thread( blade, start_pos, apex, dmg, max_pierce );
@@ -1116,7 +1218,7 @@ bz_special_boomerang_flight_thread( blade, start_pos, apex, dmg, max_pierce )
 	bz_special_run_boomerang_flight( self, blade, start_pos, apex, dmg, max_pierce );
 }
 
-// Synchronous/testable flight simulation (zero endon() inside; called from child thread).
+// Synchronous/testable elliptical boomerang simulation (zero endon() inside; called from child thread).
 bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce )
 {
 	if ( !IsDefined( blade ) )
@@ -1124,8 +1226,12 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 		return undefined;
 	}
 
-	steps = 8;
+	steps = 11;
 	step_dt = 0.05;
+	// 135 deg per 0.05s tick = 2700 deg/s (7.5 rev/s), visibly spinning in WaW's 20Hz snapshot
+	// stream instead of aliasing to a stationary pose like 720 deg/tick.
+	spin_deg = 135;
+
 	// Store pierced list on blade entity so WaW 1.7 GSC mutates it by reference
 	// across steps (GSC passes plain arrays by value).
 	blade.bz_pierced = [];
@@ -1138,7 +1244,31 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 		right = AnglesToRight( player GetPlayerAngles() );
 	}
 
-	// Outbound leg: start_pos -> apex
+	throw_dist = Distance( start_pos, apex );
+	out_arc = throw_dist * 0.11;
+	if ( out_arc > 44.0 )
+	{
+		out_arc = 44.0;
+	}
+	if ( throw_dist < 40.0 )
+	{
+		out_arc = 0.0;
+	}
+	ret_arc = throw_dist * 0.22;
+	if ( ret_arc > 88.0 )
+	{
+		ret_arc = 88.0;
+	}
+	if ( throw_dist >= 80.0 && ret_arc < 56.0 )
+	{
+		ret_arc = 56.0;
+	}
+	if ( throw_dist < 40.0 )
+	{
+		ret_arc = 0.0;
+	}
+
+	// Outbound leg: curves smoothly outward along the left edge of the oval while sweeping to apex.
 	prev_pos = start_pos;
 	for ( s = 1; s <= steps; s++ )
 	{
@@ -1147,41 +1277,64 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			break;
 		}
 		t = ( s * 1.0 ) / ( steps * 1.0 );
-		pos = (
+		bow = 4.0 * t * ( 1.0 - t );
+		out_curve = bow * out_arc;
+		out_lift = bow * 10.0;
+		direct_pos = (
 			start_pos[0] + ( ( apex[0] - start_pos[0] ) * t ),
 			start_pos[1] + ( ( apex[1] - start_pos[1] ) * t ),
 			start_pos[2] + ( ( apex[2] - start_pos[2] ) * t )
 		);
+		pos = (
+			direct_pos[0] - ( right[0] * out_curve ),
+			direct_pos[1] - ( right[1] * out_curve ),
+			direct_pos[2] + out_lift
+		);
 		step_tr = BulletTrace( prev_pos, pos, false, player );
 		if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
 		{
-			safe_f = step_tr["fraction"] - 0.05;
-			if ( safe_f < 0.0 )
+			// If the curved arc clips a side wall, fall back to the unobstructed direct line first.
+			direct_tr = BulletTrace( prev_pos, direct_pos, false, player );
+			if ( IsDefined( direct_tr ) && IsDefined( direct_tr["fraction"] ) && direct_tr["fraction"] < 1.0 )
 			{
-				safe_f = 0.0;
+				safe_f = direct_tr["fraction"] - 0.05;
+				if ( safe_f < 0.0 )
+				{
+					safe_f = 0.0;
+				}
+				pos = (
+					prev_pos[0] + ( ( direct_pos[0] - prev_pos[0] ) * safe_f ),
+					prev_pos[1] + ( ( direct_pos[1] - prev_pos[1] ) * safe_f ),
+					prev_pos[2] + ( ( direct_pos[2] - prev_pos[2] ) * safe_f )
+				);
+				blade MoveTo( pos, step_dt );
+				blade RotateYaw( spin_deg, step_dt );
+				outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
+				prev_pos = pos;
+				apex = pos;
+				wait( step_dt );
+				break;
 			}
-			pos = (
-				prev_pos[0] + ( ( pos[0] - prev_pos[0] ) * safe_f ),
-				prev_pos[1] + ( ( pos[1] - prev_pos[1] ) * safe_f ),
-				prev_pos[2] + ( ( pos[2] - prev_pos[2] ) * safe_f )
-			);
-			blade MoveTo( pos, step_dt );
-			blade RotateYaw( 720, step_dt );
-			outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
-			prev_pos = pos;
-			apex = pos;
-			wait( step_dt );
-			break;
+			pos = direct_pos;
 		}
 		blade MoveTo( pos, step_dt );
-		blade RotateYaw( 720, step_dt );
+		blade RotateYaw( spin_deg, step_dt );
+		if ( s == 4 || s == 8 )
+		{
+			PlaySoundAtPosition( "attack_whoosh", pos );
+		}
+		if ( s == 3 || s == 6 || s == 9 )
+		{
+			bz_special_play_stock_fx( "boomerang_trail", pos );
+		}
 		outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
 		prev_pos = pos;
 		wait( step_dt );
 	}
 
-	// Return leg: curves smoothly back to player's hand (clamped against side walls)
+	// Return leg: completes the opposite side of the oval and dynamically homes into the player's hand.
 	prev_pos = apex;
+	last_catch_pos = start_pos;
 	for ( s = 1; s <= steps; s++ )
 	{
 		if ( !IsDefined( blade ) || ( IsDefined( blade.bz_special_deleted ) && blade.bz_special_deleted ) )
@@ -1191,24 +1344,31 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 		catch_pos = start_pos;
 		if ( IsDefined( player ) && IsDefined( player.origin ) )
 		{
-			catch_pos = ( player.origin[0], player.origin[1], player.origin[2] + 40.0 );
+			catch_pos = (
+				player.origin[0] + ( right[0] * 6.0 ),
+				player.origin[1] + ( right[1] * 6.0 ),
+				player.origin[2] + 44.0
+			);
 		}
+		last_catch_pos = catch_pos;
 		t = ( s * 1.0 ) / ( steps * 1.0 );
-		curve = 4.0 * t * ( 1.0 - t ) * 84.0;
-		pos = (
-			apex[0] + ( ( catch_pos[0] - apex[0] ) * t ) + ( right[0] * curve ),
-			apex[1] + ( ( catch_pos[1] - apex[1] ) * t ) + ( right[1] * curve ),
+		bow = 4.0 * t * ( 1.0 - t );
+		curve = bow * ret_arc;
+		ret_lift = bow * 8.0;
+		direct_pos = (
+			apex[0] + ( ( catch_pos[0] - apex[0] ) * t ),
+			apex[1] + ( ( catch_pos[1] - apex[1] ) * t ),
 			apex[2] + ( ( catch_pos[2] - apex[2] ) * t )
+		);
+		pos = (
+			direct_pos[0] + ( right[0] * curve ),
+			direct_pos[1] + ( right[1] * curve ),
+			direct_pos[2] + ret_lift
 		);
 		step_tr = BulletTrace( prev_pos, pos, false, player );
 		if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
 		{
 			// Slide along the unobstructed direct path toward player instead of clipping through a side wall.
-			direct_pos = (
-				apex[0] + ( ( catch_pos[0] - apex[0] ) * t ),
-				apex[1] + ( ( catch_pos[1] - apex[1] ) * t ),
-				apex[2] + ( ( catch_pos[2] - apex[2] ) * t )
-			);
 			direct_tr = BulletTrace( prev_pos, direct_pos, false, player );
 			if ( IsDefined( direct_tr ) && IsDefined( direct_tr["fraction"] ) && direct_tr["fraction"] < 1.0 )
 			{
@@ -1229,7 +1389,15 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			}
 		}
 		blade MoveTo( pos, step_dt );
-		blade RotateYaw( 720, step_dt );
+		blade RotateYaw( spin_deg, step_dt );
+		if ( s == 3 || s == 7 )
+		{
+			PlaySoundAtPosition( "attack_whoosh", pos );
+		}
+		if ( s == 2 || s == 5 || s == 8 )
+		{
+			bz_special_play_stock_fx( "boomerang_trail", pos );
+		}
 		return_hits = return_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
 		prev_pos = pos;
 		wait( step_dt );
@@ -1242,12 +1410,27 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	}
 	deleted = bz_special_untrack_and_delete_entity( blade );
 
+	// True boomerang catch: only play catch foley & refill clip when the blade actually
+	// reached a standing, non-downed owner's hand (not blocked behind a wall or in Last Stand).
+	reached_hand = Distance( prev_pos, last_catch_pos ) <= 96.0;
+	refilled_clip = false;
+	if ( deleted && reached_hand && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" ) )
+	{
+		player PlayLocalSound( "knife_pull_plr" );
+		if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) == 0 )
+		{
+			player SetWeaponAmmoClip( "bz_blade_boomerang", 1 );
+			refilled_clip = true;
+		}
+	}
+
 	res = SpawnStruct();
 	res.pierce_count = pierce_total;
 	res.outbound_hits = outbound_hits;
 	res.return_hits = return_hits;
 	res.damage = dmg;
-	res.caught = true;
+	res.caught = reached_hand;
+	res.refilled_clip = refilled_clip;
 	res.deleted = deleted;
 	return res;
 }
@@ -2254,6 +2437,46 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_get_player_label( player )
+{
+	return maps\_bz_hooks::bz_get_player_label( player );
+}
+
+bz_bool_int( flag )
+{
+	return maps\_bz_hooks::bz_bool_int( flag );
+}
+
+bz_get_map_name()
+{
+	return maps\_bz_hooks::bz_get_map_name();
+}
+
+bz_recompute_zombie_move_rate( zombie )
+{
+	return maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
+}
+
+bz_save_zombie_base_move_rate( zombie )
+{
+	return maps\_bz_hooks::bz_save_zombie_base_move_rate( zombie );
+}
+
+bz_state_is_weapon_double_pap( player, weapon_name )
+{
+	return maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name );
+}
+
+bz_elem_new_get_cached_fx( fx_path )
+{
+	return maps\_bz_elem_new::bz_elem_new_get_cached_fx( fx_path );
+}
+
+bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point )
+{
+	return maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point );
 }
 
 // Local function pointers used by the gated live selftests.
