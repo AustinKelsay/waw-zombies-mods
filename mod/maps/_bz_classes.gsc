@@ -53,6 +53,10 @@ bz_class_player_is_downed( player )
 	{
 		return true;
 	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
 	if ( IsDefined( player.laststand ) && player.laststand )
 	{
 		return true;
@@ -398,6 +402,60 @@ bz_classes_on_player_downed( player )
 	}
 }
 
+bz_sapper_apply_pending_round_refill( player )
+{
+	if ( !bz_classes_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_class_player_is_downed( player ) )
+	{
+		return 0;
+	}
+	if ( bz_state_get_class( player ) != "sapper" )
+	{
+		return 0;
+	}
+	if ( !IsDefined( player.bz_sapper_pending_refill_round ) || Int( player.bz_sapper_pending_refill_round ) <= 0 )
+	{
+		return 0;
+	}
+
+	r = Int( player.bz_sapper_pending_refill_round );
+	player.bz_sapper_pending_refill_round = 0;
+	if ( ( !IsDefined( player.bz_sapper_grenade_refill_ready ) || !player.bz_sapper_grenade_refill_ready ) && player.bz_sapper_last_refill_round != r )
+	{
+		maps\_bz_state::bz_state_on_round_start( player );
+	}
+	refill_count = maps\_bz_state::bz_state_consume_sapper_grenade_refill( player );
+	if ( refill_count > 0 )
+	{
+		player.bz_sapper_last_refill_round = r;
+		bz_sapper_set_grenades( player, refill_count );
+
+		fields = [];
+		fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+		fields[1] = bz_log_kv( "count", refill_count );
+		fields[2] = bz_log_kv( "round", r );
+		bz_log_emit( "SAPPER_GRENADE_REFILL", bz_log_join( fields ) );
+	}
+	return refill_count;
+}
+
+bz_sapper_finish_revive_refill()
+{
+	self endon( "disconnect" );
+	self endon( "bz_class_changed" );
+	level endon( "end_game" );
+
+	waited = 0;
+	while ( IsDefined( self ) && bz_class_player_is_downed( self ) && waited < 40 )
+	{
+		wait( 0.05 );
+		waited++;
+	}
+	if ( IsDefined( self ) )
+	{
+		bz_sapper_apply_pending_round_refill( self );
+	}
+}
+
 bz_classes_on_player_revived( player, reviver )
 {
 	if ( !bz_classes_enabled() || !IsDefined( player ) )
@@ -413,6 +471,20 @@ bz_classes_on_player_revived( player, reviver )
 	{
 		bz_class_apply( player, active_class, true );
 		bz_class_update_hud( player );
+	}
+
+	// S10: If this Sapper was downed at round start, deliver their deferred round refill
+	// once standing and revivetrigger is gone (after stock laststand_giveback_player_weapons).
+	if ( active_class == "sapper" && IsDefined( player.bz_sapper_pending_refill_round ) && Int( player.bz_sapper_pending_refill_round ) > 0 )
+	{
+		if ( !bz_class_player_is_downed( player ) )
+		{
+			bz_sapper_apply_pending_round_refill( player );
+		}
+		else
+		{
+			player thread bz_sapper_finish_revive_refill();
+		}
 	}
 }
 
@@ -446,6 +518,15 @@ bz_classes_on_round_start( round_num )
 
 		if ( bz_state_get_class( p ) == "sapper" )
 		{
+			if ( !IsAlive( p ) || bz_class_player_is_downed( p ) )
+			{
+				if ( p.bz_sapper_last_refill_round != r )
+				{
+					p.bz_sapper_pending_refill_round = r;
+				}
+				continue;
+			}
+			p.bz_sapper_pending_refill_round = 0;
 			if ( ( !IsDefined( p.bz_sapper_grenade_refill_ready ) || !p.bz_sapper_grenade_refill_ready ) && p.bz_sapper_last_refill_round != r )
 			{
 				maps\_bz_state::bz_state_on_round_start( p );
@@ -873,21 +954,57 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 	}
 
 	cur_stock = Int( target_player GetWeaponAmmoStock( weap ) );
-	if ( cur_stock >= eff_max )
+	engine_max = Int( WeaponMaxAmmo( weap ) );
+	norm_w = bz_normalize_id( weap );
+	cur_overflow = 0;
+	if ( ( engine_max <= 0 || cur_stock <= engine_max ) &&
+		IsDefined( target_player.bz_overflow_reserve ) &&
+		IsDefined( target_player.bz_overflow_reserve[norm_w] ) )
+	{
+		cur_overflow = Int( target_player.bz_overflow_reserve[norm_w] );
+		if ( cur_overflow < 0 )
+		{
+			cur_overflow = 0;
+		}
+	}
+
+	// A4: Account for script-side bz_overflow_reserve when Double Ammo / Double PaP raises
+	// effective reserve above the weapon's engine WeaponMaxAmmo cap. Write to engine stock
+	// first and bank any rounds clamped by the engine into bz_overflow_reserve.
+	total_cur = cur_stock + cur_overflow;
+	if ( total_cur >= eff_max )
 	{
 		return 0;
 	}
 
-	new_stock = cur_stock + grant;
-	if ( new_stock > eff_max )
+	room = eff_max - total_cur;
+	added = grant;
+	if ( added > room )
 	{
-		new_stock = eff_max;
+		added = room;
+	}
+	if ( added <= 0 )
+	{
+		return 0;
 	}
 
-	added = new_stock - cur_stock;
-	if ( added > 0 )
+	desired_stock = cur_stock + added;
+	target_player SetWeaponAmmoStock( weap, desired_stock );
+	after_stock = Int( target_player GetWeaponAmmoStock( weap ) );
+	stock_gained = after_stock - cur_stock;
+	if ( stock_gained < 0 )
 	{
-		target_player SetWeaponAmmoStock( weap, new_stock );
+		stock_gained = 0;
+	}
+
+	to_overflow = added - stock_gained;
+	if ( to_overflow > 0 )
+	{
+		if ( !IsDefined( target_player.bz_overflow_reserve ) )
+		{
+			target_player.bz_overflow_reserve = [];
+		}
+		target_player.bz_overflow_reserve[norm_w] = cur_overflow + to_overflow;
 	}
 	return added;
 }
@@ -1360,6 +1477,17 @@ bz_sapper_get_total_grenades( player )
 	return clip + reserve;
 }
 
+bz_sapper_is_frag_weapon( player, weap_name )
+{
+	if ( !IsDefined( weap_name ) || weap_name == "" )
+	{
+		return true;
+	}
+	frag = bz_class_get_frag_weapon( player );
+	wn = bz_normalize_id( weap_name );
+	return ( wn == frag || IsSubStr( wn, "stielhandgranate" ) || IsSubStr( wn, "frag" ) );
+}
+
 bz_sapper_on_grenade_thrown( player, weap_name )
 {
 	if ( !IsDefined( player ) )
@@ -1372,16 +1500,12 @@ bz_sapper_on_grenade_thrown( player, weap_name )
 		return 0;
 	}
 
-	frag = bz_class_get_frag_weapon( player );
-	if ( IsDefined( weap_name ) && weap_name != "" )
+	if ( !bz_sapper_is_frag_weapon( player, weap_name ) )
 	{
-		wn = bz_normalize_id( weap_name );
-		if ( wn != frag && !IsSubStr( wn, "stielhandgranate" ) && !IsSubStr( wn, "frag" ) )
-		{
-			return bz_sapper_get_total_grenades( player );
-		}
+		return bz_sapper_get_total_grenades( player );
 	}
 
+	frag = bz_class_get_frag_weapon( player );
 	if ( IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
 	{
 		player.bz_sapper_grenade_reserve = Int( player.bz_sapper_grenade_reserve ) - 1;
@@ -1403,6 +1527,10 @@ bz_sapper_grenade_watch()
 		if ( bz_state_get_class( self ) != "sapper" )
 		{
 			return;
+		}
+		if ( !bz_sapper_is_frag_weapon( self, weap_name ) )
+		{
+			continue;
 		}
 		bz_sapper_on_grenade_thrown( self, weap_name );
 		if ( IsDefined( grenade ) )
@@ -1627,6 +1755,24 @@ bz_sapper_fire_trap_tick( trap )
 	return hits;
 }
 
+bz_sapper_untrack_trap_anchor( anchor )
+{
+	if ( !IsDefined( level.bz_class_traps ) )
+	{
+		return;
+	}
+	kept = [];
+	for ( i = 0; i < level.bz_class_traps.size; i++ )
+	{
+		ent = level.bz_class_traps[i];
+		if ( IsDefined( ent ) && ( !IsDefined( anchor ) || ent != anchor ) )
+		{
+			kept[kept.size] = ent;
+		}
+	}
+	level.bz_class_traps = kept;
+}
+
 bz_sapper_fire_trap_think()
 {
 	level endon( "end_game" );
@@ -1642,7 +1788,10 @@ bz_sapper_fire_trap_think()
 	self.active = false;
 	if ( IsDefined( self.anchor ) )
 	{
-		self.anchor Delete();
+		anchor = self.anchor;
+		self.anchor = undefined;
+		bz_sapper_untrack_trap_anchor( anchor );
+		anchor Delete();
 	}
 }
 
@@ -1723,7 +1872,10 @@ bz_sapper_betty_trap_think()
 	self.active = false;
 	if ( IsDefined( self.anchor ) )
 	{
-		self.anchor Delete();
+		anchor = self.anchor;
+		self.anchor = undefined;
+		bz_sapper_untrack_trap_anchor( anchor );
+		anchor Delete();
 	}
 }
 

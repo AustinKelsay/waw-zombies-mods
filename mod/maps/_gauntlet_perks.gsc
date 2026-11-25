@@ -576,6 +576,14 @@ snapshot_player_perks( player, current_map )
 	player_key = maps\_gauntlet_state::make_player_key( guid, name );
 	map_label = resolve_map_label( current_map );
 
+	// A1/S2: Preserve saved stock perks for reconnecting spectators / dead players whose
+	// deferred restoration has not run yet, while still clearing perks for players who
+	// already received their loadout this stage (or died normally) and are now spectating/dead.
+	if ( IsDefined( player.gauntlet_perks_deferred ) && player.gauntlet_perks_deferred )
+	{
+		return get_recorded_player_perks( guid, name );
+	}
+
 	active_perks = collect_player_active_perks( player );
 	record_player_perks( guid, name, active_perks );
 
@@ -681,10 +689,14 @@ restore_player_perks_when_alive( player, current_map )
 	level endon( "end_game" );
 	level endon( "gauntlet_stage_clear" );
 
-	player waittill( "spawned_player" );
+	while ( IsDefined( player ) && ( !IsAlive( player ) || ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" ) ) )
+	{
+		player waittill( "spawned_player" );
+	}
 
 	if ( IsDefined( player ) )
 	{
+		player.gauntlet_perks_restore_waiting = false;
 		player.gauntlet_perks_deferred = false;
 		restore_player_perks( player, current_map );
 	}
@@ -706,12 +718,16 @@ restore_player_perks( player, current_map )
 	// Defer perk restoration for mid-round reconnecting spectators until they
 	// actually respawn alive so stock respawn does not wipe Juggernog maxhealth
 	// or leave floating perk HUD icons while spectating.
+	// A1/S2/O5/F10: Use a separate watcher flag (gauntlet_perks_restore_waiting)
+	// so pre-setting gauntlet_perks_deferred during the init wait never suppresses
+	// spawning restore_player_perks_when_alive().
 	is_spectator = ( IsDefined( player.sessionstate ) && player.sessionstate == "spectator" );
 	if ( is_spectator || !IsAlive( player ) )
 	{
-		if ( !IsDefined( player.gauntlet_perks_deferred ) || !player.gauntlet_perks_deferred )
+		player.gauntlet_perks_deferred = true;
+		if ( !IsDefined( player.gauntlet_perks_restore_waiting ) || !player.gauntlet_perks_restore_waiting )
 		{
-			player.gauntlet_perks_deferred = true;
+			player.gauntlet_perks_restore_waiting = true;
 			level thread restore_player_perks_when_alive( player, current_map );
 		}
 		return restored;
@@ -719,6 +735,7 @@ restore_player_perks( player, current_map )
 
 	player.gauntlet_perks_applied = true;
 	player.gauntlet_perks_deferred = false;
+	player.gauntlet_perks_restore_waiting = false;
 
 	guid = resolve_player_guid( player );
 	name = resolve_player_name( player );

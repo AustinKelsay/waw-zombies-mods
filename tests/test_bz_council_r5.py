@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+for _p in (str(REPO_ROOT), str(SCRIPTS_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import build_mod
 from tests.gsc_runtime import FakeDvarStore, GscArray, GscStruct, UNDEFINED, _waw_to_str

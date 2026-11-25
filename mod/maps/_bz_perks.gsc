@@ -684,6 +684,21 @@ bz_perks_on_player_damage( player, ctx )
 	}
 
 	// 3. Second Chance lethal hit interception (1x per round)
+	// Skip hits that stock player_damage_override ignores (repeat ignoreAttacker) or
+	// Daredevil's unconditional fall immunity even if perks were registered before classes.
+	norm_mod = bz_normalize_id( ctx.mod );
+	if ( IsDefined( player.ignoreAttacker ) && IsDefined( ctx.attacker ) && player.ignoreAttacker == ctx.attacker )
+	{
+		return;
+	}
+	if ( norm_mod == "mod_falling" &&
+		GetDvarInt( "bz_classes_enabled" ) == 1 &&
+		IsDefined( player.bz_class ) &&
+		bz_normalize_id( player.bz_class ) == "daredevil" )
+	{
+		return;
+	}
+
 	cur_hp = 0;
 	if ( IsDefined( player.health ) )
 	{
@@ -695,6 +710,15 @@ bz_perks_on_player_damage( player, ctx )
 		inc_dmg = Int( ctx.damage );
 	}
 
+	// Stock Der Riese player_damage_override clamps grenade/projectile splash to 75 whenever
+	// player.health > 75, so those hits are non-lethal and must not burn Second Chance / QR II (F3).
+	is_proj_mod = ( norm_mod == "mod_projectile" || norm_mod == "mod_projectile_splash" ||
+		norm_mod == "mod_grenade" || norm_mod == "mod_grenade_splash" );
+	if ( is_proj_mod && cur_hp > 75 && inc_dmg > 75 && IsDefined( level.script ) && bz_normalize_id( level.script ) == "nazi_zombie_factory" )
+	{
+		inc_dmg = 75;
+	}
+
 	if ( cur_hp > 0 && inc_dmg >= cur_hp && maps\_bz_state::bz_state_try_consume_second_chance( player ) )
 	{
 		ctx.cancelled = true;
@@ -704,7 +728,9 @@ bz_perks_on_player_damage( player, ctx )
 		{
 			max_hp = Int( player.maxhealth );
 		}
+		player.maxhealth = max_hp;
 		player.health = max_hp;
+		player.maxhealth = max_hp;
 
 		invuln_sec = maps\_bz_rules::bz_get_second_chance_invuln_duration();
 		stun_sec = maps\_bz_rules::bz_get_second_chance_stun_duration();
@@ -736,7 +762,9 @@ bz_perks_on_player_damage( player, ctx )
 			{
 				max_hp = Int( player.maxhealth );
 			}
+			player.maxhealth = max_hp;
 			player.health = max_hp;
+			player.maxhealth = max_hp;
 			bz_perks_apply_revive_completed( player, player );
 			return;
 		}

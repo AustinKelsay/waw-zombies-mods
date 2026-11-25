@@ -268,8 +268,10 @@ bz_ensure_default_modules_registered()
 	level.bz_default_modules_registered = true;
 
 	maps\_bz_stations::bz_stations_register();
-	maps\_bz_perks::bz_perks_register();
+	// Register classes BEFORE perks so unconditional class damage immunities (e.g. Daredevil
+	// fall immunity) cancel damage before consumable lethal-hit perk saves (Second Chance / QR II).
 	maps\_bz_classes::bz_classes_register();
+	maps\_bz_perks::bz_perks_register();
 	maps\_bz_pap::bz_pap_register();
 	maps\_bz_elem_stock::bz_elem_stock_register();
 	maps\_bz_elem_new::bz_elem_new_register();
@@ -1096,15 +1098,41 @@ bz_global_damage_ads_wrapper( mod, hit_location, hit_origin, player )
 
 bz_handle_global_actor_damage( prev_cb, mod, hit_location, hit_origin, player, is_dog )
 {
-	// Guard against re-entrant DoDamage triggered by our own bonus damage application.
+	// Guard against re-entrant DoDamage triggered by our own scripted/bonus damage.
+	// Always clear the flag on entry; only swallow fresh MOD_UNKNOWN echoes so rapid real
+	// weapon hits within 100ms (MG42/PPSh/Thompson/etc.) never lose hit points or bonuses,
+	// and apply stock Insta-Kill eligibility before returning on scripted hits (F1 / S7).
 	if ( IsDefined( self ) && IsDefined( self.bz_in_damage_dispatch ) && self.bz_in_damage_dispatch )
 	{
-		if ( !IsDefined( self.bz_damage_dispatch_time ) || ( GetTime() - self.bz_damage_dispatch_time ) <= 100 )
+		is_fresh = !IsDefined( self.bz_damage_dispatch_time ) || ( GetTime() - self.bz_damage_dispatch_time ) <= 100;
+		is_scripted_mod = !IsDefined( mod ) || tolower( "" + mod ) == "mod_unknown";
+		self.bz_in_damage_dispatch = false;
+		if ( is_fresh && is_scripted_mod )
 		{
-			self.bz_in_damage_dispatch = false;
+			// S7: Match stock _zombiemode_powerups::check_for_instakill using zombie_insta_kill
+			// alone (never zombie_powerup_insta_kill_on, which is the separate HUD timer).
+			insta_on = IsDefined( level.zombie_vars ) &&
+				IsDefined( level.zombie_vars["zombie_insta_kill"] ) &&
+				level.zombie_vars["zombie_insta_kill"];
+			is_shielded = IsDefined( self.magic_bullet_shield ) && self.magic_bullet_shield;
+			is_boss = IsDefined( self.animname ) && self.animname == "boss_zombie";
+			if ( insta_on && !is_shielded && !is_boss && IsAlive( self ) && IsDefined( player ) && IsPlayer( player ) && IsAlive( player ) )
+			{
+				ik_org = hit_origin;
+				if ( !IsDefined( ik_org ) && IsDefined( self.origin ) )
+				{
+					ik_org = self.origin;
+				}
+				if ( !IsDefined( ik_org ) )
+				{
+					ik_org = ( 0, 0, 0 );
+				}
+				// F8: Notify before lethal DoDamage so a caller holding endon("death") never drops it.
+				player notify( "zombie_killed" );
+				self DoDamage( self.health + 666, ik_org, player );
+			}
 			return;
 		}
-		self.bz_in_damage_dispatch = false;
 	}
 
 	if ( IsDefined( prev_cb ) )
@@ -1840,12 +1868,32 @@ bz_recompute_zombie_move_rate( zombie )
 
 	if ( frozen || is_stunned )
 	{
+		if ( !IsDefined( zombie.bz_cc_forced_ignoreall ) || !zombie.bz_cc_forced_ignoreall )
+		{
+			zombie.bz_cc_prev_ignoreall = ( IsDefined( zombie.ignoreall ) && zombie.ignoreall );
+			zombie.bz_cc_forced_ignoreall = true;
+		}
+		else if ( !IsDefined( zombie.ignoreall ) || !zombie.ignoreall )
+		{
+			// S11/F6: Stock zombie_setup_attack_properties() cleared ignoreall while stunned;
+			// update the saved prior state so expiry restores false instead of stale true.
+			zombie.bz_cc_prev_ignoreall = false;
+		}
 		zombie.moveplaybackrate = 0.01;
 		zombie.ignoreall = true;
 		return 0.01;
 	}
 
-	zombie.ignoreall = false;
+	// O1/F2: Only clear ignoreall if BZ itself forced it during freeze/stun, preserving
+	// stock zombie_spawn_init pre-entry ignoreall=true for zombies outside barriers.
+	if ( IsDefined( zombie.bz_cc_forced_ignoreall ) && zombie.bz_cc_forced_ignoreall )
+	{
+		if ( !IsDefined( zombie.bz_cc_prev_ignoreall ) || !zombie.bz_cc_prev_ignoreall )
+		{
+			zombie.ignoreall = false;
+		}
+		zombie.bz_cc_forced_ignoreall = false;
+	}
 
 	acid_slowed = IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until );
 	if ( acid_slowed )

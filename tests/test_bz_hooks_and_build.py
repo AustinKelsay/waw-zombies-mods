@@ -327,6 +327,7 @@ class BzGscRuntime(GscRuntime):
         self.precached_items: list[str] = []
         self.spawned_entities: list[FakeEntity] = []
         self.world_entities: dict[tuple[str, str], list[FakeEntity]] = {}
+        self.world_structs: dict[tuple[str, str], list[Any]] = {}
         self.bullet_trace_fn: Callable[[GscArray, GscArray], dict[str, Any]] | None = None
         self.sim_time_ms: int = 1000
         self.notifies: list[tuple[Any, str]] = []
@@ -341,6 +342,10 @@ class BzGscRuntime(GscRuntime):
         if key not in self._modules:
             gsc_file = self.mod_root / f"{key}.gsc"
             if not gsc_file.is_file():
+                if key == "common_scripts/utility":
+                    stub = "getstructarray( val, key ) { return GetStructArray( val, key ); }\n"
+                    self._modules[key] = BzGscParser(tokenize(stub, filename=key), filename=key).parse_module()
+                    return self._modules[key]
                 raise FileNotFoundError(f"GSC module not found: {gsc_file}")
             source = gsc_file.read_text(encoding="latin1")
             tokens = tokenize(source, filename=str(gsc_file))
@@ -415,6 +420,11 @@ class BzGscRuntime(GscRuntime):
             val = _waw_to_str(args[0]).lower() if len(args) > 0 else ""
             key = _waw_to_str(args[1]).lower() if len(args) > 1 else ""
             matches = self.world_entities.get((key, val), [])
+            return True, GscArray(list(matches))
+        if name_lower == "getstructarray":
+            val = _waw_to_str(args[0]).lower() if len(args) > 0 else ""
+            key = _waw_to_str(args[1]).lower() if len(args) > 1 else ""
+            matches = self.world_structs.get((key, val), [])
             return True, GscArray(list(matches))
         if name_lower == "bullettrace":
             start = args[0] if len(args) > 0 else GscArray([0, 0, 0])
