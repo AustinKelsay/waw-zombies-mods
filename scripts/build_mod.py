@@ -7,6 +7,7 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -16,6 +17,8 @@ import zlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+
+import generate_bz_weapon_models as bz_models
 
 MOD_NAME = "waw_gauntlet"
 BZ_BUILD_VERSION = "0.7.0"
@@ -278,10 +281,12 @@ BZ_ELEMENT_LOC_MULTIPLIERS: dict[str, str] = {
 BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
     (
         "bz_acid_sprayer",
-        ("m2_flamethrower_zombie", "ray_gun"),
+        ("m2_flamethrower_zombie",),
         {
             **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Acid Sprayer",
+            "gunModel": bz_models.CUSTOM_WEAPON_VIEWMODELS["bz_acid_sprayer"],
+            "worldModel": bz_models.CUSTOM_WEAPON_WORLDMODELS["bz_acid_sprayer"],
             "inventoryType": "primary",
             "weaponType": "bullet",
             "weaponClass": "rifle",
@@ -318,10 +323,12 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
     ),
     (
         "bz_cryo_cannon",
-        ("tesla_gun", "ray_gun"),
+        ("tesla_gun",),
         {
             **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Cryo Cannon",
+            "gunModel": bz_models.CUSTOM_WEAPON_VIEWMODELS["bz_cryo_cannon"],
+            "worldModel": bz_models.CUSTOM_WEAPON_WORLDMODELS["bz_cryo_cannon"],
             "inventoryType": "primary",
             "weaponType": "bullet",
             "ammoName": "bz_cryo",
@@ -342,10 +349,12 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
     ),
     (
         "bz_multi_crossbow",
-        ("fg42_scoped", "kar98k_scoped_zombie", "springfield_scoped_zombie", "zombie_m1garand", "kar98k"),
+        ("fg42_scoped",),
         {
             **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Multi-Crossbow",
+            "gunModel": bz_models.CUSTOM_WEAPON_VIEWMODELS["bz_multi_crossbow"],
+            "worldModel": bz_models.CUSTOM_WEAPON_WORLDMODELS["bz_multi_crossbow"],
             "inventoryType": "primary",
             "weaponType": "bullet",
             "weaponClass": "rifle",
@@ -373,10 +382,12 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
     ),
     (
         "bz_blade_boomerang",
-        ("m1carbine_bayonet", "kar98k_bayonet", "zombie_colt", "walther", "colt"),
+        ("zombie_colt", "colt"),
         {
             **BZ_ELEMENT_LOC_MULTIPLIERS,
             "displayName": "Blade Boomerang",
+            "gunModel": bz_models.CUSTOM_WEAPON_VIEWMODELS["bz_blade_boomerang"],
+            "worldModel": bz_models.CUSTOM_WEAPON_WORLDMODELS["bz_blade_boomerang"],
             "inventoryType": "primary",
             "weaponType": "bullet",
             "weaponClass": "rifle",
@@ -390,12 +401,19 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "dropAmmoMin": "1",
             "dropAmmoMax": "10",
             "moveSpeedScale": "1",
-            "fireTime": "0.55",
-            "reloadTime": "0.65",
-            "reloadEmptyTime": "0.65",
+            "fireTime": "1.15",
+            "reloadTime": "0.25",
+            "reloadEmptyTime": "0.25",
             "cancelAutoHolsterWhenEmpty": "1",
-            "fireAnim": "viewmodel_carbine_bayonet_swipe",
-            "lastShotAnim": "viewmodel_carbine_bayonet_swipe",
+            "idleAnim": "viewmodel_ray_gun_idle",
+            "fireAnim": "viewmodel_germangrenade_throw",
+            "lastShotAnim": "viewmodel_germangrenade_throw",
+            "emptyIdleAnim": "viewmodel_ray_gun_drop",
+            "raiseAnim": "viewmodel_ray_gun_raise",
+            "firstRaiseAnim": "viewmodel_ray_gun_raise",
+            "dropAnim": "viewmodel_ray_gun_drop",
+            "reloadAnim": "viewmodel_ray_gun_raise",
+            "reloadEmptyAnim": "viewmodel_ray_gun_raise",
             "damage": "1",
             "minDamage": "1",
             "explosionInnerDamage": "0",
@@ -1924,8 +1942,433 @@ DER_RIESE_COMPAT_XMODELS: tuple[str, ...] = (
     "weapon_mp_ptrs41",
     "viewmodel_usa_flamethrower",
     "weapon_usa_flamethrower",
-    "viewmodel_knife_bowie",
 )
+
+CUSTOM_WEAPON_MANIFEST_NAME = ".bz_weapons_manifest.json"
+CUSTOM_WEAPON_MANIFEST_VERSION = 1
+
+
+def _custom_weapon_manifest_path(tools_root: Path) -> Path:
+    return tools_root / "model_export" / bz_models.ASSET_SUBDIR / CUSTOM_WEAPON_MANIFEST_NAME
+
+
+def _custom_weapon_source_digest() -> str:
+    hasher = hashlib.sha256()
+    hasher.update(Path(bz_models.__file__).read_bytes())
+    return hasher.hexdigest()
+
+
+def _expected_custom_image_stems() -> tuple[list[str], list[str]]:
+    direct_images: list[str] = []
+    spec_stems: list[str] = []
+    for spec in bz_models.MATERIAL_SPECS:
+        stem = spec.name.removeprefix("mtl_")
+        if spec.material_type == "model unlit":
+            direct_images.append(f"{stem}_c")
+        else:
+            direct_images.append(f"{stem}_c")
+            direct_images.append(f"{stem}_n")
+            spec_stems.append(f"{stem}_s")
+    return direct_images, spec_stems
+
+
+def _find_xmodel_payloads(subdir: Path, xm: str) -> list[Path]:
+    """Return exact compiled xmodelparts/xmodelsurfs payload files for single-LOD xm (`xm`, `xm0`, or `xm1`)."""
+    if not subdir.is_dir():
+        return []
+    pat = re.compile(rf"^{re.escape(xm)}[01]?$")
+    return sorted(p for p in subdir.iterdir() if p.is_file() and pat.match(p.name))
+
+
+def _is_owned_spec_iwi_name(filename: str, spec_stem: str) -> bool:
+    """Return True iff filename is a WaW-hashed packed spec map for our exact material's gloss map."""
+    gloss_stem = spec_stem.removesuffix("_s") + "_g"
+    m = re.fullmatch(rf"~{re.escape(spec_stem)}-rgb&([^~]+)~[0-9a-fA-F]{{8}}\.iwi", filename)
+    if m is None:
+        return False
+    gloss_frag = m.group(1)
+    return len(gloss_frag) >= 3 and gloss_stem.startswith(gloss_frag)
+
+
+def _find_spec_iwis(img_dir: Path, spec_stem: str) -> list[Path]:
+    if not img_dir.is_dir():
+        return []
+    return [
+        p
+        for p in sorted(img_dir.glob(f"~{spec_stem}-rgb&*.iwi"))
+        if p.is_file() and _is_owned_spec_iwi_name(p.name, spec_stem)
+    ]
+
+
+def _extract_material_packed_spec_name(mtl_path: Path, spec_stem: str) -> str | None:
+    """Extract the exact packed spec .iwi filename referenced inside a compiled WaW material binary (A14/A15/A17/S18/S20).
+
+    Returns None when the material binary has no embedded packed-spec token (e.g., minimal test fixtures).
+    Raises ValueError if an embedded token for spec_stem is malformed (e.g. non-8-hex hash) or references
+    an unowned gloss map, preventing fallback to unreferenced files.
+    """
+    if not _is_nonempty_file(mtl_path):
+        return None
+    raw_bytes = mtl_path.read_bytes()
+    pat = re.compile(rb"~" + re.escape(spec_stem.encode("ascii")) + rb"-rgb&[^\x00\s]*")
+    matches = list(pat.finditer(raw_bytes))
+    if not matches:
+        return None
+    owned_candidates: set[str] = set()
+    bad_tokens: list[str] = []
+    for m in matches:
+        token = m.group(0).decode("ascii", errors="replace")
+        candidate = token + ".iwi"
+        if _is_owned_spec_iwi_name(candidate, spec_stem):
+            owned_candidates.add(candidate)
+        else:
+            bad_tokens.append(token)
+    if bad_tokens or len(owned_candidates) != 1:
+        raise ValueError(
+            f"Compiled material {mtl_path.name} references unowned, malformed, or conflicting packed spec image(s): "
+            f"{bad_tokens or sorted(owned_candidates)}"
+        )
+    return next(iter(owned_candidates))
+
+
+def _is_owned_manifest_output(group: str, rel: str) -> bool:
+    """Validate that a manifest output path stays strictly inside our managed directories and custom asset names."""
+    if not isinstance(rel, str) or "\\" in rel or rel.startswith("/") or ".." in Path(rel).parts:
+        return False
+    parts = Path(rel).parts
+    if len(parts) != 2 or parts[0] != group:
+        return False
+    name = parts[1]
+    if group == "materials":
+        return name in bz_models.ALL_CUSTOM_MATERIALS
+    if group == "xmodel":
+        return name in bz_models.ALL_CUSTOM_XMODELS
+    if group in ("xmodelparts", "xmodelsurfs"):
+        return any(re.fullmatch(rf"{re.escape(xm)}[01]?", name) for xm in bz_models.ALL_CUSTOM_XMODELS)
+    if group == "images":
+        direct_images, spec_stems = _expected_custom_image_stems()
+        if name in {f"{img}.iwi" for img in direct_images}:
+            return True
+        return any(_is_owned_spec_iwi_name(name, stem) for stem in spec_stems)
+    return False
+
+
+def _read_custom_weapon_manifest(manifest_path: Path) -> dict | None:
+    if not manifest_path.is_file():
+        return None
+    try:
+        data = json.loads(manifest_path.read_text(encoding="ascii"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("version") != CUSTOM_WEAPON_MANIFEST_VERSION:
+        return None
+    return data
+
+
+def _is_nonempty_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _manifest_cache_valid(manifest: dict, raw_dir: Path, expected_digest: str) -> bool:
+    if manifest.get("digest") != expected_digest:
+        return False
+    summary = manifest.get("summary")
+    outputs = manifest.get("outputs")
+    if not isinstance(summary, dict) or not isinstance(outputs, dict):
+        return False
+    if summary.get("materials") != list(bz_models.ALL_CUSTOM_MATERIALS):
+        return False
+    if summary.get("xmodels") != list(bz_models.ALL_CUSTOM_XMODELS):
+        return False
+
+    group_to_dir = {
+        "materials": "materials",
+        "xmodels": "xmodel",
+        "xmodelparts": "xmodelparts",
+        "xmodelsurfs": "xmodelsurfs",
+        "images": "images",
+    }
+    for group, subdir in group_to_dir.items():
+        entries = outputs.get(group)
+        if not isinstance(entries, list) or not entries:
+            return False
+        for rel in entries:
+            if not _is_owned_manifest_output(subdir, rel) or not _is_nonempty_file(raw_dir / rel):
+                return False
+
+    parts_names = {Path(rel).name for rel in outputs["xmodelparts"]}
+    surfs_names = {Path(rel).name for rel in outputs["xmodelsurfs"]}
+    for xm in bz_models.ALL_CUSTOM_XMODELS:
+        pat = re.compile(rf"^{re.escape(xm)}[01]?$")
+        if f"xmodel/{xm}" not in outputs["xmodels"]:
+            return False
+        if not any(pat.match(n) for n in parts_names):
+            return False
+        if not any(pat.match(n) for n in surfs_names):
+            return False
+
+    img_names = {Path(rel).name for rel in outputs["images"]}
+    direct_images, spec_stems = _expected_custom_image_stems()
+    for img in direct_images:
+        if f"{img}.iwi" not in img_names:
+            return False
+    for stem in spec_stems:
+        if not any(_is_owned_spec_iwi_name(n, stem) for n in img_names):
+            return False
+    return True
+
+
+def compile_custom_weapon_assets(
+    tools_root: Path,
+    steam_root: Path,
+    dev_root: Path,
+    force: bool = False,
+) -> dict[str, list[str]]:
+    """Generate and compile custom Phase 2 weapon XMODELs and materials via Treyarch's converter.exe.
+
+    Checks the JSON build manifest before invoking generate_all_assets() or converter.exe,
+    invalidates any prior manifest before replacing outputs so failed conversions never leave
+    a stale cache hit, verifies every compiled material, xmodel, xmodelparts, xmodelsurfs,
+    and non-empty .iwi output, and cleans strictly owned paths without touching unrelated files.
+    """
+    raw_dir = tools_root / "raw"
+    manifest_path = _custom_weapon_manifest_path(tools_root)
+    digest = _custom_weapon_source_digest()
+
+    prior_manifest = _read_custom_weapon_manifest(manifest_path)
+    if not force and prior_manifest is not None and _manifest_cache_valid(prior_manifest, raw_dir, digest):
+        return prior_manifest["summary"]
+
+    # Invalidate any prior success manifest BEFORE modifying or converting outputs (S11)
+    # so a partial/failed converter run can never be accepted by a subsequent build.
+    manifest_path.unlink(missing_ok=True)
+
+    summary = bz_models.generate_all_assets(tools_root)
+
+    direct_images = [img for img in summary["images"] if not img.endswith(("_s", "_g"))]
+    spec_stems = [img for img in summary["images"] if img.endswith("_s")]
+    expected_materials = [raw_dir / "materials" / mtl for mtl in summary["materials"]]
+    expected_xmodels = [raw_dir / "xmodel" / xm for xm in summary["xmodels"]]
+    expected_direct_imgs = [raw_dir / "images" / f"{img}.iwi" for img in direct_images]
+
+    # Remove ONLY validated owned prior-manifest paths and exact single-LOD / direct custom outputs (A5/A10/S13).
+    # Never glob-delete arbitrary packed spec .iwi files not recorded in our prior manifest, so foreign packed
+    # images sharing a truncated gloss prefix with a different hash survive untouched.
+    group_to_dir = {
+        "materials": "materials",
+        "xmodels": "xmodel",
+        "xmodelparts": "xmodelparts",
+        "xmodelsurfs": "xmodelsurfs",
+        "images": "images",
+    }
+    if prior_manifest is not None and isinstance(prior_manifest.get("outputs"), dict):
+        for group, entries in prior_manifest["outputs"].items():
+            subdir = group_to_dir.get(group)
+            if subdir and isinstance(entries, list):
+                for rel in entries:
+                    if _is_owned_manifest_output(subdir, rel):
+                        (raw_dir / rel).unlink(missing_ok=True)
+    # Before unlinking our compiled materials, remove any exact owned packed spec .iwi referenced by them
+    # so manifestless retries after an aborted conversion self-heal without touching foreign peers (F26).
+    for stem in spec_stems:
+        mtl_path = raw_dir / "materials" / f"mtl_{stem.removesuffix('_s')}"
+        try:
+            prev_ref = _extract_material_packed_spec_name(mtl_path, stem)
+        except ValueError:
+            prev_ref = None
+        if prev_ref is not None:
+            (raw_dir / "images" / prev_ref).unlink(missing_ok=True)
+    for out_path in (*expected_materials, *expected_xmodels, *expected_direct_imgs):
+        out_path.unlink(missing_ok=True)
+    for xm in summary["xmodels"]:
+        for sub in ("xmodelparts", "xmodelsurfs"):
+            for stale in _find_xmodel_payloads(raw_dir / sub, xm):
+                stale.unlink(missing_ok=True)
+
+    env = os.environ.copy()
+    env["WAW_STEAM_ROOT"] = str(steam_root)
+    env["WAW_DEV_ROOT"] = str(dev_root)
+
+    def _convert_single(asset_type: str, asset_name: str) -> None:
+        cmd = [str(OPEN_TOOL_SH), "converter", "-single", asset_type, asset_name, "-n"]
+        res = subprocess.run(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+            check=False,
+        )
+        if res.returncode != 0 or "Conversion failed" in (res.stdout or ""):
+            raise RuntimeError(
+                f"converter.exe failed for {asset_type} {asset_name!r} (rc={res.returncode}):\n"
+                f"{(res.stdout or '').strip()}"
+            )
+
+    pre_spec_meta: dict[str, dict[str, tuple[int, int]]] = {
+        stem: {p.name: (p.stat().st_mtime_ns, p.stat().st_size) for p in _find_spec_iwis(raw_dir / "images", stem)}
+        for stem in spec_stems
+    }
+    for mtl in summary["materials"]:
+        _convert_single("material", mtl)
+    for xm in summary["xmodels"]:
+        _convert_single("xmodel", xm)
+
+    missing: list[str] = []
+    recorded_materials: list[str] = []
+    recorded_xmodels: list[str] = []
+    recorded_parts: list[str] = []
+    recorded_surfs: list[str] = []
+    recorded_images: list[str] = []
+
+    for p in expected_materials:
+        if _is_nonempty_file(p):
+            recorded_materials.append(p.relative_to(raw_dir).as_posix())
+        else:
+            missing.append(str(p))
+
+    for xm, p in zip(summary["xmodels"], expected_xmodels):
+        if _is_nonempty_file(p):
+            recorded_xmodels.append(p.relative_to(raw_dir).as_posix())
+        else:
+            missing.append(str(p))
+        parts = [f for f in _find_xmodel_payloads(raw_dir / "xmodelparts", xm) if _is_nonempty_file(f)]
+        if parts:
+            recorded_parts.extend(f.relative_to(raw_dir).as_posix() for f in parts)
+        else:
+            missing.append(str(raw_dir / "xmodelparts" / xm))
+        surfs = [f for f in _find_xmodel_payloads(raw_dir / "xmodelsurfs", xm) if _is_nonempty_file(f)]
+        if surfs:
+            recorded_surfs.extend(f.relative_to(raw_dir).as_posix() for f in surfs)
+        else:
+            missing.append(str(raw_dir / "xmodelsurfs" / xm))
+
+    for p in expected_direct_imgs:
+        if _is_nonempty_file(p):
+            recorded_images.append(p.relative_to(raw_dir).as_posix())
+        else:
+            missing.append(str(p))
+
+    # Identify exact converter-owned packed specular maps using the same strict ownership predicate as
+    # cache validation and staging (A10/A11/A14/S16/S18):
+    # - When the compiled material binary embeds an exact packed image name, require THAT exact file
+    #   to exist, be non-empty, AND have been freshly written/updated during this conversion run.
+    # - Otherwise (synthetic mock material binary without embedded image strings), require newly
+    #   created/updated valid owned packed images from this conversion run.
+    for stem in spec_stems:
+        mtl_path = raw_dir / "materials" / f"mtl_{stem.removesuffix('_s')}"
+        try:
+            ref_name = _extract_material_packed_spec_name(mtl_path, stem)
+        except ValueError as exc:
+            missing.append(str(exc))
+            continue
+        if ref_name is not None:
+            ref_path = raw_dir / "images" / ref_name
+            if (
+                _is_nonempty_file(ref_path)
+                and pre_spec_meta[stem].get(ref_name) != (ref_path.stat().st_mtime_ns, ref_path.stat().st_size)
+            ):
+                owned_spec = [ref_path]
+            else:
+                owned_spec = []
+        else:
+            candidates = [f for f in _find_spec_iwis(raw_dir / "images", stem) if _is_nonempty_file(f)]
+            owned_spec = [
+                f
+                for f in candidates
+                if pre_spec_meta[stem].get(f.name) != (f.stat().st_mtime_ns, f.stat().st_size)
+            ]
+        if owned_spec:
+            recorded_images.extend(f.relative_to(raw_dir).as_posix() for f in owned_spec)
+        else:
+            expected_label = ref_name if ref_name is not None else f"~{stem}-rgb&*.iwi"
+            missing.append(str(raw_dir / "images" / expected_label))
+
+    if missing:
+        raise RuntimeError(f"Custom weapon conversion succeeded but outputs are missing or empty: {missing}")
+
+    manifest_data = {
+        "version": CUSTOM_WEAPON_MANIFEST_VERSION,
+        "digest": digest,
+        "summary": summary,
+        "outputs": {
+            "materials": sorted(set(recorded_materials)),
+            "xmodels": sorted(set(recorded_xmodels)),
+            "xmodelparts": sorted(set(recorded_parts)),
+            "xmodelsurfs": sorted(set(recorded_surfs)),
+            "images": sorted(set(recorded_images)),
+        },
+    }
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=manifest_path.parent) as tmp:
+        staged_manifest = Path(tmp) / manifest_path.name
+        staged_manifest.write_text(json.dumps(manifest_data, indent=2, sort_keys=True) + "\n", encoding="ascii")
+        staged_manifest.replace(manifest_path)
+    return summary
+
+
+def stage_custom_weapon_images(tools_root: Path, stage_dir: Path) -> list[str]:
+    """Copy ONLY the exact owned compiled custom weapon .iwi images into stage_dir/images/ for IWD packing."""
+    raw_dir = tools_root / "raw"
+    raw_images_dir = raw_dir / "images"
+    if not raw_images_dir.is_dir():
+        return []
+
+    out_dir = stage_dir / "images"
+    staged_relpaths: list[str] = []
+
+    manifest = _read_custom_weapon_manifest(_custom_weapon_manifest_path(tools_root))
+    if manifest is not None and isinstance(manifest.get("outputs", {}).get("images"), list):
+        candidates: list[Path] = []
+        missing: list[str] = []
+        for rel in sorted(manifest["outputs"]["images"]):
+            if not _is_owned_manifest_output("images", rel):
+                continue
+            src = raw_dir / rel
+            if not _is_nonempty_file(src):
+                missing.append(str(src))
+            else:
+                candidates.append(src)
+        if missing:
+            raise FileNotFoundError(
+                f"Manifest-recorded custom weapon images are missing or empty: {', '.join(missing)}"
+            )
+    else:
+        direct_images, spec_stems = _expected_custom_image_stems()
+        candidates = []
+        for img in direct_images:
+            p = raw_images_dir / f"{img}.iwi"
+            if _is_nonempty_file(p):
+                candidates.append(p)
+        for stem in spec_stems:
+            mtl_path = raw_dir / "materials" / f"mtl_{stem.removesuffix('_s')}"
+            ref_name = _extract_material_packed_spec_name(mtl_path, stem)
+            if ref_name is not None:
+                p = raw_images_dir / ref_name
+                if not _is_nonempty_file(p):
+                    raise FileNotFoundError(f"Compiled material {mtl_path.name} references missing packed image: {p}")
+                candidates.append(p)
+            else:
+                matches = [p for p in _find_spec_iwis(raw_images_dir, stem) if _is_nonempty_file(p)]
+                if len(matches) == 1:
+                    candidates.append(matches[0])
+                elif len(matches) > 1:
+                    raise FileNotFoundError(
+                        f"Manifest missing and multiple packed images match {stem} without a compiled material reference: "
+                        f"{[m.name for m in matches]}"
+                    )
+        candidates = sorted(set(candidates))
+
+    for src_path in candidates:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dst_path = out_dir / src_path.name
+        shutil.copy2(src_path, dst_path)
+        staged_relpaths.append(f"images/{src_path.name}")
+    return staged_relpaths
 
 
 def generate_staged_mod_csv(
@@ -2406,8 +2849,18 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
                 for p in sorted(clientscripts_dir.rglob("*.csc"))
             )
         raw_xmodel_dir = tools_root / "raw" / "xmodel"
+        if staged_weapons and raw_xmodel_dir.is_dir():
+            missing_custom = [
+                xm for xm in bz_models.ALL_CUSTOM_XMODELS if not _is_nonempty_file(raw_xmodel_dir / xm)
+            ]
+            if missing_custom:
+                raise FileNotFoundError(
+                    f"Missing compiled custom weapon xmodels in {raw_xmodel_dir}: {', '.join(missing_custom)}"
+                )
         compat_xmodels = [
-            xm for xm in DER_RIESE_COMPAT_XMODELS if (raw_xmodel_dir / xm).is_file()
+            xm
+            for xm in (*DER_RIESE_COMPAT_XMODELS, *bz_models.ALL_CUSTOM_XMODELS)
+            if (raw_xmodel_dir / xm).is_file()
         ]
         updated_csv = generate_staged_mod_csv(
             staged_mod_csv.read_text(encoding="latin1"),
@@ -2416,6 +2869,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             extra_xmodels=compat_xmodels,
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
+
+    # Stage compiled custom weapon .iwi images so build_iwd() packs them into waw_gauntlet.iwd.
+    stage_custom_weapon_images(tools_root=tools_root, stage_dir=stage_dir)
 
     # Stage stock DLC weapon definition files missing from base iw_*.iwd into stage_dir/weapons/sp/
     # so build_iwd() packs them into waw_gauntlet.iwd. Under fs_game, WaW 1.7 resolves weapons/sp/*
@@ -2681,11 +3137,17 @@ def build_iwd(stage_dir: Path) -> Path:
         if weapons_sp_dir.is_dir()
         else []
     )
+    images_dir = stage_dir / "images"
+    image_files = (
+        sorted(p for p in images_dir.iterdir() if p.is_file() and p.suffix.lower() == ".iwi")
+        if images_dir.is_dir()
+        else []
+    )
 
     with TemporaryDirectory(dir=DIST_DIR) as tmp:
         staged_iwd = Path(tmp) / dist_iwd.name
         with ZipFile(staged_iwd, "w") as archive:
-            for file_path in (*gsc_files, *csc_files, *weapon_files):
+            for file_path in (*gsc_files, *csc_files, *weapon_files, *image_files):
                 rel = file_path.relative_to(stage_dir).as_posix()
                 archive.writestr(ZipInfo(rel), file_path.read_bytes(), compress_type=ZIP_DEFLATED)
         staged_iwd.replace(dist_iwd)
@@ -2776,6 +3238,7 @@ def build_and_optionally_deploy(
     steam_game: Path = DEFAULT_STEAM_GAME,
     deploy_targets: list[Path] | None = None,
 ) -> tuple[list[Path], list[Path]]:
+    compile_custom_weapon_assets(tools_root=tools_root, steam_root=steam_root, dev_root=dev_root)
     stage_dir = stage_mod_files(tools_root=tools_root, steam_game=steam_game)
     dist_ff = run_linker(tools_root=tools_root, steam_root=steam_root, dev_root=dev_root)
     dist_iwd = build_iwd(stage_dir=stage_dir)

@@ -49,6 +49,7 @@ VERIFIED_STOCK_FX_PATHS: frozenset[str] = frozenset(
         "maps/zombie/fx_zombie_tesla_shock_secondary",
         "env/electrical/fx_elec_short_oneshot",
         "bio/player/fx_footstep_water",
+        "misc/fx_trail_raygun_geotrail",
         "weapon/grenade/fx_trail_rifle_grenade",
     }
 )
@@ -453,11 +454,26 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         self.assertEqual(z_in.damage_events[0]["damage"], 140)
         self.assertIs(z_in.damage_events[0]["attacker"], player)
 
-        # Next puddle tick (250ms later) deals 45 melt tick damage and refreshes slow/brittle
+        # Same-frame tick right after direct splash suppresses DoDamage and MUST NOT emit ELEM_ACID_TICK (A8/F17)
+        before_ticks = len(gsc.emitted_events)
+        gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddle)
+        self.assertEqual(len(z_in.damage_events), 1)
+        self.assertFalse(any("ELEM_ACID_TICK" in ev for ev in gsc.emitted_events[before_ticks:]))
+
+        # Next puddle tick (250ms later) deals 45 melt tick damage, refreshes slow/brittle, and emits 1 throttled ELEM_ACID_TICK
         gsc.sim_time_ms = 5250
         gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddle)
         self.assertEqual(len(z_in.damage_events), 2)
         self.assertEqual(z_in.damage_events[1]["damage"], 45)
+        tick_events_1 = [ev for ev in gsc.emitted_events[before_ticks:] if "ELEM_ACID_TICK" in ev]
+        self.assertEqual(len(tick_events_1), 1)
+        self.assertIn("hits=1", tick_events_1[0])
+
+        # Rapid follow-up tick (<1.0s later) still deals tick damage but throttles ELEM_ACID_TICK telemetry (F14/F17)
+        gsc.sim_time_ms = 5500
+        gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddle)
+        self.assertEqual(len(z_in.damage_events), 3)
+        self.assertEqual(len([ev for ev in gsc.emitted_events[before_ticks:] if "ELEM_ACID_TICK" in ev]), 1)
 
         # Out-of-radius zombie untouched
         self.assertAlmostEqual(float(z_out.get_field("moveplaybackrate")), 1.0)
