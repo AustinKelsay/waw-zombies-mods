@@ -1724,7 +1724,8 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("user.score >= maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
         self.assertIn("user.score < maps\\_bz_hooks::bz_box_cost_modify( user, cost )", dlc_patched)
         self.assertIn(
-            "user maps\\_zombiemode_score::minus_to_player_score( maps\\_bz_hooks::bz_box_cost_modify( user, cost ) );",
+            "user.bz_last_box_cost = maps\\_bz_hooks::bz_box_cost_modify( user, cost ); "
+            "user maps\\_zombiemode_score::minus_to_player_score( user.bz_last_box_cost );",
             dlc_patched,
         )
         # Wall-buy cabinet in weapon_spawn_think() must remain untouched!
@@ -2130,6 +2131,8 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 wp_patched = self.bm.inject_zombiemode_weapons_hooks(wp).decode("latin1")
                 self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, false )", wp_patched)
                 self.assertIn("maps\\_bz_hooks::bz_on_wall_buy( player, self.zombie_weapon_upgrade, self.origin, true )", wp_patched)
+                if m in ("nazi_zombie_asylum", "nazi_zombie_sumpf", "nazi_zombie_factory"):
+                    self.assertIn("bz_refund = maps\\_bz_hooks::bz_box_cost_modify(", wp_patched)
 
             sc = self.bm.extract_stock_script(
                 "nazi_zombie_factory", "maps/_zombiemode_score.gsc", self.bm.DEFAULT_STEAM_GAME, self.bm.DEFAULT_TOOLS_ROOT

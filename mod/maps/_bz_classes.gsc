@@ -367,7 +367,7 @@ bz_classes_on_player_spawned( player )
 	active_class = bz_state_get_class( player );
 	if ( active_class != "" )
 	{
-		bz_class_apply( player, active_class );
+		bz_class_apply( player, active_class, true );
 		bz_class_update_hud( player );
 	}
 }
@@ -411,7 +411,7 @@ bz_classes_on_player_revived( player, reviver )
 	active_class = bz_state_get_class( player );
 	if ( active_class != "" )
 	{
-		bz_class_apply( player, active_class );
+		bz_class_apply( player, active_class, true );
 		bz_class_update_hud( player );
 	}
 }
@@ -629,7 +629,7 @@ bz_class_teardown( player, previous_class )
 	player notify( "bz_class_changed" );
 }
 
-bz_class_apply( player, class_id )
+bz_class_apply( player, class_id, skip_nade_refill )
 {
 	if ( !bz_classes_enabled() || !IsDefined( player ) )
 	{
@@ -668,7 +668,11 @@ bz_class_apply( player, class_id )
 	{
 		max_nades = maps\_bz_rules::bz_calc_max_grenades( "sapper" );
 		player.bz_max_grenades = max_nades;
-		bz_sapper_set_grenades( player, max_nades );
+		if ( !IsDefined( skip_nade_refill ) || !skip_nade_refill || !IsDefined( player.bz_sapper_nades_seeded ) || !player.bz_sapper_nades_seeded )
+		{
+			bz_sapper_set_grenades( player, max_nades );
+			player.bz_sapper_nades_seeded = true;
+		}
 		player thread bz_sapper_grenade_watch();
 		player thread bz_sapper_max_ammo_watch();
 	}
@@ -1079,6 +1083,14 @@ bz_titan_apply_aggro_bias( titan )
 		dist_titan = Distance( z.origin, titan.origin );
 		if ( dist_titan > aggro_radius )
 		{
+			if ( IsDefined( z.bz_aggro_biased_by ) && z.bz_aggro_biased_by == titan )
+			{
+				if ( IsDefined( z.favoriteenemy ) && z.favoriteenemy == titan )
+				{
+					z.favoriteenemy = undefined;
+				}
+				z.bz_aggro_biased_by = undefined;
+			}
 			continue;
 		}
 
@@ -1118,6 +1130,14 @@ bz_titan_apply_aggro_bias( titan )
 			z.favoriteenemy = titan;
 			z.bz_aggro_biased_by = titan;
 			biased_count = biased_count + 1;
+		}
+		else if ( IsDefined( z.bz_aggro_biased_by ) && z.bz_aggro_biased_by == titan )
+		{
+			if ( IsDefined( z.favoriteenemy ) && z.favoriteenemy == titan )
+			{
+				z.favoriteenemy = undefined;
+			}
+			z.bz_aggro_biased_by = undefined;
 		}
 	}
 

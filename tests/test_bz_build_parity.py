@@ -46,11 +46,18 @@ class TestBzBuildStamp(unittest.TestCase):
         for output, expected in git_outputs:
             with (
                 self.subTest(output=output),
-                patch.object(build_mod.subprocess, "check_output", return_value=output) as git,
+                patch.object(build_mod.subprocess, "check_output", side_effect=[output, b""]) as git,
             ):
                 self.assertEqual(build_mod.resolve_git_short_sha(MOD_ROOT.parent), expected)
-                self.assertEqual(git.call_args.args[0], ["git", "rev-parse", "--short", "HEAD"])
-                self.assertEqual(git.call_args.kwargs["cwd"], MOD_ROOT.parent)
+                self.assertEqual(git.call_args_list[0].args[0], ["git", "rev-parse", "--short", "HEAD"])
+                self.assertEqual(git.call_args_list[0].kwargs["cwd"], MOD_ROOT.parent)
+
+        with patch.object(
+            build_mod.subprocess,
+            "check_output",
+            side_effect=[b"abc1234\n", b" M mod/maps/_bz_perks.gsc\n"],
+        ):
+            self.assertEqual(build_mod.resolve_git_short_sha(MOD_ROOT.parent), "abc1234-dirty")
 
         for error in (FileNotFoundError(), subprocess.CalledProcessError(128, "git")):
             with (

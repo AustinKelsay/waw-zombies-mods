@@ -530,15 +530,21 @@ bz_flame_start_burn_dot( zombie, player, round_num, zombie_hp, is_close_range, i
 	}
 
 	tick_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( round_num, zombie_hp, is_close_range, is_upgraded );
+	was_active = ( IsDefined( zombie.bz_flame_dot_active ) && zombie.bz_flame_dot_active );
 	zombie.bz_flame_dot_active = true;
 	zombie.bz_flame_dot_damage = tick_dmg;
 	zombie.bz_flame_dot_close = is_close_range;
 	zombie.bz_flame_dot_upgraded = is_upgraded;
+	zombie.bz_flame_dot_player = player;
+	zombie.bz_flame_dot_ticks_left = bz_get_flame_dot_ticks();
 	zombie.bz_flame_last_ignite_ms = now;
 	maps\_bz_hooks::bz_recompute_zombie_move_rate( zombie );
 
-	zombie notify( "bz_flame_dot_restart" );
-	zombie thread bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgraded );
+	if ( !was_active )
+	{
+		zombie notify( "bz_flame_dot_restart" );
+		zombie thread bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgraded );
+	}
 
 	if ( IsDefined( allow_spread ) && allow_spread )
 	{
@@ -604,10 +610,30 @@ bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgra
 	self endon( "bz_flame_dot_restart" );
 	level endon( "end_game" );
 
-	tick_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( round_num, zombie_hp, is_close_range, is_upgraded );
-	max_ticks = bz_get_flame_dot_ticks();
+	default_dmg = maps\_bz_rules::bz_calc_flame_dot_damage( round_num, zombie_hp, is_close_range, is_upgraded );
+	if ( !IsDefined( self.bz_flame_dot_ticks_left ) || Int( self.bz_flame_dot_ticks_left ) <= 0 )
+	{
+		self.bz_flame_dot_ticks_left = bz_get_flame_dot_ticks();
+	}
+	if ( !IsDefined( self.bz_flame_dot_damage ) )
+	{
+		self.bz_flame_dot_damage = default_dmg;
+	}
+	if ( !IsDefined( self.bz_flame_dot_player ) )
+	{
+		self.bz_flame_dot_player = player;
+	}
+	if ( !IsDefined( self.bz_flame_dot_close ) )
+	{
+		self.bz_flame_dot_close = is_close_range;
+	}
+	if ( !IsDefined( self.bz_flame_dot_upgraded ) )
+	{
+		self.bz_flame_dot_upgraded = is_upgraded;
+	}
 
-	for ( tick = 1; tick <= max_ticks; tick++ )
+	tick = 0;
+	while ( IsDefined( self ) && IsDefined( self.bz_flame_dot_ticks_left ) && Int( self.bz_flame_dot_ticks_left ) > 0 )
 	{
 		wait( 1.0 );
 
@@ -624,12 +650,15 @@ bz_flame_burn_dot_thread( player, round_num, zombie_hp, is_close_range, is_upgra
 			break;
 		}
 
-		bz_flame_apply_dot_tick( self, player, tick_dmg, is_close_range, is_upgraded, tick );
+		self.bz_flame_dot_ticks_left = Int( self.bz_flame_dot_ticks_left ) - 1;
+		tick++;
+		bz_flame_apply_dot_tick( self, self.bz_flame_dot_player, self.bz_flame_dot_damage, self.bz_flame_dot_close, self.bz_flame_dot_upgraded, tick );
 	}
 
 	if ( IsDefined( self ) )
 	{
 		self.bz_flame_dot_active = false;
+		self.bz_flame_dot_ticks_left = 0;
 		if ( IsAlive( self ) )
 		{
 			maps\_bz_hooks::bz_recompute_zombie_move_rate( self );

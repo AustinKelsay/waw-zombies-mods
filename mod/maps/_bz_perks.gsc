@@ -31,6 +31,7 @@ bz_perks_register()
 	bz_register_hook( "player_connect", ::bz_perks_on_player_connect, "perks" );
 	bz_register_hook( "player_spawned", ::bz_perks_on_player_spawned, "perks" );
 	bz_register_hook( "player_downed", ::bz_perks_on_player_downed, "perks" );
+	bz_register_hook( "player_revived", ::bz_perks_on_player_revived, "perks" );
 	bz_register_hook( "round_start", ::bz_perks_on_round_start, "perks" );
 	bz_register_hook( "end_game", ::bz_perks_on_end_game, "perks" );
 	bz_register_hook( "max_primary_weapons", ::bz_perks_on_max_primary_weapons, "perks" );
@@ -207,7 +208,7 @@ bz_perks_on_player_connect( player )
 		return;
 	}
 
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	if ( !IsDefined( player.bz_primary_weapon_order ) )
 	{
 		player.bz_primary_weapon_order = [];
@@ -220,11 +221,29 @@ bz_perks_on_player_connect( player )
 	{
 		player.bz_extra_solo_revives = 0;
 	}
-	player.bz_max_primary_weapons = maps\_bz_state::bz_state_get_max_primary_weapons( player );
+	player.bz_max_primary_weapons = bz_state_get_max_primary_weapons( player );
 
 	bz_perks_sync_stock_perks( player );
 	bz_perks_sync_weapon_order( player );
 	bz_perks_update_hud( player );
+
+	// If a 2nd player joins a session where solo perk dvars were applied on the host,
+	// reset those shared host dvars back to stock defaults immediately.
+	if ( !bz_perks_is_solo() )
+	{
+		all_players = GetPlayers();
+		if ( IsDefined( all_players ) )
+		{
+			for ( pi = 0; pi < all_players.size; pi++ )
+			{
+				p_other = all_players[pi];
+				if ( IsDefined( p_other ) && IsDefined( p_other.bz_applied_solo_dvars ) && p_other.bz_applied_solo_dvars )
+				{
+					bz_perks_reset_shared_dvars( p_other );
+				}
+			}
+		}
+	}
 
 	if ( !IsDefined( player.bz_perks_watchers_started ) || !player.bz_perks_watchers_started )
 	{
@@ -243,11 +262,147 @@ bz_perks_on_player_spawned( player )
 		return;
 	}
 
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	bz_perks_sync_stock_perks( player );
 	bz_perks_sync_weapon_order( player );
 	bz_perks_update_lightweight_heavy( player );
 	bz_perks_update_hud( player );
+}
+
+bz_perks_is_solo()
+{
+	players = GetPlayers();
+	return !IsDefined( players ) || players.size <= 1;
+}
+
+bz_perks_reset_shared_dvars( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	player SetClientDvar( "player_sprintTime", "4" );
+	player SetClientDvar( "player_sprintSpeedScale", "1.5" );
+	player SetClientDvar( "player_adsStrafeSpeedScale", "1.0" );
+	player SetClientDvar( "perk_weapReloadMultiplier", "0.5" );
+	player SetClientDvar( "perk_weapSwitchMultiplier", "1.0" );
+	player.bz_applied_solo_dvars = false;
+	player.bz_reload_mult = 0.5;
+	player.bz_swap_mult = 1.0;
+}
+
+bz_perks_sync_solo_dvars_for_player( player )
+{
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( !bz_perks_is_solo() )
+	{
+		if ( IsDefined( player.bz_applied_solo_dvars ) && player.bz_applied_solo_dvars )
+		{
+			bz_perks_reset_shared_dvars( player );
+		}
+		return;
+	}
+
+	if ( bz_state_has_perk( player, "staminup" ) )
+	{
+		if ( bz_state_has_perk_t2( player, "staminup" ) )
+		{
+			player SetClientDvar( "player_sprintTime", "12" );
+			player SetClientDvar( "player_sprintSpeedScale", "1.75" );
+			player SetClientDvar( "player_adsStrafeSpeedScale", "1.25" );
+		}
+		else
+		{
+			player SetClientDvar( "player_sprintTime", "8" );
+			player SetClientDvar( "player_sprintSpeedScale", "1.65" );
+		}
+		player.bz_applied_solo_dvars = true;
+	}
+	if ( bz_state_has_perk_t2( player, "speed_cola" ) )
+	{
+		player.bz_reload_mult = 0.35;
+		player.bz_swap_mult = 0.5;
+		player SetClientDvar( "perk_weapReloadMultiplier", "0.35" );
+		player SetClientDvar( "perk_weapSwitchMultiplier", "0.5" );
+		player.bz_applied_solo_dvars = true;
+	}
+}
+
+bz_perks_on_player_disconnect( player )
+{
+	bz_perks_destroy_hud( player );
+	if ( !bz_perks_enabled() )
+	{
+		return;
+	}
+
+	// If a teammate's disconnect returns the session to 1 solo player, re-apply
+	// that player's owned solo perk dvars (Stamin-Up I/II, Speed Cola II).
+	all_players = GetPlayers();
+	if ( !IsDefined( all_players ) )
+	{
+		return;
+	}
+	remaining = [];
+	for ( i = 0; i < all_players.size; i++ )
+	{
+		p = all_players[i];
+		if ( IsDefined( p ) && p != player )
+		{
+			remaining[remaining.size] = p;
+		}
+	}
+	if ( remaining.size == 1 )
+	{
+		survivor = remaining[0];
+		if ( bz_state_has_perk( survivor, "staminup" ) )
+		{
+			if ( bz_state_has_perk_t2( survivor, "staminup" ) )
+			{
+				survivor SetClientDvar( "player_sprintTime", "12" );
+				survivor SetClientDvar( "player_sprintSpeedScale", "1.75" );
+				survivor SetClientDvar( "player_adsStrafeSpeedScale", "1.25" );
+			}
+			else
+			{
+				survivor SetClientDvar( "player_sprintTime", "8" );
+				survivor SetClientDvar( "player_sprintSpeedScale", "1.65" );
+			}
+			survivor.bz_applied_solo_dvars = true;
+		}
+		if ( bz_state_has_perk_t2( survivor, "speed_cola" ) )
+		{
+			survivor.bz_reload_mult = 0.35;
+			survivor.bz_swap_mult = 0.5;
+			survivor SetClientDvar( "perk_weapReloadMultiplier", "0.35" );
+			survivor SetClientDvar( "perk_weapSwitchMultiplier", "0.5" );
+			survivor.bz_applied_solo_dvars = true;
+		}
+	}
+}
+
+bz_perks_player_is_downed( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( IsDefined( player.revivetrigger ) )
+	{
+		return true;
+	}
+	if ( IsDefined( player.is_in_laststand ) && player.is_in_laststand )
+	{
+		return true;
+	}
+	if ( IsDefined( player.in_last_stand ) && player.in_last_stand )
+	{
+		return true;
+	}
+	return false;
 }
 
 bz_perks_on_player_downed( player )
@@ -257,26 +412,60 @@ bz_perks_on_player_downed( player )
 		return;
 	}
 
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
+	prev_order = [];
+	if ( IsDefined( player.bz_primary_weapon_order ) )
+	{
+		for ( pi = 0; pi < player.bz_primary_weapon_order.size; pi++ )
+		{
+			prev_order[pi] = player.bz_primary_weapon_order[pi];
+		}
+	}
 	held = bz_perks_sync_weapon_order( player );
 	summary = maps\_bz_state::bz_state_on_player_downed( player, held.size );
 	stripped = bz_perks_strip_excess_mule_weapons( player, 2 );
+	if ( stripped.size == 0 && prev_order.size > 2 )
+	{
+		// Stock Last Stand snapshots & removes primaries BEFORE firing player_downed,
+		// so preserve acquisition order to strip excess Mule Kick weapons on revive.
+		player.bz_pending_mule_strip_order = prev_order;
+	}
+	else
+	{
+		player.bz_pending_mule_strip_order = undefined;
+	}
 
 	// Clear perk speed and base health modifiers (preserves Class modifiers such as Titan 2x)
 	maps\_bz_hooks::bz_clear_speed_modifier( player, "bz_staminup" );
 	maps\_bz_hooks::bz_clear_speed_modifier( player, "bz_lightweight_heavy" );
 	maps\_bz_hooks::bz_clear_base_max_health( player, "bz_jugg_t2" );
 
-	// Clear perk-owned engine perks, client dvars, and runtime flags
+	// Clear ALL perk-owned engine specialties (including station-bought stock perks
+	// which do not have a stock vending machine perk_think thread).
+	if ( player HasPerk( "specialty_armorvest" ) )
+	{
+		player UnsetPerk( "specialty_armorvest" );
+	}
+	if ( player HasPerk( "specialty_fastreload" ) )
+	{
+		player UnsetPerk( "specialty_fastreload" );
+	}
+	if ( player HasPerk( "specialty_rof" ) )
+	{
+		player UnsetPerk( "specialty_rof" );
+	}
+	if ( player HasPerk( "specialty_quickrevive" ) )
+	{
+		player UnsetPerk( "specialty_quickrevive" );
+	}
 	if ( player HasPerk( "specialty_longersprint" ) )
 	{
 		player UnsetPerk( "specialty_longersprint" );
 	}
-	player SetClientDvar( "player_sprintTime", "4" );
-	player SetClientDvar( "player_sprintSpeedScale", "1.5" );
-	player SetClientDvar( "player_adsStrafeSpeedScale", "1.0" );
-	player SetClientDvar( "perk_weapReloadMultiplier", "0.5" );
-	player SetClientDvar( "perk_weapSwitchMultiplier", "1.0" );
+	if ( bz_perks_is_solo() || ( IsDefined( player.bz_applied_solo_dvars ) && player.bz_applied_solo_dvars ) )
+	{
+		bz_perks_reset_shared_dvars( player );
+	}
 
 	player.bz_fast_swap_active = false;
 	player.bz_reload_mult = 0.5;
@@ -289,11 +478,40 @@ bz_perks_on_player_downed( player )
 	player.bz_extra_solo_revives = 0;
 	player.bz_max_primary_weapons = 2;
 	player.bz_weapon_max_reserve = [];
+	// Lose Double Ammo (2x) overflow on down, but clamp rather than erase surviving
+	// Double PaP (+50%) overflow because Double PaP persists across downs.
+	if ( IsDefined( player.bz_overflow_reserve ) )
+	{
+		ov_keys = GetArrayKeys( player.bz_overflow_reserve );
+		new_ov = [];
+		for ( oi = 0; oi < ov_keys.size; oi++ )
+		{
+			ok = ov_keys[oi];
+			if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, ok ) )
+			{
+				cur_ov = Int( player.bz_overflow_reserve[ok] );
+				dpap_cap = bz_perks_calc_weapon_max_reserve( player, ok ) - Int( WeaponMaxAmmo( ok ) );
+				if ( dpap_cap > 0 && cur_ov > 0 )
+				{
+					if ( cur_ov > dpap_cap )
+					{
+						cur_ov = dpap_cap;
+					}
+					new_ov[ok] = cur_ov;
+				}
+			}
+		}
+		player.bz_overflow_reserve = new_ov;
+	}
+	else
+	{
+		player.bz_overflow_reserve = [];
+	}
 	player.bz_invuln_until = 0;
 
 	bz_perks_update_revive_state( player );
-	maps\_bz_hooks::bz_recompute_player_speed( player );
-	maps\_bz_hooks::bz_recompute_player_max_health( player );
+	bz_recompute_player_speed( player );
+	bz_recompute_player_max_health( player );
 	bz_perks_update_hud( player );
 	maps\_bz_stations::bz_stations_sync_player_ui( player );
 
@@ -305,6 +523,43 @@ bz_perks_on_player_downed( player )
 	fields[4] = bz_log_kv( "stripped_weapons", bz_perks_join_csv( stripped ) );
 	fields[5] = bz_log_kv( "max_weapons", summary.new_max_weapons );
 	bz_log_emit( "PERK_DOWN_RESET", bz_log_join( fields ) );
+}
+
+bz_perks_on_player_revived( player, reviver )
+{
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+	// Stock revive_success() fires "player_revived" BEFORE deleting revivetrigger
+	// and BEFORE calling laststand_giveback_player_weapons(). Wait until the
+	// post-giveback call (when revivetrigger is gone) so bz_pending_mule_strip_order
+	// is never consumed prematurely while only the Last Stand pistol is held.
+	if ( bz_perks_player_is_downed( player ) )
+	{
+		return;
+	}
+
+	bz_state_ensure_init( player );
+	max_weapons = bz_state_get_max_primary_weapons( player );
+	player.bz_max_primary_weapons = max_weapons;
+
+	if ( IsDefined( player.bz_pending_mule_strip_order ) && player.bz_pending_mule_strip_order.size > 0 )
+	{
+		player.bz_primary_weapon_order = player.bz_pending_mule_strip_order;
+		player.bz_pending_mule_strip_order = undefined;
+	}
+	bz_perks_sync_weapon_order( player );
+	stripped = bz_perks_strip_excess_mule_weapons( player, max_weapons );
+	if ( stripped.size > 0 )
+	{
+		fields = [];
+		fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+		fields[1] = bz_log_kv( "stripped_weapons", bz_perks_join_csv( stripped ) );
+		fields[2] = bz_log_kv( "max_weapons", max_weapons );
+		bz_log_emit( "PERK_MULE_REVIVE_STRIP", bz_log_join( fields ) );
+		maps\_bz_stations::bz_stations_sync_player_ui( player );
+	}
 }
 
 bz_perks_on_round_start( round_num )
@@ -385,7 +640,7 @@ bz_perks_on_max_primary_weapons( player, current_cap )
 		return current_cap;
 	}
 
-	cap = maps\_bz_state::bz_state_get_max_primary_weapons( player );
+	cap = bz_state_get_max_primary_weapons( player );
 	if ( cap > current_cap )
 	{
 		return cap;
@@ -612,7 +867,7 @@ bz_perks_apply_standard_perk( player, perk_id )
 		{
 			player SetPerk( "specialty_armorvest" );
 		}
-		maps\_bz_hooks::bz_recompute_player_max_health( player );
+		bz_recompute_player_max_health( player );
 	}
 	else if ( id == "speed_cola" )
 	{
@@ -639,15 +894,19 @@ bz_perks_apply_standard_perk( player, perk_id )
 	else if ( id == "staminup" )
 	{
 		player SetPerk( "specialty_longersprint" );
-		player SetClientDvar( "player_sprintTime", "8" );
-		player SetClientDvar( "player_sprintSpeedScale", "1.65" );
+		if ( bz_perks_is_solo() )
+		{
+			player SetClientDvar( "player_sprintTime", "8" );
+			player SetClientDvar( "player_sprintSpeedScale", "1.65" );
+			player.bz_applied_solo_dvars = true;
+		}
 		player.bz_staminup_sprint_scale = 1.65;
 		maps\_bz_hooks::bz_set_speed_modifier( player, "bz_staminup", 1.15 );
-		maps\_bz_hooks::bz_recompute_player_speed( player );
+		bz_recompute_player_speed( player );
 	}
 	else if ( id == "mule_kick" )
 	{
-		player.bz_max_primary_weapons = maps\_bz_state::bz_state_get_max_primary_weapons( player );
+		player.bz_max_primary_weapons = bz_state_get_max_primary_weapons( player );
 		bz_perks_sync_weapon_order( player );
 	}
 	else if ( id == "ap" )
@@ -679,7 +938,7 @@ bz_perks_apply_perk_t2( player, perk_id )
 			player SetPerk( "specialty_armorvest" );
 		}
 		maps\_bz_hooks::bz_set_base_max_health( player, "bz_jugg_t2", 220 );
-		maps\_bz_hooks::bz_recompute_player_max_health( player );
+		bz_recompute_player_max_health( player );
 	}
 	else if ( id == "speed_cola" )
 	{
@@ -688,10 +947,19 @@ bz_perks_apply_perk_t2( player, perk_id )
 			player SetPerk( "specialty_fastreload" );
 		}
 		player.bz_fast_swap_active = true;
-		player.bz_reload_mult = 0.35;
-		player.bz_swap_mult = 0.5;
-		player SetClientDvar( "perk_weapReloadMultiplier", "0.35" );
-		player SetClientDvar( "perk_weapSwitchMultiplier", "0.5" );
+		if ( bz_perks_is_solo() )
+		{
+			player.bz_reload_mult = 0.35;
+			player.bz_swap_mult = 0.5;
+			player SetClientDvar( "perk_weapReloadMultiplier", "0.35" );
+			player SetClientDvar( "perk_weapSwitchMultiplier", "0.5" );
+			player.bz_applied_solo_dvars = true;
+		}
+		else
+		{
+			player.bz_reload_mult = 0.5;
+			player.bz_swap_mult = 1.0;
+		}
 		player SetClientDvar( "cg_weaponCycleDelay", "0" );
 	}
 	else if ( id == "double_tap" )
@@ -719,17 +987,21 @@ bz_perks_apply_perk_t2( player, perk_id )
 	else if ( id == "staminup" )
 	{
 		player SetPerk( "specialty_longersprint" );
-		player SetClientDvar( "player_sprintTime", "12" );
-		player SetClientDvar( "player_sprintSpeedScale", "1.75" );
-		player SetClientDvar( "player_adsStrafeSpeedScale", "1.25" );
+		if ( bz_perks_is_solo() )
+		{
+			player SetClientDvar( "player_sprintTime", "12" );
+			player SetClientDvar( "player_sprintSpeedScale", "1.75" );
+			player SetClientDvar( "player_adsStrafeSpeedScale", "1.25" );
+			player.bz_applied_solo_dvars = true;
+		}
 		player.bz_staminup_sprint_scale = 1.75;
 		player.bz_ads_strafe_mult = maps\_bz_rules::bz_get_staminup_t2_ads_strafe_mult();
 		maps\_bz_hooks::bz_set_speed_modifier( player, "bz_staminup", 1.25 );
-		maps\_bz_hooks::bz_recompute_player_speed( player );
+		bz_recompute_player_speed( player );
 	}
 	else if ( id == "mule_kick" )
 	{
-		player.bz_max_primary_weapons = maps\_bz_state::bz_state_get_max_primary_weapons( player );
+		player.bz_max_primary_weapons = bz_state_get_max_primary_weapons( player );
 		bz_perks_sync_weapon_order( player );
 	}
 	else if ( id == "ap" )
@@ -867,6 +1139,26 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 				cur_was_stripped = true;
 			}
 			player TakeWeapon( w );
+			norm_stripped = bz_normalize_id( w );
+			if ( norm_stripped != "" )
+			{
+				if ( IsDefined( player.bz_pap_weapons ) )
+				{
+					player.bz_pap_weapons[norm_stripped] = false;
+				}
+				if ( IsDefined( player.bz_single_pap_weapons ) )
+				{
+					player.bz_single_pap_weapons[norm_stripped] = false;
+				}
+				if ( IsDefined( player.bz_double_pap_weapons ) )
+				{
+					player.bz_double_pap_weapons[norm_stripped] = false;
+				}
+				if ( IsDefined( player.bz_overflow_reserve ) )
+				{
+					player.bz_overflow_reserve[norm_stripped] = 0;
+				}
+			}
 			stripped[stripped.size] = w;
 		}
 	}
@@ -908,6 +1200,111 @@ bz_perks_calc_weapon_max_reserve( player, weapon_name )
 	return Int( base_max * mult );
 }
 
+bz_perks_set_weapon_stock_with_overflow( player, w, target_max )
+{
+	if ( !IsDefined( player ) || !IsDefined( w ) || w == "" || !IsDefined( target_max ) || Int( target_max ) <= 0 )
+	{
+		return 0;
+	}
+
+	if ( !IsDefined( player.bz_weapon_max_reserve ) )
+	{
+		player.bz_weapon_max_reserve = [];
+	}
+	if ( !IsDefined( player.bz_overflow_reserve ) )
+	{
+		player.bz_overflow_reserve = [];
+	}
+
+	norm_w = bz_normalize_id( w );
+	player.bz_weapon_max_reserve[w] = target_max;
+	player SetWeaponAmmoStock( w, target_max );
+
+	engine_max = Int( WeaponMaxAmmo( w ) );
+	overflow = 0;
+	if ( engine_max > 0 && target_max > engine_max )
+	{
+		overflow = target_max - engine_max;
+	}
+	player.bz_overflow_reserve[norm_w] = overflow;
+	return overflow;
+}
+
+bz_perks_drain_overflow_reserve( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.bz_overflow_reserve ) )
+	{
+		return 0;
+	}
+	if ( !IsAlive( player ) || bz_perks_player_is_downed( player ) )
+	{
+		return 0;
+	}
+
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) || primaries.size == 0 )
+	{
+		return 0;
+	}
+
+	held = [];
+	transferred = 0;
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		w = primaries[i];
+		norm_w = bz_normalize_id( w );
+		if ( norm_w == "" )
+		{
+			continue;
+		}
+		held[norm_w] = true;
+
+		if ( !IsDefined( player.bz_overflow_reserve[norm_w] ) )
+		{
+			continue;
+		}
+		overflow = Int( player.bz_overflow_reserve[norm_w] );
+		if ( overflow <= 0 )
+		{
+			continue;
+		}
+
+		engine_max = Int( WeaponMaxAmmo( w ) );
+		if ( engine_max <= 0 )
+		{
+			continue;
+		}
+		cur_stock = Int( player GetWeaponAmmoStock( w ) );
+		missing = engine_max - cur_stock;
+		if ( missing > 0 )
+		{
+			grant = missing;
+			if ( grant > overflow )
+			{
+				grant = overflow;
+			}
+			player SetWeaponAmmoStock( w, cur_stock + grant );
+			player.bz_overflow_reserve[norm_w] = overflow - grant;
+			transferred = transferred + grant;
+		}
+	}
+
+	keys = GetArrayKeys( player.bz_overflow_reserve );
+	if ( IsDefined( keys ) )
+	{
+		for ( k = 0; k < keys.size; k++ )
+		{
+			key = keys[k];
+			if ( !IsDefined( held[key] ) )
+			{
+				player.bz_overflow_reserve[key] = 0;
+			}
+		}
+	}
+
+	return transferred;
+}
+
 bz_perks_apply_double_ammo_to_player( player )
 {
 	if ( !IsDefined( player ) )
@@ -933,8 +1330,7 @@ bz_perks_apply_double_ammo_to_player( player )
 		target_max = bz_perks_calc_weapon_max_reserve( player, w );
 		if ( target_max > 0 )
 		{
-			player.bz_weapon_max_reserve[w] = target_max;
-			player SetWeaponAmmoStock( w, target_max );
+			bz_perks_set_weapon_stock_with_overflow( player, w, target_max );
 			updated++;
 		}
 	}
@@ -965,8 +1361,7 @@ bz_perks_refill_ammo_for_player( player, weapon_name )
 		target_max = bz_perks_calc_weapon_max_reserve( player, norm_w );
 		if ( target_max > 0 )
 		{
-			player.bz_weapon_max_reserve[norm_w] = target_max;
-			player SetWeaponAmmoStock( norm_w, target_max );
+			bz_perks_set_weapon_stock_with_overflow( player, norm_w, target_max );
 			updated = 1;
 		}
 	}
@@ -1053,7 +1448,7 @@ bz_perks_update_lightweight_heavy( player )
 		maps\_bz_hooks::bz_clear_speed_modifier( player, "bz_lightweight_heavy" );
 	}
 
-	return maps\_bz_hooks::bz_recompute_player_speed( player );
+	return bz_recompute_player_speed( player );
 }
 
 bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
@@ -1249,7 +1644,7 @@ bz_perks_sync_stock_perks( player )
 		return false;
 	}
 
-	maps\_bz_state::bz_state_ensure_init( player );
+	bz_state_ensure_init( player );
 	changed = false;
 
 	if ( player HasPerk( "specialty_armorvest" ) && !bz_state_has_perk( player, "juggernog" ) )
@@ -1276,7 +1671,7 @@ bz_perks_sync_stock_perks( player )
 
 	if ( changed )
 	{
-		maps\_bz_hooks::bz_recompute_player_max_health( player );
+		bz_recompute_player_max_health( player );
 		bz_perks_update_hud( player );
 		maps\_bz_stations::bz_stations_sync_player_ui( player );
 	}
@@ -1506,6 +1901,7 @@ bz_perks_player_monitor()
 				}
 			}
 		}
+		bz_perks_drain_overflow_reserve( self );
 
 		cur_weap = bz_normalize_id( self GetCurrentWeapon() );
 		if ( cur_weap != last_weapon )
@@ -1524,13 +1920,13 @@ bz_perks_player_monitor()
 			if ( is_ads != last_ads )
 			{
 				last_ads = is_ads;
-				maps\_bz_hooks::bz_recompute_player_speed( self );
+				bz_recompute_player_speed( self );
 			}
 		}
 		else if ( last_ads )
 		{
 			last_ads = false;
-			maps\_bz_hooks::bz_recompute_player_speed( self );
+			bz_recompute_player_speed( self );
 		}
 	}
 }
@@ -1539,7 +1935,7 @@ bz_perks_watch_disconnect()
 {
 	level endon( "end_game" );
 	self waittill( "disconnect" );
-	bz_perks_destroy_hud( self );
+	bz_perks_on_player_disconnect( self );
 }
 
 bz_perks_watch_max_ammo()
@@ -1624,4 +2020,24 @@ bz_state_has_perk( player, perk_id )
 bz_state_has_perk_t2( player, perk_id )
 {
 	return maps\_bz_state::bz_state_has_perk_t2( player, perk_id );
+}
+
+bz_state_ensure_init( player )
+{
+	maps\_bz_state::bz_state_ensure_init( player );
+}
+
+bz_state_get_max_primary_weapons( player )
+{
+	return maps\_bz_state::bz_state_get_max_primary_weapons( player );
+}
+
+bz_recompute_player_speed( player )
+{
+	return maps\_bz_hooks::bz_recompute_player_speed( player );
+}
+
+bz_recompute_player_max_health( player )
+{
+	return maps\_bz_hooks::bz_recompute_player_max_health( player );
 }

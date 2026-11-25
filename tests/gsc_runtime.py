@@ -785,6 +785,11 @@ class GscRuntime:
             return True, GscArray(parts)
         if name_lower == "spawnstruct":
             return True, GscStruct()
+        if name_lower == "getarraykeys":
+            arr = args[0] if args else UNDEFINED
+            if isinstance(arr, GscArray):
+                return True, GscArray(list(arr._data.keys()))
+            return True, GscArray([])
         if name_lower == "getdvar":
             key = _waw_to_str(args[0]) if args else ""
             return True, self.dvars.get(key)

@@ -205,13 +205,20 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                     player.set_field("health", 0)
                 else:
                     player.set_field("sessionstate", player_state)
-                runtime.call(BRIDGE_MOD, "restore_player_bz_state", player, VERRUCKT)
+                restored_ok = runtime.call(BRIDGE_MOD, "restore_player_bz_state", player, VERRUCKT)
                 self.assertEqual(player.weapons, expected)
                 self.assertFalse(runtime.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, ACID))
-                if expected:
-                    self.assertEqual(player.weapon_stock[ACID], 120)
-                    self.assertEqual(runtime.call(BRIDGE_MOD, "encode_weapons_record", player), "ac:0,cr:0")
-                self.assert_restored_counts(runtime, len(expected), 0)
+                if player_state in ("dead", "spectator"):
+                    # Dead/spectating players defer alive-only restore until live spawn
+                    # so carried perks & weapons are never permanently skipped.
+                    self.assertFalse(restored_ok)
+                    self.assertTrue(player.get_field("gauntlet_bz_restore_pending"))
+                    self.assertNotEqual(player.get_field("gauntlet_bz_restored"), True)
+                else:
+                    if expected:
+                        self.assertEqual(player.weapon_stock[ACID], 120)
+                        self.assertEqual(runtime.call(BRIDGE_MOD, "encode_weapons_record", player), "ac:0,cr:0")
+                    self.assert_restored_counts(runtime, len(expected), 0)
 
     def test_save_gates_leave_classic_state_alone_and_clear_disabled_element_entry(self) -> None:
         dvars = _make_enhanced_dvars()

@@ -825,12 +825,48 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
         )
         chest_body = CHEST_SCORE_DEDUCT_RE.sub(
             lambda m: (
-                f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( "
-                f"maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} ) )"
+                f"{m.group('ent')}.bz_last_box_cost = maps\\_bz_hooks::bz_box_cost_modify( {m.group('ent')}, {m.group('cost')} ); "
+                f"{m.group('ent')} maps\\_zombiemode_score::minus_to_player_score( {m.group('ent')}.bz_last_box_cost )"
             ),
             chest_body,
         )
         text = text[: chest_match.start()] + chest_body + text[chest_end:]
+
+    # Refund the actual box cost paid on teddy bear inside treasure_chest_weapon_spawn()
+    # without passing through bz_points_modify (prevents Broker from netting +1,425 pts).
+    bear_refund_re = re.compile(
+        r"^(?P<indent>[ \t]*)(?P<ent>[A-Za-z_][A-Za-z0-9_]*)[ \t]+maps\\_zombiemode_score::add_to_player_score\([ \t]*950[ \t]*\);(?P<trailing>[ \t]*)\r?$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+
+    def _patch_bear_refund(m: re.Match[str]) -> str:
+        indent = m.group("indent")
+        ent = m.group("ent")
+        orig = m.group(0).rstrip("\r")
+        ending = "\r" if m.group(0).endswith("\r") else ""
+        return (
+            f"{indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+            f"{indent}{{{newline}"
+            f"{indent}\tif ( !IsDefined( level.intermission ) || !level.intermission ){newline}"
+            f"{indent}\t{{{newline}"
+            f"{indent}\t\tbz_refund = maps\\_bz_hooks::bz_box_cost_modify( {ent}, 950 );{newline}"
+            f"{indent}\t\tif ( IsDefined( {ent}.bz_last_box_cost ) && Int( {ent}.bz_last_box_cost ) > 0 ){newline}"
+            f"{indent}\t\t{{{newline}"
+            f"{indent}\t\t\tbz_refund = Int( {ent}.bz_last_box_cost );{newline}"
+            f"{indent}\t\t}}{newline}"
+            f"{indent}\t\t{ent}.bz_last_box_cost = undefined;{newline}"
+            f"{indent}\t\t{ent}.score += bz_refund;{newline}"
+            f"{indent}\t\t{ent}.score_total += bz_refund;{newline}"
+            f"{indent}\t\t{ent} maps\\_zombiemode_score::set_player_score_hud();{newline}"
+            f"{indent}\t}}{newline}"
+            f"{indent}}}{newline}"
+            f"{indent}else{newline}"
+            f"{indent}{{{newline}"
+            f"{indent}\t{orig.lstrip()}{newline}"
+            f"{indent}}}{ending}"
+        )
+
+    text = bear_refund_re.sub(_patch_bear_refund, text)
 
     # Inject guarded wall-buy weapon purchase hook (Sapper Wall-Buy Traps)
     def _inject_wall_weapon(match: re.Match[str]) -> str:
@@ -1281,6 +1317,40 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
         f"{all_match.group(0)}"
     )
     text = text[: all_match.start()] + solo_hook + text[all_match.end() :]
+
+    # 4. Exit revive_trigger_think() cleanly once Gauntlet Stage Clear deletes revivetrigger
+    #    without aborting an active reviver mid-revive (so revive_do_revive exits via !is_reviving
+    #    and revive_give_back_weapons() still removes the syrette and restores weapon cycling).
+    hint_clear_re = re.compile(
+        r'^(?P<indent>[ \t]*)self\.revivetrigger[ \t]+setHintString[ \t]*\([ \t]*""[ \t]*\);(?P<trailing>[ \t]*)\r?$',
+        re.MULTILINE | re.IGNORECASE,
+    )
+    h_match = hint_clear_re.search(text)
+    if h_match is not None:
+        h_indent = h_match.group("indent")
+        h_orig = h_match.group(0).rstrip("\r")
+        h_ending = "\r" if h_match.group(0).endswith("\r") else ""
+        h_hook = f"{h_indent}if ( !IsDefined( self.revivetrigger ) ) {{ return; }}{newline}{h_orig}{h_ending}"
+        text = text[: h_match.start()] + h_hook + text[h_match.end() :]
+
+    # 5. Strip excess Mule Kick weapons AFTER stock revive_success() gives back saved weapons.
+    giveback_re = re.compile(
+        r"^(?P<indent>[ \t]*)self[ \t]+laststand_giveback_player_weapons\([ \t]*\);(?P<trailing>[ \t]*)\r?$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    gb_match = giveback_re.search(text)
+    if gb_match is not None:
+        gb_indent = gb_match.group("indent")
+        gb_orig = gb_match.group(0).rstrip("\r")
+        gb_ending = "\r" if gb_match.group(0).endswith("\r") else ""
+        gb_hook = (
+            f"{gb_orig}{newline}"
+            f"{gb_indent}if ( maps\\_bz_hooks::bz_enabled() ){newline}"
+            f"{gb_indent}{{{newline}"
+            f"{gb_indent}\tmaps\\_bz_perks::bz_perks_on_player_revived( self, reviver );{newline}"
+            f"{gb_indent}}}{gb_ending}"
+        )
+        text = text[: gb_match.start()] + gb_hook + text[gb_match.end() :]
 
     return text.encode("latin1")
 
@@ -2038,7 +2108,7 @@ bz_get_build_id()
 
 
 def resolve_git_short_sha(repo_root: Path) -> str:
-    """Read the short HEAD commit or use the dev fallback for source-only builds."""
+    """Read the short HEAD commit (with -dirty when working tree is dirty) or dev fallback."""
     try:
         output = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -2048,6 +2118,18 @@ def resolve_git_short_sha(repo_root: Path) -> str:
         commit_sha = output.decode("ascii").strip()
     except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
         return "dev"
+    if not BZ_BUILD_COMMIT_RE.fullmatch(commit_sha):
+        return "dev"
+    try:
+        status_out = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            stderr=subprocess.DEVNULL,
+        )
+        if status_out.strip() and not commit_sha.endswith("-dirty"):
+            commit_sha = f"{commit_sha}-dirty"
+    except (OSError, subprocess.CalledProcessError):
+        pass
     return commit_sha if BZ_BUILD_COMMIT_RE.fullmatch(commit_sha) else "dev"
 
 
@@ -2317,7 +2399,11 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     return stage_dir
 
 
-def _overlay_staged_ui_into_raw(stage_dir: Path, tools_root: Path) -> list[tuple[Path, bytes | None]]:
+def _overlay_staged_ui_into_raw(
+    stage_dir: Path,
+    tools_root: Path,
+    backups: list[tuple[Path, bytes | None]] | None = None,
+) -> list[tuple[Path, bytes | None]]:
     """Temporarily overlay staged ui/ files onto tools_root/raw/ui/ for linker_pc.exe.
 
     In CoD:WaW 1.7, linker_pc.exe resolves menufile assets (and #include'd .inc files)
@@ -2327,7 +2413,8 @@ def _overlay_staged_ui_into_raw(stage_dir: Path, tools_root: Path) -> list[tuple
     """
     staged_ui_dir = stage_dir / "ui"
     raw_dir = tools_root / "raw"
-    backups: list[tuple[Path, bytes | None]] = []
+    if backups is None:
+        backups = []
     if not staged_ui_dir.is_dir():
         return backups
 
@@ -2336,21 +2423,37 @@ def _overlay_staged_ui_into_raw(stage_dir: Path, tools_root: Path) -> list[tuple
             continue
         rel = src_path.relative_to(stage_dir)
         dst_path = raw_dir / rel
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
         prior = dst_path.read_bytes() if dst_path.is_file() else None
         backups.append((dst_path, prior))
-        dst_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dst_path)
+        # Preserve destination permissions instead of copying staged file modes
+        # (a read-only staged file must not make a writable stock menu unwritable).
+        shutil.copyfile(src_path, dst_path)
     return backups
 
 
-def _restore_raw_ui_overlay(backups: list[tuple[Path, bytes | None]]) -> None:
-    """Restore tools_root/raw/ui/ files backed up by _overlay_staged_ui_into_raw()."""
+def _restore_raw_ui_overlay(backups: list[tuple[Path, bytes | None]]) -> list[str]:
+    """Restore tools_root/raw/ui/ files backed up by _overlay_staged_ui_into_raw().
+
+    Attempts every file even if one destination fails and returns any error strings.
+    """
+    errors: list[str] = []
     for dst_path, prior in reversed(backups):
-        if prior is not None:
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            dst_path.write_bytes(prior)
-        else:
-            dst_path.unlink(missing_ok=True)
+        try:
+            if prior is not None:
+                if dst_path.is_file():
+                    try:
+                        if dst_path.read_bytes() == prior:
+                            continue
+                    except OSError:
+                        pass
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+                dst_path.write_bytes(prior)
+            elif dst_path.parent.is_dir():
+                dst_path.unlink(missing_ok=True)
+        except OSError as exc:
+            errors.append(f"{dst_path}: {exc}")
+    return errors
 
 
 def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
@@ -2374,11 +2477,16 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
     if zone_out.exists():
         zone_out.unlink()
 
+    primary_exc: BaseException | None = None
     try:
-        shutil.copy2(mod_csv_src, zone_csv)
+        shutil.copyfile(mod_csv_src, zone_csv)
         if not assetlist_csv.exists():
             assetlist_csv.write_bytes(b"")
-        raw_ui_backups = _overlay_staged_ui_into_raw(stage_dir=stage_dir, tools_root=tools_root)
+        _overlay_staged_ui_into_raw(
+            stage_dir=stage_dir,
+            tools_root=tools_root,
+            backups=raw_ui_backups,
+        )
 
         env = os.environ.copy()
         env["WAW_STEAM_ROOT"] = str(steam_root)
@@ -2421,16 +2529,27 @@ def run_linker(tools_root: Path, steam_root: Path, dev_root: Path) -> Path:
 
         zone_out.unlink(missing_ok=True)
         return dist_ff
+    except BaseException as exc:
+        primary_exc = exc
+        raise
     finally:
-        _restore_raw_ui_overlay(raw_ui_backups)
-        if prior_zone_csv is not None:
-            zone_csv.write_bytes(prior_zone_csv)
-        else:
-            zone_csv.unlink(missing_ok=True)
-        if prior_assetlist_csv is not None:
-            assetlist_csv.write_bytes(prior_assetlist_csv)
-        else:
-            assetlist_csv.unlink(missing_ok=True)
+        restore_errors = _restore_raw_ui_overlay(raw_ui_backups)
+        for target_path, prior_bytes in (
+            (zone_csv, prior_zone_csv),
+            (assetlist_csv, prior_assetlist_csv),
+        ):
+            try:
+                if prior_bytes is not None:
+                    target_path.write_bytes(prior_bytes)
+                else:
+                    target_path.unlink(missing_ok=True)
+            except OSError as exc:
+                restore_errors.append(f"{target_path}: {exc}")
+        if restore_errors and primary_exc is None:
+            raise RuntimeError(
+                "Failed to restore raw UI overlay / manifests after linking: "
+                + "; ".join(restore_errors)
+            )
 
 
 def stage_dlc_iwd_weapon_files(
