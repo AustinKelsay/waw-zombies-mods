@@ -122,6 +122,13 @@ SYNTHETIC_ZOMBIE_COLT = (
     "\\dropAmmoMax\\16"
     "\\idleAnim\\viewmodel_colt45_idle"
     "\\emptyIdleAnim\\viewmodel_colt45_idle"
+    "\\fireAnim\\viewmodel_colt45_fire"
+    "\\lastShotAnim\\viewmodel_colt45_lastshot"
+    "\\raiseAnim\\viewmodel_colt45_pullout"
+    "\\dropAnim\\viewmodel_colt45_putaway"
+    "\\reloadAnim\\viewmodel_colt45_reload_notempty"
+    "\\reloadEmptyAnim\\viewmodel_colt45_reload"
+    "\\adsUpAnim\\viewmodel_colt45_missing_ads_up"
     "\\gunModel\\viewmodel_usa_colt45_pistol"
     "\\worldModel\\weapon_usa_colt45_pistol"
     "\\viewFlashEffect\\weapon/muzzleflashes/pistolflash"
@@ -442,19 +449,19 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
         }
         self.assertEqual(
             spec_templates["bz_acid_sprayer"],
-            ("m2_flamethrower_zombie", "ray_gun"),
+            ("m2_flamethrower_zombie",),
         )
         self.assertEqual(
             spec_templates["bz_cryo_cannon"],
-            ("tesla_gun", "ray_gun"),
+            ("tesla_gun",),
         )
         self.assertEqual(
             spec_templates["bz_multi_crossbow"],
-            ("fg42_scoped", "kar98k_scoped_zombie", "springfield_scoped_zombie", "zombie_m1garand", "kar98k"),
+            ("fg42_scoped",),
         )
         self.assertEqual(
             spec_templates["bz_blade_boomerang"],
-            ("m1carbine_bayonet", "kar98k_bayonet", "zombie_colt", "walther", "colt"),
+            ("zombie_colt", "colt"),
         )
         self.assertEqual(
             len({templates[0] for templates in spec_templates.values()}),
@@ -501,8 +508,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "20",
                     "360",
                     "120",
-                    "viewmodel_usa_flamethrower",
-                    "weapon_usa_flamethrower",
+                    "viewmodel_bz_acid_sprayer",
+                    "world_bz_acid_sprayer",
                     "0.40",
                 ),
                 "bz_cryo_cannon": (
@@ -511,8 +518,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "16",
                     "288",
                     "96",
-                    "viewmodel_usa_tesla_gun",
-                    "weapon_usa_tesla",
+                    "viewmodel_bz_cryo_cannon",
+                    "world_bz_cryo_cannon",
                     "0.50",
                 ),
                 "bz_multi_crossbow": (
@@ -521,8 +528,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "6",
                     "108",
                     "36",
-                    "viewmodel_ger_fg42_scoped_lmg",
-                    "weapon_ger_fg42_scoped_lmg",
+                    "viewmodel_bz_multi_crossbow",
+                    "world_bz_multi_crossbow",
                     "0.52",
                 ),
                 "bz_blade_boomerang": (
@@ -531,9 +538,9 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "1",
                     "60",
                     "20",
-                    "viewmodel_usa_m1carbine_rifle_bayonet",
-                    "weapon_usa_m1carbine_rifle_bayonet",
-                    "0.55",
+                    "viewmodel_bz_blade_boomerang",
+                    "world_bz_blade_boomerang",
+                    "1.15",
                 ),
             }
             seen_ammo: set[str] = set()
@@ -616,19 +623,20 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             self.assertEqual(blade["weaponClass"], "rifle")
             self.assertEqual(blade["shotCount"], "1")
             self.assertEqual(blade["fireType"], "Single Shot")
-            self.assertEqual(blade["reloadTime"], "0.65")
-            self.assertEqual(blade["reloadEmptyTime"], "0.65")
+            self.assertEqual(blade["reloadTime"], "0.25")
+            self.assertEqual(blade["reloadEmptyTime"], "0.25")
             self.assertEqual(blade["aimDownSight"], "0")
             self.assertEqual(blade["adsFire"], "0")
             self.assertEqual(blade["fireSound"], "foley_throw")
             self.assertEqual(blade["fireSoundPlayer"], "foley_throw")
-            self.assertEqual(blade["idleAnim"], "viewmodel_carbine_idle")
-            self.assertEqual(blade["fireAnim"], "viewmodel_carbine_bayonet_swipe")
-            self.assertEqual(blade["lastShotAnim"], "viewmodel_carbine_bayonet_swipe")
+            self.assertEqual(blade["idleAnim"], "viewmodel_ray_gun_idle")
+            self.assertEqual(blade["emptyIdleAnim"], "viewmodel_ray_gun_drop")
+            self.assertEqual(blade["fireAnim"], "viewmodel_germangrenade_throw")
+            self.assertEqual(blade["lastShotAnim"], "viewmodel_germangrenade_throw")
             self.assertEqual(blade["cancelAutoHolsterWhenEmpty"], "1")
-            self.assertEqual(blade["raiseAnim"], "viewmodel_carbine_pullout")
-            self.assertEqual(blade["reloadAnim"], "viewmodel_carbine_reload")
-            self.assertEqual(blade["reloadEmptyAnim"], "viewmodel_carbine_reload_empty")
+            self.assertEqual(blade["raiseAnim"], "viewmodel_ray_gun_raise")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_ray_gun_raise")
+            self.assertEqual(blade["reloadEmptyAnim"], "viewmodel_ray_gun_raise")
 
             # generate_staged_mod_csv appends weapon,sp/bz_* entries cleanly without duplicates
             base_csv = (MOD_ROOT / "mod.csv").read_text(encoding="latin1")
@@ -735,11 +743,11 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
             (raw_sp / "fg42_scoped").write_text(
                 SYNTHETIC_FG42_SCOPED, encoding="latin1"
             )
-            (raw_sp / "m1carbine_bayonet").write_text(
-                SYNTHETIC_M1CARBINE_BAYONET, encoding="latin1"
+            (raw_sp / "zombie_colt").write_text(
+                SYNTHETIC_ZOMBIE_COLT, encoding="latin1"
             )
 
-            # Populate Linux lowercase xanim files (deliberately omitting tesla adsDownAnim & carbine adsUpAnim)
+            # Populate Linux lowercase xanim files (deliberately omitting tesla adsDownAnim & colt adsUpAnim)
             for anim_name in (
                 "viewmodel_usa_flamethrower_idle",
                 "viewmodel_usa_flamethrower_fire",
@@ -754,14 +762,16 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 "viewmodel_fg42_reload",
                 "viewmodel_fg42_ads_up",
                 "viewmodel_fg42_ads_fire",
-                "viewmodel_carbine_idle",
-                "viewmodel_carbine_empty_idle",
-                "viewmodel_carbine_fire",
-                "viewmodel_carbine_bayonet_swipe",
-                "viewmodel_carbine_reload",
-                "viewmodel_carbine_reload_empty",
-                "viewmodel_carbine_pullout",
-                "viewmodel_carbine_putaway",
+                "viewmodel_colt45_idle",
+                "viewmodel_colt45_fire",
+                "viewmodel_colt45_pullout",
+                "viewmodel_colt45_putaway",
+                "viewmodel_colt45_reload",
+                "viewmodel_ray_gun_idle",
+                "viewmodel_ray_gun_raise",
+                "viewmodel_ray_gun_drop",
+                "viewmodel_germangrenade_idle",
+                "viewmodel_germangrenade_throw",
             ):
                 (raw_xanim / anim_name).write_bytes(b"XANIM")
 
@@ -792,9 +802,11 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     (stage_dir / "weapons" / "sp" / "bz_blade_boomerang").read_text(encoding="latin1")
                 )
             )
-            self.assertEqual(blade["idleAnim"], "viewmodel_carbine_idle")
-            self.assertEqual(blade["fireAnim"], "viewmodel_carbine_bayonet_swipe")
-            self.assertEqual(blade["reloadAnim"], "viewmodel_carbine_reload")
+            self.assertEqual(blade["idleAnim"], "viewmodel_ray_gun_idle")
+            self.assertEqual(blade["fireAnim"], "viewmodel_germangrenade_throw")
+            self.assertEqual(blade["lastShotAnim"], "viewmodel_germangrenade_throw")
+            self.assertEqual(blade["emptyIdleAnim"], "viewmodel_ray_gun_drop")
+            self.assertEqual(blade["reloadAnim"], "viewmodel_ray_gun_raise")
             # Missing optional adsUpAnim cleared to ""
             self.assertEqual(blade["adsUpAnim"], "")
 

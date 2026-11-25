@@ -88,6 +88,7 @@ class SpecialFakeEntity(FakeEntity):
         self.linked_to: Any = None
         self.move_calls: list[tuple[tuple[float, float, float], float]] = []
         self.rotate_yaw_calls: list[tuple[float, float]] = []
+        self.rotate_roll_calls: list[tuple[float, float]] = []
         self.delete_count: int = 0
         self.ads_pressed: bool = False
 
@@ -286,6 +287,11 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
                 deg = float(args[0]) if len(args) > 0 else 0.0
                 dur = float(args[1]) if len(args) > 1 else 0.05
                 receiver.rotate_yaw_calls.append((deg, dur))
+                return UNDEFINED
+            if method == "rotateroll":
+                deg = float(args[0]) if len(args) > 0 else 0.0
+                dur = float(args[1]) if len(args) > 1 else 0.05
+                receiver.rotate_roll_calls.append((deg, dur))
                 return UNDEFINED
             if method == "notifyoncommand":
                 ev = _waw_to_str(args[0]) if len(args) > 0 else ""
@@ -504,7 +510,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertNotEqual(z_cone.get_field("bz_stunned"), True)
         self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 96)
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "misc/fx_trail_raygun_geotrail", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
 
@@ -883,17 +889,12 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
     """Seam 3: Blade Boomerang stock blade model, wall stop, 6-unique-zombie pierce, return & cleanup."""
 
     def test_boomerang_resolves_map_models_respects_wall_stop_pierces_six_unique_zombies_and_returns(self) -> None:
-        # Cross-map stock model verification (0 custom models)
+        # Cross-map custom boomerang model verification (map-independent bz_boomerang_blade_air, F14/S10)
         _dvars_n, gsc_n, _p_n = _setup_special_env(map_name="nazi_zombie_prototype")
         self.assertEqual(
-            gsc_n.call(BZ_SPECIAL_MOD, "bz_special_get_boomerang_model", "nazi_zombie_factory"),
-            "viewmodel_knife_bowie",
+            gsc_n.call(BZ_SPECIAL_MOD, "bz_special_get_boomerang_model"),
+            "bz_boomerang_blade_air",
         )
-        for other_map in ("nazi_zombie_prototype", "nazi_zombie_asylum", "nazi_zombie_sumpf"):
-            self.assertEqual(
-                gsc_n.call(BZ_SPECIAL_MOD, "bz_special_get_boomerang_model", other_map),
-                "weapon_usa_kbar_knife",
-            )
 
         _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_factory")
         gsc.level.set_field("round_number", 16)
@@ -944,7 +945,7 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         blades = [tracked[i] for i in range(tracked.size) if tracked[i] is not UNDEFINED]
         self.assertEqual(len(blades), 1)
         blade = blades[0]
-        self.assertEqual(blade.get_field("model"), "viewmodel_knife_bowie")
+        self.assertEqual(blade.get_field("model"), "bz_boomerang_blade_air")
         self.assertEqual(blade.contents, 0)
         self.assertTrue(blade.not_solid)
 
@@ -961,7 +962,7 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         self.assertTrue(
             any(
                 e.startswith("BZ_EVENT|SPECIAL_BOOMERANG_THROW|")
-                and "model=viewmodel_knife_bowie" in e
+                and "model=bz_boomerang_blade_air" in e
                 and "max_pierce=6" in e
                 and "damage=1500" in e
                 for e in gsc.emitted_events
@@ -985,9 +986,19 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         self.assertGreaterEqual(res.get_field("outbound_hits"), 4)
         self.assertGreaterEqual(res.get_field("return_hits"), 2)
         self.assertTrue(res.get_field("caught"))
+        self.assertTrue(
+            any(
+                e.startswith("BZ_EVENT|SPECIAL_BOOMERANG_RETURN|")
+                and "model=bz_boomerang_blade_air" in e
+                and "pierce=6" in e
+                and "caught=1" in e
+                for e in gsc.emitted_events
+            ),
+            f"Missing SPECIAL_BOOMERANG_RETURN event: {gsc.emitted_events}",
+        )
         self.assertTrue(blade.deleted)
         self.assertEqual(blade.delete_count, 1)
-        self.assertGreater(len(blade.rotate_yaw_calls), 0)
+        self.assertGreater(len(blade.rotate_roll_calls), 0)
         self.assertGreater(len(blade.move_calls), 0)
 
         # Every hit zombie took exactly 1 hit of 1500 attributed to player; 2 zombies untouched
@@ -1190,7 +1201,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertTrue(portal_fx_ent.get_field("triggered"))
         self.assertEqual(gsc.played_fx, [])
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "misc/fx_trail_raygun_geotrail", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
         self.assertTrue(
@@ -1270,6 +1281,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
                     "env/electrical/fx_elec_short_oneshot",
                     "bio/player/fx_footstep_water",
                     "misc/fx_zombie_bloodsplat",
+                    "misc/fx_trail_raygun_geotrail",
                     "weapon/grenade/fx_trail_rifle_grenade",
                 )
                 for fx in gsc_n.load_fx_calls
@@ -1608,17 +1620,28 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
     def test_boomerang_flies_smooth_elliptical_arc_spins_without_aliasing_and_refills_on_catch(self) -> None:
         _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_factory")
         player.set_pos(0.0, 0.0, 0.0)
-        player.set_angles(0.0, 0.0, 0.0)
+        player.set_angles(-24.0, 0.0, 0.0)
         player.give_weapon("bz_blade_boomerang", make_current=True)
         player.weapon_clips = {"bz_blade_boomerang": 0}
 
         res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
         blade = res.get_field("blade")
-        # Horizontal tilt (roll = 85 deg) for flat spinning thrown blade
+        # YZ-plane 3-wing boomerang tilted -20 deg relative to view pitch and spun via RotateRoll around +X
+        # so the 3-wing star stays face-on across level and angled throws (O18/F19/A18/O21/F24).
         ang = blade.get_field("angles")
-        self.assertAlmostEqual(float(ang[2]), 85.0)
+        self.assertAlmostEqual(float(ang[0]), -44.0)  # player pitch=-24.0 -> -24.0 - 20.0
+        self.assertAlmostEqual(float(ang[2]), 0.0)
+
+        # Downward-aimed throw (+45 deg pitch) also preserves relative -20 deg tilt (+25 deg) instead of turning edge-on
+        player.set_angles(45.0, 0.0, 0.0)
+        res_down = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        down_ang = res_down.get_field("blade").get_field("angles")
+        self.assertAlmostEqual(float(down_ang[0]), 25.0)
+        self.assertAlmostEqual(float(down_ang[2]), 0.0)
+        player.set_angles(-24.0, 0.0, 0.0)
 
         # Simulate player strafing laterally while the boomerang is in flight -> must home to moved player!
+        gsc.played_fx.clear()
         player.set_pos(30.0, 120.0, 0.0)
         flight_res = gsc.call(
             BZ_SPECIAL_MOD,
@@ -1635,10 +1658,11 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
         self.assertIn((player, "knife_pull_plr"), gsc.played_local_sounds)
 
-        # 22 total steps (11 outbound + 11 return) with smooth 135 deg/tick spin (never aliased 360/720!)
+        # 22 total steps (11 outbound + 11 return) with smooth 135 deg/tick RotateRoll spin and light 2-puff trail (O18/F19/F20)
         self.assertEqual(len(blade.move_calls), 22)
-        self.assertEqual(len(blade.rotate_yaw_calls), 22)
-        self.assertTrue(all(deg == 135.0 and dt == 0.05 for deg, dt in blade.rotate_yaw_calls))
+        self.assertEqual(len(blade.rotate_roll_calls), 22)
+        self.assertTrue(all(deg == 135.0 and dt == 0.05 for deg, dt in blade.rotate_roll_calls))
+        self.assertEqual(len(gsc.played_fx), 2)
 
         # True oval arc: outbound bows left (+Y when aiming +X), return sweeps around & homes to moved player (30, 120)
         outbound_ys = [pos[1] for pos, _dt in blade.move_calls[:11]]
@@ -1646,8 +1670,9 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         end_pos, _end_dt = blade.move_calls[-1]
         self.assertLess(math.hypot(end_pos[0] - 30.0, end_pos[1] - 120.0), 15.0)
 
-        # Downed player (Last Stand) must NOT receive boomerang catch refill or catch sound
+        # Downed player (Last Stand) must NOT receive boomerang catch refill, catch sound, or caught=1 telemetry (A9/O13)
         gsc.played_local_sounds.clear()
+        gsc.emitted_events.clear()
         player.weapon_clips["bz_blade_boomerang"] = 0
         player.set_field("is_in_laststand", True)
         res2 = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
@@ -1661,10 +1686,48 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             res2.get_field("damage"),
             res2.get_field("max_pierce"),
         )
+        self.assertFalse(flight_downed.get_field("caught"))
         self.assertFalse(flight_downed.get_field("refilled_clip"))
         self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 0)
         self.assertEqual(gsc.played_local_sounds, [])
+        self.assertTrue(any("caught=0;refilled=0" in ev for ev in gsc.emitted_events))
         player.set_field("is_in_laststand", False)
+
+        # Blocked launch against angled cover stays strictly on player's side of the plane, skips model (<16u), and uses short bounce (A12/S14/F17)
+        player.set_pos(0.0, 0.0, 0.0)
+        player.set_angles(0.0, 0.0, 0.0)
+        gsc.played_fx.clear()
+
+        def angled_wall_plane(pt):
+            return float(pt[0]) + 0.75 * float(pt[1]) + 0.75 * (float(pt[2]) - 60.0) - 17.0
+
+        def angled_trace(start, end, _hc, _ig):
+            sd, ed = angled_wall_plane(start), angled_wall_plane(end)
+            if sd * ed < 0.0:
+                frac = sd / (sd - ed)
+                hit = GscArray([float(start[i]) + frac * (float(end[i]) - float(start[i])) for i in range(3)])
+                return {"fraction": frac, "position": hit, "entity": UNDEFINED}
+            return {"fraction": 1.0, "position": end, "entity": UNDEFINED}
+
+        gsc.trace_handler = angled_trace
+        res_blocked = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        spawn_pt = res_blocked.get_field("start_pos")
+        self.assertLess(angled_wall_plane(spawn_pt), 0.0, "Blocked launch must stay on player side of angled cover")
+        blocked_blade = res_blocked.get_field("blade")
+        self.assertIs(blocked_blade.get_field("model"), UNDEFINED, "Point-blank <16u throw must skip SetModel")
+        gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_run_boomerang_flight",
+            player,
+            blocked_blade,
+            spawn_pt,
+            res_blocked.get_field("apex"),
+            res_blocked.get_field("damage"),
+            res_blocked.get_field("max_pierce"),
+        )
+        self.assertEqual(len(blocked_blade.move_calls), 6, "Short throw (<48u) must use 3 outbound + 3 return steps")
+        self.assertEqual(gsc.played_fx, [], "Short throw (<48u) must suppress trail FX")
+        gsc.trace_handler = None
 
         # Lethal crossbow piercing impact leaves bolt unlinked at hit_pos (no corpse carry)
         z_fragile = SpecialFakeEntity("ZFragile", ent_num=98, is_player=False)

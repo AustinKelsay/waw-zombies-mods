@@ -821,7 +821,7 @@ bz_run_p2_selftest()
 	boom_res = bz_special_fire_blade_boomerang( p, "bz_blade_boomerang" );
 	boom_spawned = IsDefined( boom_res ) &&
 		IsDefined( boom_res.blade ) &&
-		boom_res.model == "viewmodel_knife_bowie";
+		boom_res.model == "bz_boomerang_blade_air";
 	wait( 1.5 );
 	boom_returned = boom_spawned &&
 		( !IsDefined( boom_res.blade ) || ( IsDefined( boom_res.blade.bz_special_deleted ) && boom_res.blade.bz_special_deleted ) );

@@ -474,7 +474,7 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 {
 	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( puddle ) || bz_elem_new_is_hidden_spawning_dog( zombie ) )
 	{
-		return;
+		return false;
 	}
 
 	now = GetTime();
@@ -485,7 +485,7 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 	if ( IsDefined( zombie.bz_acid_direct_puddle ) && zombie.bz_acid_direct_puddle == puddle &&
 		IsDefined( zombie.bz_acid_direct_hit_ms ) && zombie.bz_acid_direct_hit_ms == now )
 	{
-		return;
+		return false;
 	}
 
 	if ( IsDefined( puddle.tick_damage ) && Int( puddle.tick_damage ) > 0 )
@@ -493,7 +493,9 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 		zombie.bz_in_damage_dispatch = true;
 		zombie.bz_damage_dispatch_time = now;
 		zombie DoDamage( Int( puddle.tick_damage ), puddle.origin, puddle.owner );
+		return true;
 	}
+	return false;
 }
 
 bz_elem_new_apply_acid_direct_splash( player, impact_pos, hit_ent, direct_dmg, splash_fx, puddle )
@@ -554,6 +556,7 @@ bz_elem_new_tick_acid_puddle( puddle )
 	}
 
 	hits = 0;
+	dmg_hits = 0;
 	zombies = GetAiSpeciesArray( "axis", "all" );
 	if ( IsDefined( zombies ) )
 	{
@@ -566,9 +569,31 @@ bz_elem_new_tick_acid_puddle( puddle )
 			}
 			if ( Distance( z.origin, puddle.origin ) <= puddle.radius )
 			{
-				bz_elem_new_apply_acid_to_zombie( z, puddle );
+				if ( bz_elem_new_apply_acid_to_zombie( z, puddle ) )
+				{
+					dmg_hits = dmg_hits + 1;
+				}
 				hits = hits + 1;
 			}
+		}
+	}
+	if ( dmg_hits > 0 && IsDefined( puddle.owner ) )
+	{
+		// Throttle ELEM_ACID_TICK per puddle (>=1.0s interval) and report ONLY actual DoDamage calls (A8/F14).
+		now = GetTime();
+		if ( !IsDefined( puddle.last_tick_log_ms ) || ( now - puddle.last_tick_log_ms ) >= 1000 )
+		{
+			puddle.last_tick_log_ms = now;
+			tick_dmg = 0;
+			if ( IsDefined( puddle.tick_damage ) )
+			{
+				tick_dmg = Int( puddle.tick_damage );
+			}
+			fields = [];
+			fields[0] = bz_log_kv( "player", bz_get_player_label( puddle.owner ) );
+			fields[1] = bz_log_kv( "hits", dmg_hits );
+			fields[2] = bz_log_kv( "damage", tick_dmg );
+			bz_log_emit( "ELEM_ACID_TICK", bz_log_join( fields ) );
 		}
 	}
 	return hits;
@@ -1089,10 +1114,6 @@ bz_elem_new_on_pre_init()
 	if ( !IsDefined( level.bz_elem_new_fx["misc/fx_zombie_bloodsplat"] ) )
 	{
 		level.bz_elem_new_fx["misc/fx_zombie_bloodsplat"] = LoadFX( "misc/fx_zombie_bloodsplat" );
-	}
-	if ( !IsDefined( level.bz_elem_new_fx["weapon/grenade/fx_trail_rifle_grenade"] ) )
-	{
-		level.bz_elem_new_fx["weapon/grenade/fx_trail_rifle_grenade"] = LoadFX( "weapon/grenade/fx_trail_rifle_grenade" );
 	}
 }
 

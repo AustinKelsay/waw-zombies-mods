@@ -212,12 +212,7 @@ bz_special_resolve_stock_fx( kind )
 
 	if ( kind == "crossbow_trail" )
 	{
-		trail_fx = bz_elem_new_get_cached_fx( "weapon/grenade/fx_trail_rifle_grenade" );
-		if ( IsDefined( trail_fx ) )
-		{
-			return trail_fx;
-		}
-		return undefined;
+		return bz_elem_new_get_cached_fx( "env/electrical/fx_elec_short_oneshot" );
 	}
 
 	if ( kind == "boomerang" || kind == "boomerang_hit" )
@@ -609,7 +604,7 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 
 		bolt = Spawn( "script_model", spawn_pos );
 		bolt.angles = bolt_angles;
-		bolt SetModel( "weapon_usa_kbar_knife" );
+		bolt SetModel( "bz_crossbow_bolt" );
 		bolt SetContents( 0 );
 		bolt NotSolid();
 		bolt.bz_special_kind = "crossbow_bolt";
@@ -660,7 +655,15 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 			stuck_world++;
 		}
 
-		bz_special_play_stock_fx( "crossbow_trail", spawn_pos );
+		if ( travel_dist >= 96.0 )
+		{
+			trail_pos = (
+				spawn_pos[0] + ( dir[0] * 72.0 ),
+				spawn_pos[1] + ( dir[1] * 72.0 ),
+				spawn_pos[2] + ( dir[2] * 72.0 )
+			);
+			bz_special_play_stock_fx( "crossbow_trail", trail_pos );
+		}
 		bz_special_track_entity( bolt );
 		bolts[bolts.size] = bolt;
 		player thread bz_special_crossbow_bolt_fuse( bolt, is_dpap, round_num );
@@ -978,14 +981,9 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 // 3. Blade Boomerang (bz_blade_boomerang: Primary Weapon Slot Piercing Blade)
 // ---------------------------------------------------------------------------
 
-bz_special_get_boomerang_model( map_name )
+bz_special_get_boomerang_model()
 {
-	norm = bz_normalize_id( map_name );
-	if ( norm == "nazi_zombie_factory" )
-	{
-		return "viewmodel_knife_bowie";
-	}
-	return "weapon_usa_kbar_knife";
+	return "bz_boomerang_blade_air";
 }
 
 bz_special_array_contains_entity( arr, target )
@@ -1109,10 +1107,12 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	eye = player GetEye();
 	angles = player GetPlayerAngles();
 	fwd = AnglesToForward( angles );
+	right_launch = AnglesToRight( angles );
+	// Launch slightly right & below eye line (matching the throwing hand) so release never clips the camera (F11/A2).
 	raw_start = (
-		eye[0] + ( fwd[0] * 24.0 ),
-		eye[1] + ( fwd[1] * 24.0 ),
-		eye[2] + ( fwd[2] * 24.0 )
+		eye[0] + ( fwd[0] * 24.0 ) + ( right_launch[0] * 4.0 ),
+		eye[1] + ( fwd[1] * 24.0 ) + ( right_launch[1] * 4.0 ),
+		eye[2] + ( fwd[2] * 24.0 ) - 4.0
 	);
 
 	// A5/S5: Trace from eye to the 24-unit launch point first so thin cover at point-blank
@@ -1128,10 +1128,11 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 		{
 			safe_start_frac = 0.0;
 		}
+		// Interpolate along the exact checked (eye -> raw_start) segment so angled cover never places the blade behind walls (A12/S14).
 		start_pos = (
-			eye[0] + ( fwd[0] * 24.0 * safe_start_frac ),
-			eye[1] + ( fwd[1] * 24.0 * safe_start_frac ),
-			eye[2] + ( fwd[2] * 24.0 * safe_start_frac )
+			eye[0] + ( ( raw_start[0] - eye[0] ) * safe_start_frac ),
+			eye[1] + ( ( raw_start[1] - eye[1] ) * safe_start_frac ),
+			eye[2] + ( ( raw_start[2] - eye[2] ) * safe_start_frac )
 		);
 	}
 
@@ -1162,18 +1163,21 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 		}
 	}
 
-	map_name = bz_get_map_name();
-	model_name = bz_special_get_boomerang_model( map_name );
+	model_name = bz_special_get_boomerang_model();
 	round_num = bz_special_get_current_round();
 	zombie_hp = bz_special_get_round_zombie_health( round_num );
 	is_dpap = bz_state_is_weapon_double_pap( player, "bz_blade_boomerang" );
 	dmg = maps\_bz_rules::bz_calc_boomerang_damage( round_num, zombie_hp, is_dpap );
 	max_pierce = maps\_bz_rules::bz_get_boomerang_max_pierce();
 
-	// Tilt blade flat horizontally (roll 85 deg) so RotateYaw spins it visibly like a thrown boomerang.
+	// YZ-plane 3-wing boomerang (axis along +X) tilted -20 deg relative to throw pitch and spun via RotateRoll
+	// around its own spin axis so the 3-wing star stays face-on (~0.94 facing) across level & angled throws (O18/F19/A18/O21/F24).
 	blade = Spawn( "script_model", start_pos );
-	blade.angles = ( angles[0], angles[1], 85.0 );
-	blade SetModel( model_name );
+	blade.angles = ( angles[0] - 20.0, angles[1], 0.0 );
+	if ( Distance( start_pos, apex ) >= 16.0 )
+	{
+		blade SetModel( model_name );
+	}
 	blade SetContents( 0 );
 	blade NotSolid();
 	blade.bz_special_kind = "blade_boomerang";
@@ -1245,6 +1249,12 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	}
 
 	throw_dist = Distance( start_pos, apex );
+	is_short_throw = ( throw_dist < 48.0 );
+	if ( is_short_throw )
+	{
+		// Point-blank / wall-blocked throw: run a brief 0.30s slash-bounce without trail FX flashing the camera (F11/A2).
+		steps = 3;
+	}
 	out_arc = throw_dist * 0.11;
 	if ( out_arc > 44.0 )
 	{
@@ -1308,7 +1318,7 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 					prev_pos[2] + ( ( direct_pos[2] - prev_pos[2] ) * safe_f )
 				);
 				blade MoveTo( pos, step_dt );
-				blade RotateYaw( spin_deg, step_dt );
+				blade RotateRoll( spin_deg, step_dt );
 				outbound_hits = outbound_hits + bz_special_boomerang_pierce_at( player, pos, dmg, max_pierce, undefined, blade );
 				prev_pos = pos;
 				apex = pos;
@@ -1318,12 +1328,12 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			pos = direct_pos;
 		}
 		blade MoveTo( pos, step_dt );
-		blade RotateYaw( spin_deg, step_dt );
+		blade RotateRoll( spin_deg, step_dt );
 		if ( s == 4 || s == 8 )
 		{
 			PlaySoundAtPosition( "attack_whoosh", pos );
 		}
-		if ( s == 3 || s == 6 || s == 9 )
+		if ( !is_short_throw && s == 5 )
 		{
 			bz_special_play_stock_fx( "boomerang_trail", pos );
 		}
@@ -1389,12 +1399,12 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			}
 		}
 		blade MoveTo( pos, step_dt );
-		blade RotateYaw( spin_deg, step_dt );
+		blade RotateRoll( spin_deg, step_dt );
 		if ( s == 3 || s == 7 )
 		{
 			PlaySoundAtPosition( "attack_whoosh", pos );
 		}
-		if ( s == 2 || s == 5 || s == 8 )
+		if ( !is_short_throw && s == 6 )
 		{
 			bz_special_play_stock_fx( "boomerang_trail", pos );
 		}
@@ -1408,13 +1418,15 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	{
 		pierce_total = blade.bz_pierced.size;
 	}
-	deleted = bz_special_untrack_and_delete_entity( blade );
+	still_live = IsDefined( blade ) && ( !IsDefined( blade.bz_special_deleted ) || !blade.bz_special_deleted );
 
-	// True boomerang catch: only play catch foley & refill clip when the blade actually
-	// reached a standing, non-downed owner's hand (not blocked behind a wall or in Last Stand).
+	// True boomerang catch: execute catch foley, clip refill, and return telemetry BEFORE deleting
+	// blade so blade Delete() firing notify("death") inside bz_special_boomerang_flight_thread()
+	// cannot abort refill or telemetry emission in WaW 1.7. Unified predicate for gameplay, log, & return (A9/O13).
 	reached_hand = Distance( prev_pos, last_catch_pos ) <= 96.0;
+	caught_ok = still_live && reached_hand && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" );
 	refilled_clip = false;
-	if ( deleted && reached_hand && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" ) )
+	if ( caught_ok )
 	{
 		player PlayLocalSound( "knife_pull_plr" );
 		if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) == 0 )
@@ -1424,12 +1436,24 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 		}
 	}
 
+	ret_fields = [];
+	ret_fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
+	ret_fields[1] = bz_log_kv( "model", bz_special_get_boomerang_model() );
+	ret_fields[2] = bz_log_kv( "pierce", pierce_total );
+	ret_fields[3] = bz_log_kv( "outbound_hits", outbound_hits );
+	ret_fields[4] = bz_log_kv( "return_hits", return_hits );
+	ret_fields[5] = bz_log_kv( "caught", bz_bool_int( caught_ok ) );
+	ret_fields[6] = bz_log_kv( "refilled", bz_bool_int( refilled_clip ) );
+	bz_log_emit( "SPECIAL_BOOMERANG_RETURN", bz_log_join( ret_fields ) );
+
+	deleted = bz_special_untrack_and_delete_entity( blade );
+
 	res = SpawnStruct();
 	res.pierce_count = pierce_total;
 	res.outbound_hits = outbound_hits;
 	res.return_hits = return_hits;
 	res.damage = dmg;
-	res.caught = reached_hand;
+	res.caught = caught_ok;
 	res.refilled_clip = refilled_clip;
 	res.deleted = deleted;
 	return res;
@@ -2154,13 +2178,8 @@ bz_special_on_pre_init()
 	{
 		return;
 	}
-	PrecacheModel( "weapon_usa_kbar_knife" );
-	map_name = maps\_bz_hooks::bz_get_map_name();
-	boom_model = bz_special_get_boomerang_model( map_name );
-	if ( IsDefined( boom_model ) && boom_model != "" && boom_model != "weapon_usa_kbar_knife" )
-	{
-		PrecacheModel( boom_model );
-	}
+	PrecacheModel( "bz_crossbow_bolt" );
+	PrecacheModel( bz_special_get_boomerang_model() );
 }
 
 bz_special_on_init()
