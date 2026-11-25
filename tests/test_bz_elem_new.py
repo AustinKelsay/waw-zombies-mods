@@ -49,6 +49,7 @@ VERIFIED_STOCK_FX_PATHS: frozenset[str] = frozenset(
         "maps/zombie/fx_zombie_tesla_shock_secondary",
         "env/electrical/fx_elec_short_oneshot",
         "bio/player/fx_footstep_water",
+        "weapon/grenade/fx_trail_rifle_grenade",
     }
 )
 
@@ -81,6 +82,8 @@ class ElemNewGscRuntime(BzGscRuntime):
         self.ai_enemies: list[ElemNewFakeEntity] = []
         self.loaded_fx: list[str] = []
         self.played_fx: list[tuple[Any, Any]] = []
+        self.played_fx_on_tag: list[tuple[Any, Any, str]] = []
+        self.played_sounds_at_pos: list[tuple[str, Any]] = []
         self.spawned_fx_entities: list[FakeEntity] = []
         self.triggered_fx_entities: list[FakeEntity] = []
         self.bullet_trace_calls: list[tuple[Any, Any, Any, Any]] = []
@@ -96,6 +99,17 @@ class ElemNewGscRuntime(BzGscRuntime):
             fx_handle = args[0] if len(args) > 0 else UNDEFINED
             origin = args[1] if len(args) > 1 else UNDEFINED
             self.played_fx.append((fx_handle, origin))
+            return True, UNDEFINED
+        if name_lower == "playfxontag":
+            fx_handle = args[0] if len(args) > 0 else UNDEFINED
+            ent = args[1] if len(args) > 1 else UNDEFINED
+            tag = _waw_to_str(args[2]) if len(args) > 2 else ""
+            self.played_fx_on_tag.append((fx_handle, ent, tag))
+            return True, UNDEFINED
+        if name_lower == "playsoundatposition":
+            alias = _waw_to_str(args[0]) if len(args) > 0 else ""
+            origin = args[1] if len(args) > 1 else UNDEFINED
+            self.played_sounds_at_pos.append((alias, origin))
             return True, UNDEFINED
         if name_lower == "spawnfx":
             fx_handle = args[0] if len(args) > 0 else UNDEFINED
@@ -418,8 +432,10 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         self.assertAlmostEqual(float(p_org[2]), 12.0)
         self.assertEqual(float(puddle.get_field("duration")), 6.0)
         self.assertEqual(int(puddle.get_field("radius")), 128)
-        self.assertEqual(int(puddle.get_field("tick_damage")), 25)
+        self.assertEqual(int(puddle.get_field("direct_damage")), 140)
+        self.assertEqual(int(puddle.get_field("tick_damage")), 45)
         self.assertTrue(puddle.get_field("active"))
+        self.assertTrue(any(alias == "smoke_hiss" for alias, _pos in gsc.played_sounds_at_pos))
 
         # Looping stock FX spawned & triggered, and tracked in level.bz_elem_new_entities
         self.assertEqual(len(gsc.spawned_fx_entities), 1)
@@ -428,14 +444,20 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         tracked = gsc.level.get_field("bz_elem_new_entities")
         self.assertGreaterEqual(tracked.size, 2)  # script_origin anchor + fx_ent
 
-        # 2. In-radius zombie got 40% slow (0.60), brittle timestamp, and 25 tick dmg attributed to player
+        # 2. In-radius zombie got 40% slow (0.60), brittle timestamp, and 140 direct acid splash attributed to player
         self.assertAlmostEqual(float(z_in.get_field("bz_base_moveplaybackrate")), 1.0)
         self.assertAlmostEqual(float(z_in.get_field("moveplaybackrate")), 0.60)
         self.assertGreater(int(z_in.get_field("bz_acid_slow_until")), 5000)
         self.assertGreater(int(z_in.get_field("bz_acid_brittle_until")), 5000)
         self.assertEqual(len(z_in.damage_events), 1)
-        self.assertEqual(z_in.damage_events[0]["damage"], 25)
+        self.assertEqual(z_in.damage_events[0]["damage"], 140)
         self.assertIs(z_in.damage_events[0]["attacker"], player)
+
+        # Next puddle tick (250ms later) deals 45 melt tick damage and refreshes slow/brittle
+        gsc.sim_time_ms = 5250
+        gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddle)
+        self.assertEqual(len(z_in.damage_events), 2)
+        self.assertEqual(z_in.damage_events[1]["damage"], 45)
 
         # Out-of-radius zombie untouched
         self.assertAlmostEqual(float(z_out.get_field("moveplaybackrate")), 1.0)
@@ -537,19 +559,19 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
         self.assertEqual(z_ring.damage_events, [])
 
-        # Single PaP (scripted Tier 1 PaP) expands radius to 168 and tick damage to 45
+        # Single PaP (scripted Tier 1 PaP) expands radius to 168 and scales tick damage to 85 (Round 5 zhp=550)
         gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_acid_sprayer")
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
         self.assertEqual(len(z_ring.damage_events), 1)
-        self.assertEqual(z_ring.damage_events[0]["damage"], 45)
+        self.assertEqual(z_ring.damage_events[0]["damage"], 85)
         self.assertAlmostEqual(float(z_ring.get_field("moveplaybackrate")), 0.60)
 
-        # Double PaP keeps 168 radius and scales tick damage to 75, setting bz_in_damage_dispatch
+        # Double PaP keeps 168 radius and scales tick damage to 140, setting bz_in_damage_dispatch
         # so global actor_damage / _bz_pap NEVER double-multiplies acid puddle ticks!
         gsc.call(BZ_PAP_MOD, "bz_pap_apply_double_pap", player, "bz_acid_sprayer")
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
         self.assertEqual(len(z_ring.damage_events), 2)
-        self.assertEqual(z_ring.damage_events[1]["damage"], 75)
+        self.assertEqual(z_ring.damage_events[1]["damage"], 140)
         self.assertTrue(z_ring.get_field("bz_in_damage_dispatch"))
 
         # Even if MOD_UNKNOWN reached _bz_pap directly while holding Double-PaP bz_acid_sprayer,
@@ -633,6 +655,48 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         alive_fx = [ent for ent in gsc.spawned_fx_entities if not ent.deleted]
         self.assertEqual(len(deleted_fx), 4)
         self.assertEqual(len(alive_fx), max_cap)
+
+    def test_acid_sprayer_direct_hit_scales_on_high_rounds_and_slows_elevated_zombies(self) -> None:
+        _, gsc, player = _setup_elem_new_env(map_name="nazi_zombie_factory", pap_enabled=True)
+        gsc.level.set_field("round_number", 16)
+        gsc.level.set_field("zombie_health", 2000)
+        gsc.sim_time_ms = 5000
+
+        # Elevated zombie standing on a balcony (z=200) while floor snap lands far below at z=0
+        z_balcony = ElemNewFakeEntity("ZBalcony", ent_num=29, is_player=False, origin=(260.0, 0.0, 200.0))
+        z_balcony.set_field("health", 2000)
+        z_balcony.set_field("moveplaybackrate", 1.0)
+        gsc.ai_enemies.append(z_balcony)
+
+        calls = {"n": 0}
+
+        def elevated_trace(start: GscArray, end: GscArray) -> dict[str, Any]:
+            idx = calls["n"]
+            calls["n"] += 1
+            if idx == 0:
+                return {"fraction": 0.25, "position": GscArray([260.0, 0.0, 240.0]), "entity": z_balcony}
+            return {"fraction": 0.80, "position": GscArray([260.0, 0.0, 0.0])}
+
+        gsc.bullet_trace_fn = elevated_trace
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_acid_sprayer")
+
+        # Even though the floor puddle snapped to z=0 (200u below z_balcony), direct splash hit z_balcony
+        # for 25% of 2000 = 500 damage, 40% slow (0.60x), and 1.50x brittle!
+        self.assertEqual(len(z_balcony.damage_events), 1)
+        self.assertEqual(z_balcony.damage_events[0]["damage"], 500)
+        self.assertAlmostEqual(float(z_balcony.get_field("moveplaybackrate")), 0.60)
+        self.assertGreater(int(z_balcony.get_field("bz_acid_brittle_until")), 5000)
+
+        # An independent pre-existing puddle on the balcony STILL ticks on the same frame (no cross-puddle suppression)
+        puddle_other = GscStruct()
+        puddle_other.set_field("active", True)
+        puddle_other.set_field("origin", GscArray([260.0, 0.0, 200.0]))
+        puddle_other.set_field("radius", 128)
+        puddle_other.set_field("tick_damage", 160)
+        puddle_other.set_field("owner", player)
+        gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddle_other)
+        self.assertEqual(len(z_balcony.damage_events), 2)
+        self.assertEqual(z_balcony.damage_events[1]["damage"], 160)
 
 
 class TestCryoCannonWeapon(unittest.TestCase):
@@ -840,11 +904,47 @@ class TestCryoCannonWeapon(unittest.TestCase):
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
         self.assertFalse(bool(z_outer.get_field("bz_is_frozen")))
 
-        # Single PaP expands cone radius to 150 and freezes outer zombie!
+        # Single PaP expands cone radius to 150 and freezes outer zombie while dealing real blast damage!
         gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_cryo_cannon")
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
         self.assertTrue(z_outer.get_field("bz_is_frozen"))
         self.assertAlmostEqual(float(z_outer.get_field("moveplaybackrate")), 0.01)
+        self.assertEqual(z_outer.damage_events[0]["damage"], 700)
+
+    def test_cryo_cannon_deals_real_blast_damage_and_follow_up_shot_shatters_with_ice_splash(self) -> None:
+        _, gsc, player = _setup_elem_new_env(map_name="nazi_zombie_factory", pap_enabled=True)
+        gsc.level.set_field("round_number", 16)
+        gsc.level.set_field("zombie_health", 2000)
+        gsc.sim_time_ms = 5000
+        gsc.bullet_trace_fn = lambda s, e: {"fraction": 0.25, "position": GscArray([250.0, 0.0, 60.0])}
+
+        # Target inside cone, plus adjacent zombie just outside the 110u cone but within 96u of target
+        z_main = ElemNewFakeEntity("ZMain", ent_num=31, is_player=False, origin=(340.0, 0.0, 0.0))
+        z_main.set_field("health", 4000)
+        z_splash = ElemNewFakeEntity("ZSplash", ent_num=32, is_player=False, origin=(410.0, 0.0, 0.0))
+        z_splash.set_field("health", 4000)
+        gsc.ai_enemies.extend([z_main, z_splash])
+
+        # Shot 1: deals 45% of 2000 = 900 real Cryo Blast damage and freezes z_main (tag FX + glass audio)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
+        self.assertEqual(len(z_main.damage_events), 1)
+        self.assertEqual(z_main.damage_events[0]["damage"], 900)
+        self.assertTrue(z_main.get_field("bz_is_frozen"))
+        self.assertTrue(any(tag == "J_SpineUpper" for _fx, ent, tag in gsc.played_fx_on_tag if ent is z_main))
+        self.assertTrue(any(alias == "bullet_small_glass" for alias, _pos in gsc.played_sounds_at_pos))
+        self.assertFalse(bool(z_splash.get_field("bz_is_frozen")))
+
+        # Shot 2 (next frame / 500ms later): shatters already-frozen z_main for 2.5x (2250 dmg),
+        # plays impact_hard_glass, and splashes/chills adjacent z_splash (65% of 900 = 585 dmg + freeze)!
+        gsc.sim_time_ms = 5500
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
+        self.assertEqual(len(z_main.damage_events), 2)
+        self.assertEqual(z_main.damage_events[1]["damage"], 2250)
+        self.assertFalse(bool(z_main.get_field("bz_is_frozen")))
+        self.assertEqual(len(z_splash.damage_events), 1)
+        self.assertEqual(z_splash.damage_events[0]["damage"], 585)
+        self.assertTrue(z_splash.get_field("bz_is_frozen"))
+        self.assertTrue(any(alias == "impact_hard_glass" for alias, _pos in gsc.played_sounds_at_pos))
 
 
 class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
@@ -877,14 +977,14 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
         gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_tick_acid_puddle", puddles[0])
         self.assertAlmostEqual(float(z_a.get_field("moveplaybackrate")), 0.01)
 
-        # At t=5000 cryo thaws while acid slow is active (until 6000) -> MUST restore 0.60, not 1.0!
+        # At t=5000 cryo thaws while acid slow is active (until 6500) -> MUST restore 0.60, not 1.0!
         gsc.sim_time_ms = 5000
         gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_thaw_zombie", z_a)
         self.assertFalse(bool(z_a.get_field("bz_is_frozen")))
         self.assertAlmostEqual(float(z_a.get_field("moveplaybackrate")), 0.60)
 
-        # At t=6100 acid slow expires -> MUST restore original base 1.0
-        gsc.sim_time_ms = 6100
+        # At t=6600 acid slow expires -> MUST restore original base 1.0
+        gsc.sim_time_ms = 6600
         gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_recompute_zombie_move_rate", z_a)
         self.assertAlmostEqual(float(z_a.get_field("moveplaybackrate")), 1.0)
 
@@ -1074,7 +1174,7 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
         dog_spawning.set_field("ignoreall", True)
 
         dog_active = ElemNewFakeEntity("ActiveDog", ent_num=61, is_player=False, origin=(210.0, 0.0, 0.0))
-        dog_active.set_field("health", 500)
+        dog_active.set_field("health", 2000)
         dog_active.set_field("animname", "zombie_dog")
         dog_active.set_field("ignoreall", False)
 

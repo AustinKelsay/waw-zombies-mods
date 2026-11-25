@@ -89,6 +89,7 @@ class SpecialFakeEntity(FakeEntity):
         self.move_calls: list[tuple[tuple[float, float, float], float]] = []
         self.rotate_yaw_calls: list[tuple[float, float]] = []
         self.delete_count: int = 0
+        self.ads_pressed: bool = False
 
     def set_pos(self, x: float, y: float, z: float) -> None:
         self.set_field("origin", GscArray([float(x), float(y), float(z)]))
@@ -245,6 +246,8 @@ class SpecialWeaponsGscRuntime(BzGscRuntime):
             if method == "geteye":
                 x, y, z = receiver.get_pos()
                 return GscArray([x, y, z + receiver.eye_offset_z])
+            if method == "adsbuttonpressed":
+                return bool(receiver.ads_pressed)
             if method == "getplayerangles":
                 ang = receiver.get_field("angles")
                 if ang is UNDEFINED:
@@ -501,7 +504,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertNotEqual(z_cone.get_field("bz_stunned"), True)
         self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 96)
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
 
@@ -723,25 +726,32 @@ class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
         stuck_to_world = [b for b in bolts if b.get_field("bz_stuck_type") == "world"]
         self.assertEqual(len(stuck_to_zombie), 1)
         self.assertEqual(len(stuck_to_world), 2)
-        # Bolts spawn near muzzle (not teleported to 300u), stagger fuses (1.00 / 1.12 / 1.24),
-        # and fly via MoveTo before linking at hit height (48.0, not feet z=0)
+        # Bolts spawn near muzzle (not teleported to 300u), stagger fuses (0.65 / 0.77 / 0.89),
+        # and fly via MoveTo before sticking with instant piercing impact + pin stagger at hit height 48.0
         self.assertEqual(
             [round(float(b.get_field("bz_fuse_time")), 2) for b in bolts],
-            [1.0, 1.12, 1.24],
+            [0.65, 0.77, 0.89],
         )
         for b in bolts:
             self.assertLess(b.get_pos()[0], 40.0)
             self.assertGreaterEqual(float(b.get_field("bz_travel_time")), 0.05)
-            self.assertLessEqual(float(b.get_field("bz_travel_time")), 0.22)
+            self.assertLessEqual(float(b.get_field("bz_travel_time")), 0.20)
             self.assertTrue(b.not_solid)
             self.assertEqual(b.contents, 0)
 
-        # Simulate bolt flight & stick helper for zombie bolt -> MoveTo + LinkTo at hit height 48.0
+        # Simulate bolt flight & stick helper for zombie bolt -> MoveTo + LinkTo + instant piercing impact + 0.30x pin stagger
         self.assertAlmostEqual(float(stuck_to_zombie[0].get_field("bz_stuck_z_offset")), 48.0)
+        gsc.sim_time_ms = 5000
         gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", stuck_to_zombie[0])
         self.assertEqual(len(stuck_to_zombie[0].move_calls), 1)
         self.assertIs(stuck_to_zombie[0].linked_to, z_stuck)
         self.assertAlmostEqual(stuck_to_zombie[0].get_pos()[2], 48.0)
+        # Instant piercing impact damage: 55% of 2000 = 1100, leaving 900 HP + brief 0.30x pin stagger
+        self.assertEqual(len(z_stuck.damage_events), 1)
+        self.assertEqual(z_stuck.damage_events[0]["damage"], 1100)
+        self.assertEqual(z_stuck.get_field("health"), 900)
+        self.assertAlmostEqual(float(z_stuck.get_field("moveplaybackrate")), 0.30)
+        self.assertTrue(any(s["alias"] == "impact_wood_flesh" for s in gsc.played_sounds_at_pos))
 
         # Child fuse threads scheduled (zero inline wait/endon in weapon_fired)
         fuse_threads = [t for t in gsc._threads if t[1] == "bz_special_crossbow_bolt_fuse"]
@@ -1180,7 +1190,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertTrue(portal_fx_ent.get_field("triggered"))
         self.assertEqual(gsc.played_fx, [])
         self.assertTrue(
-            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat") for fx in gsc.load_fx_calls),
+            all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
         self.assertTrue(
@@ -1260,6 +1270,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
                     "env/electrical/fx_elec_short_oneshot",
                     "bio/player/fx_footstep_water",
                     "misc/fx_zombie_bloodsplat",
+                    "weapon/grenade/fx_trail_rifle_grenade",
                 )
                 for fx in gsc_n.load_fx_calls
             ),
@@ -1557,25 +1568,120 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
 
         b0 = bolts[0]
         b1 = bolts[1]
-        self.assertAlmostEqual(float(b0.get_field("bz_fuse_time")), 1.00)
-        self.assertAlmostEqual(float(b1.get_field("bz_fuse_time")), 1.12)
+        self.assertAlmostEqual(float(b0.get_field("bz_fuse_time")), 0.65)
+        self.assertAlmostEqual(float(b1.get_field("bz_fuse_time")), 0.77)
         self.assertAlmostEqual(float(b0.get_field("bz_stuck_z_offset")), 24.0)  # clamped min 24
         self.assertAlmostEqual(float(b1.get_field("bz_stuck_z_offset")), 56.0)  # clamped max 56
 
-        # Fly & detonate both bolts -> verify detonation height = z.origin[2] + clamped offset & explosion audio
+        # Fly & detonate both bolts -> verify detonation height = z.origin[2] + clamped offset & bolt/explosion audio
         gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", b0)
         gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", b1)
         det0 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, b0, False, 1)
         det1 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, b1, False, 1)
         self.assertAlmostEqual(float(det0.get_field("center")[2]), 34.0)  # 10 + 24
         self.assertAlmostEqual(float(det1.get_field("center")[2]), 66.0)  # 10 + 56
-        self.assertEqual(len(gsc.played_sounds_at_pos), 2)
-        self.assertTrue(all(s["alias"] == "grenade_explode_default" for s in gsc.played_sounds_at_pos))
+        aliases = [s["alias"] for s in gsc.played_sounds_at_pos]
+        self.assertIn("attack_whoosh", aliases)
+        self.assertEqual(aliases.count("impact_wood_flesh"), 2)
+        self.assertEqual(aliases.count("grenade_explode_default"), 2)
+
+        # ADS tightens spread from [-6, 0, +6] to [-2.5, 0, +2.5]
+        ads_yaws: list[float] = []
+        player.ads_pressed = True
+
+        def ads_trace(start: GscArray, end: GscArray, _hit_chars: bool, _ignore: Any) -> dict[str, Any]:
+            yaw_deg = math.degrees(math.atan2(float(end[1]) - float(start[1]), float(end[0]) - float(start[0])))
+            ads_yaws.append(round(yaw_deg, 1))
+            return {"fraction": 0.25, "position": GscArray([250.0, float(end[1]) * 0.25, 40.0]), "entity": UNDEFINED}
+
+        gsc.trace_handler = ads_trace
+        ads_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_multi_crossbow", player, "bz_multi_crossbow")
+        self.assertEqual(ads_yaws, [-2.5, 0.0, 2.5])
+        self.assertTrue(ads_res.get_field("ads"))
+        player.ads_pressed = False
 
         # Pure sky shot (all 3 fraction >= 0.99, no entity) -> 0 bolts spawned
         gsc.trace_handler = lambda s, e, _hc, _ig: {"fraction": 0.995, "position": e, "entity": UNDEFINED}
         sky_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_multi_crossbow", player, "bz_multi_crossbow")
         self.assertEqual(sky_res.get_field("bolts").size, 0)
+
+    def test_boomerang_flies_smooth_elliptical_arc_spins_without_aliasing_and_refills_on_catch(self) -> None:
+        _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_factory")
+        player.set_pos(0.0, 0.0, 0.0)
+        player.set_angles(0.0, 0.0, 0.0)
+        player.give_weapon("bz_blade_boomerang", make_current=True)
+        player.weapon_clips = {"bz_blade_boomerang": 0}
+
+        res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        blade = res.get_field("blade")
+        # Horizontal tilt (roll = 85 deg) for flat spinning thrown blade
+        ang = blade.get_field("angles")
+        self.assertAlmostEqual(float(ang[2]), 85.0)
+
+        # Simulate player strafing laterally while the boomerang is in flight -> must home to moved player!
+        player.set_pos(30.0, 120.0, 0.0)
+        flight_res = gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_run_boomerang_flight",
+            player,
+            blade,
+            res.get_field("start_pos"),
+            res.get_field("apex"),
+            res.get_field("damage"),
+            res.get_field("max_pierce"),
+        )
+        self.assertTrue(flight_res.get_field("caught"))
+        self.assertTrue(flight_res.get_field("refilled_clip"))
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
+        self.assertIn((player, "knife_pull_plr"), gsc.played_local_sounds)
+
+        # 22 total steps (11 outbound + 11 return) with smooth 135 deg/tick spin (never aliased 360/720!)
+        self.assertEqual(len(blade.move_calls), 22)
+        self.assertEqual(len(blade.rotate_yaw_calls), 22)
+        self.assertTrue(all(deg == 135.0 and dt == 0.05 for deg, dt in blade.rotate_yaw_calls))
+
+        # True oval arc: outbound bows left (+Y when aiming +X), return sweeps around & homes to moved player (30, 120)
+        outbound_ys = [pos[1] for pos, _dt in blade.move_calls[:11]]
+        self.assertGreater(max(outbound_ys), 30.0)
+        end_pos, _end_dt = blade.move_calls[-1]
+        self.assertLess(math.hypot(end_pos[0] - 30.0, end_pos[1] - 120.0), 15.0)
+
+        # Downed player (Last Stand) must NOT receive boomerang catch refill or catch sound
+        gsc.played_local_sounds.clear()
+        player.weapon_clips["bz_blade_boomerang"] = 0
+        player.set_field("is_in_laststand", True)
+        res2 = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        flight_downed = gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_run_boomerang_flight",
+            player,
+            res2.get_field("blade"),
+            res2.get_field("start_pos"),
+            res2.get_field("apex"),
+            res2.get_field("damage"),
+            res2.get_field("max_pierce"),
+        )
+        self.assertFalse(flight_downed.get_field("refilled_clip"))
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 0)
+        self.assertEqual(gsc.played_local_sounds, [])
+        player.set_field("is_in_laststand", False)
+
+        # Lethal crossbow piercing impact leaves bolt unlinked at hit_pos (no corpse carry)
+        z_fragile = SpecialFakeEntity("ZFragile", ent_num=98, is_player=False)
+        z_fragile.set_field("health", 100)
+        z_fragile.set_pos(200.0, 0.0, 0.0)
+        gsc.ai_enemies.append(z_fragile)
+        bolt_lethal = SpecialFakeEntity("BoltLethal", ent_num=99, is_player=False)
+        bolt_lethal.set_pos(24.0, 0.0, 60.0)
+        bolt_lethal.set_field("bz_owner", player)
+        bolt_lethal.set_field("bz_stuck_entity", z_fragile)
+        bolt_lethal.set_field("bz_stuck_z_offset", 44.0)
+        bolt_lethal.set_field("bz_travel_time", 0.05)
+        bolt_lethal.set_field("bz_round_num", 1)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_crossbow_bolt_fly_and_stick", bolt_lethal)
+        self.assertEqual(z_fragile.get_field("health"), 0)
+        self.assertIsNone(bolt_lethal.linked_to)
+        self.assertIs(bolt_lethal.get_field("bz_stuck_entity"), UNDEFINED)
 
     def test_special_weapons_skip_hidden_spawning_hellhounds_and_never_force_teleport_them(self) -> None:
         _dvars, gsc, p1 = _setup_special_env(map_name="nazi_zombie_factory")

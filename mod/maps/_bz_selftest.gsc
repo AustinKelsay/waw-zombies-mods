@@ -670,7 +670,7 @@ bz_run_p2_selftest()
 		live_z.bz_acid_brittle_until = 0;
 		bz_recompute_zombie_move_rate( live_z );
 
-		// 5. Cryo Cannon: freezes live zombie (moveplaybackrate == 0.01) + 2.5x shatter on follow-up hit
+		// 5. Cryo Cannon: deals real blast damage + freezes live zombie (moveplaybackrate == 0.01) + 2.5x shatter on follow-up hit
 		live_z.health = 50000;
 		cryo_trace = bz_elem_new_trace_forward_impact( p, 1024 );
 		cryo_dist = Distance( cryo_trace.start, cryo_trace.impact );
@@ -687,7 +687,9 @@ bz_run_p2_selftest()
 		live_z ForceTeleport( bz_elem_new_snap_to_floor( cryo_target ), orig_z_ang );
 
 		frozen_cnt = bz_elem_new_fire_cryo_cannon( p, "bz_cryo_cannon" );
+		cryo_dmg_ok = Int( live_z.health ) < 50000;
 		cryo_frozen_ok = frozen_cnt >= 1 &&
+			cryo_dmg_ok &&
 			bz_elem_new_is_cryo_frozen( live_z ) &&
 			live_z.moveplaybackrate <= 0.02;
 		cryo_shatter_dmg = bz_actor_damage_dispatch( live_z, p, p, 100, 0, "MOD_EXPLOSIVE", "stielhandgranate", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
@@ -820,7 +822,7 @@ bz_run_p2_selftest()
 	boom_spawned = IsDefined( boom_res ) &&
 		IsDefined( boom_res.blade ) &&
 		boom_res.model == "viewmodel_knife_bowie";
-	wait( 1.2 );
+	wait( 1.5 );
 	boom_returned = boom_spawned &&
 		( !IsDefined( boom_res.blade ) || ( IsDefined( boom_res.blade.bz_special_deleted ) && boom_res.blade.bz_special_deleted ) );
 	bz_selftest_check( st, boom_returned, "blade_boomerang_spawn_and_return" );

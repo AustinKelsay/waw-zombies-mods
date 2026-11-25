@@ -1849,6 +1849,10 @@ bz_recompute_zombie_move_rate( zombie )
 		{
 			target_rate = dog_floor;
 		}
+		else if ( IsDefined( zombie.bz_crossbow_pin_until ) && now < Int( zombie.bz_crossbow_pin_until ) )
+		{
+			target_rate = dog_floor;
+		}
 		else if ( IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until ) )
 		{
 			target_rate = base_rate * maps\_bz_rules::bz_get_acid_slow_scale();
@@ -1893,6 +1897,14 @@ bz_recompute_zombie_move_rate( zombie )
 			zombie.ignoreall = false;
 		}
 		zombie.bz_cc_forced_ignoreall = false;
+	}
+
+	pin_slowed = IsDefined( zombie.bz_crossbow_pin_until ) && now < Int( zombie.bz_crossbow_pin_until );
+	if ( pin_slowed )
+	{
+		pin_rate = base_rate * 0.30;
+		zombie.moveplaybackrate = pin_rate;
+		return pin_rate;
 	}
 
 	acid_slowed = IsDefined( zombie.bz_acid_slow_until ) && now < Int( zombie.bz_acid_slow_until );

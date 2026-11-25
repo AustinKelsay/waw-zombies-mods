@@ -197,7 +197,7 @@ bz_elem_new_is_weapon_papped( player, weapon_name )
 	{
 		return false;
 	}
-	if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name ) )
+	if ( bz_elem_new_is_weapon_double_pap( player, weapon_name ) )
 	{
 		return true;
 	}
@@ -211,6 +211,41 @@ bz_elem_new_is_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 	return maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name );
+}
+
+bz_elem_new_get_current_round()
+{
+	if ( IsDefined( level.round_number ) && Int( level.round_number ) > 0 )
+	{
+		return Int( level.round_number );
+	}
+	if ( IsDefined( level.bz_current_round ) && Int( level.bz_current_round ) > 0 )
+	{
+		return Int( level.bz_current_round );
+	}
+	return 1;
+}
+
+bz_elem_new_get_round_zombie_health( round_num )
+{
+	if ( IsDefined( level.zombie_health ) && Int( level.zombie_health ) > 0 )
+	{
+		return Int( level.zombie_health );
+	}
+	return maps\_bz_rules::bz_estimate_round_zombie_health( round_num );
+}
+
+bz_elem_new_get_zombie_torso_tag( zombie )
+{
+	if ( IsDefined( zombie ) && IsDefined( zombie.animname ) && zombie.animname == "zombie_dog" )
+	{
+		return "J_Spine1";
+	}
+	if ( IsDefined( zombie ) && IsDefined( zombie.isdog ) && zombie.isdog )
+	{
+		return "J_Spine1";
+	}
+	return "J_SpineUpper";
 }
 
 bz_elem_new_get_player_aim_ray( player )
@@ -260,9 +295,14 @@ bz_elem_new_trace_forward_impact( player, range )
 
 	trace = BulletTrace( start, end, true, player );
 	impact = end;
+	hit_ent = undefined;
 	if ( IsDefined( trace ) && IsDefined( trace["position"] ) )
 	{
 		impact = trace["position"];
+	}
+	if ( IsDefined( trace ) && IsDefined( trace["entity"] ) )
+	{
+		hit_ent = trace["entity"];
 	}
 
 	res = SpawnStruct();
@@ -270,6 +310,7 @@ bz_elem_new_trace_forward_impact( player, range )
 	res.fwd = fwd;
 	res.end = end;
 	res.impact = impact;
+	res.hit_ent = hit_ent;
 	return res;
 }
 
@@ -353,15 +394,16 @@ bz_elem_new_get_acid_puddle_radius( is_pap, is_dpap )
 
 bz_elem_new_calc_acid_tick_damage( is_pap, is_dpap )
 {
-	if ( IsDefined( is_dpap ) && is_dpap )
-	{
-		return 75;
-	}
-	if ( IsDefined( is_pap ) && is_pap )
-	{
-		return 45;
-	}
-	return 25;
+	round_num = bz_elem_new_get_current_round();
+	zhp = bz_elem_new_get_round_zombie_health( round_num );
+	return maps\_bz_rules::bz_calc_acid_tick_damage( round_num, zhp, is_pap, is_dpap );
+}
+
+bz_elem_new_calc_acid_direct_damage( is_pap, is_dpap )
+{
+	round_num = bz_elem_new_get_current_round();
+	zhp = bz_elem_new_get_round_zombie_health( round_num );
+	return maps\_bz_rules::bz_calc_acid_direct_damage( round_num, zhp, is_pap, is_dpap );
 }
 
 bz_elem_new_compact_acid_puddles()
@@ -402,6 +444,32 @@ bz_elem_new_cleanup_puddle( puddle )
 	bz_elem_new_compact_acid_puddles();
 }
 
+bz_elem_new_apply_acid_debuff( zombie, linger_ms )
+{
+	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || bz_elem_new_is_hidden_spawning_dog( zombie ) )
+	{
+		return;
+	}
+
+	now = GetTime();
+	dur_ms = linger_ms;
+	if ( !IsDefined( dur_ms ) || Int( dur_ms ) <= 0 )
+	{
+		dur_ms = 2000;
+	}
+
+	bz_elem_new_save_zombie_base_move_rate( zombie );
+	zombie.bz_acid_slow_until = now + dur_ms;
+	zombie.bz_acid_brittle_until = now + dur_ms;
+	bz_elem_new_recompute_zombie_move_rate( zombie );
+
+	if ( !IsDefined( zombie.bz_acid_slow_watcher_active ) || !zombie.bz_acid_slow_watcher_active )
+	{
+		zombie.bz_acid_slow_watcher_active = true;
+		zombie thread bz_elem_new_watch_acid_slow_expiry();
+	}
+}
+
 bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 {
 	if ( !IsDefined( zombie ) || !IsAlive( zombie ) || !IsDefined( puddle ) || bz_elem_new_is_hidden_spawning_dog( zombie ) )
@@ -410,25 +478,72 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 	}
 
 	now = GetTime();
-	linger_ms = 1500;
+	bz_elem_new_apply_acid_debuff( zombie, 2000 );
 
-	bz_elem_new_save_zombie_base_move_rate( zombie );
-	zombie.bz_acid_slow_until = now + linger_ms;
-	zombie.bz_acid_brittle_until = now + linger_ms;
-	bz_elem_new_recompute_zombie_move_rate( zombie );
-
-	if ( !IsDefined( zombie.bz_acid_slow_watcher_active ) || !zombie.bz_acid_slow_watcher_active )
+	// Skip duplicate tick damage ONLY for the newly spawned puddle that already dealt
+	// direct acid splash to this zombie on the exact same frame (never suppress other puddles).
+	if ( IsDefined( zombie.bz_acid_direct_puddle ) && zombie.bz_acid_direct_puddle == puddle &&
+		IsDefined( zombie.bz_acid_direct_hit_ms ) && zombie.bz_acid_direct_hit_ms == now )
 	{
-		zombie.bz_acid_slow_watcher_active = true;
-		zombie thread bz_elem_new_watch_acid_slow_expiry();
+		return;
 	}
 
 	if ( IsDefined( puddle.tick_damage ) && Int( puddle.tick_damage ) > 0 )
 	{
 		zombie.bz_in_damage_dispatch = true;
-		zombie.bz_damage_dispatch_time = GetTime();
+		zombie.bz_damage_dispatch_time = now;
 		zombie DoDamage( Int( puddle.tick_damage ), puddle.origin, puddle.owner );
 	}
+}
+
+bz_elem_new_apply_acid_direct_splash( player, impact_pos, hit_ent, direct_dmg, splash_fx, puddle )
+{
+	if ( !IsDefined( player ) || !IsDefined( impact_pos ) )
+	{
+		return 0;
+	}
+
+	now = GetTime();
+	splash_radius = 84.0;
+	direct_hits = 0;
+	zombies = GetAiSpeciesArray( "axis", "all" );
+	if ( !IsDefined( zombies ) )
+	{
+		return 0;
+	}
+
+	for ( i = 0; i < zombies.size; i++ )
+	{
+		z = zombies[i];
+		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
+		{
+			continue;
+		}
+		is_direct_ent = IsDefined( hit_ent ) && z == hit_ent;
+		z_mid = ( z.origin[0], z.origin[1], z.origin[2] + 36.0 );
+		in_splash = is_direct_ent || ( Distance( z.origin, impact_pos ) <= splash_radius ) || ( Distance( z_mid, impact_pos ) <= splash_radius );
+		if ( !in_splash )
+		{
+			continue;
+		}
+
+		bz_elem_new_apply_acid_debuff( z, 2000 );
+		z.bz_acid_direct_puddle = puddle;
+		z.bz_acid_direct_hit_ms = now;
+		if ( IsDefined( direct_dmg ) && Int( direct_dmg ) > 0 )
+		{
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = now;
+			z DoDamage( Int( direct_dmg ), impact_pos, player );
+		}
+		if ( IsDefined( splash_fx ) && IsAlive( z ) )
+		{
+			PlayFXOnTag( splash_fx, z, bz_elem_new_get_zombie_torso_tag( z ) );
+		}
+		direct_hits = direct_hits + 1;
+	}
+
+	return direct_hits;
 }
 
 bz_elem_new_tick_acid_puddle( puddle )
@@ -484,6 +599,7 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	is_dpap = bz_elem_new_is_weapon_double_pap( player, weapon_name );
 	radius = bz_elem_new_get_acid_puddle_radius( is_pap, is_dpap );
 	duration = maps\_bz_rules::bz_get_acid_puddle_duration();
+	direct_dmg = bz_elem_new_calc_acid_direct_damage( is_pap, is_dpap );
 	tick_dmg = bz_elem_new_calc_acid_tick_damage( is_pap, is_dpap );
 
 	acid_fx = bz_elem_new_resolve_acid_fx();
@@ -504,6 +620,7 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	{
 		PlayFX( acid_fx.impact_fx, pos );
 	}
+	PlaySoundAtPosition( "smoke_hiss", pos );
 
 	puddle = SpawnStruct();
 	puddle.owner = player;
@@ -511,6 +628,7 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	puddle.radius = radius;
 	puddle.duration = duration;
 	puddle.tick_interval = 0.25;
+	puddle.direct_damage = direct_dmg;
 	puddle.tick_damage = tick_dmg;
 	puddle.is_pap = is_pap;
 	puddle.is_dpap = is_dpap;
@@ -521,19 +639,26 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 
 	level.bz_acid_puddles[level.bz_acid_puddles.size] = puddle;
 
-	initial_hits = bz_elem_new_tick_acid_puddle( puddle );
+	direct_hits = bz_elem_new_apply_acid_direct_splash( player, trace_info.impact, trace_info.hit_ent, direct_dmg, acid_fx.impact_fx, puddle );
+	puddle_hits = bz_elem_new_tick_acid_puddle( puddle );
+	initial_hits = puddle_hits;
+	if ( direct_hits > initial_hits )
+	{
+		initial_hits = direct_hits;
+	}
 	puddle thread bz_elem_new_acid_puddle_think();
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "radius", radius );
 	fields[2] = bz_log_kv( "duration", duration );
-	fields[3] = bz_log_kv( "tick_dmg", tick_dmg );
-	fields[4] = bz_log_kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
-	fields[5] = bz_log_kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	fields[6] = bz_log_kv( "hits", initial_hits );
-	fields[7] = bz_log_kv( "active", level.bz_acid_puddles.size );
-	fields[8] = bz_log_kv( "fx", acid_fx.puddle_fx_path );
+	fields[3] = bz_log_kv( "direct_dmg", direct_dmg );
+	fields[4] = bz_log_kv( "tick_dmg", tick_dmg );
+	fields[5] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
+	fields[6] = bz_log_kv( "dpap", bz_bool_int( is_dpap ) );
+	fields[7] = bz_log_kv( "hits", initial_hits );
+	fields[8] = bz_log_kv( "active", level.bz_acid_puddles.size );
+	fields[9] = bz_log_kv( "fx", acid_fx.puddle_fx_path );
 	bz_log_emit( "ELEM_ACID_PUDDLE", bz_log_join( fields ) );
 
 	return puddle;
@@ -607,8 +732,10 @@ bz_elem_new_freeze_zombie( zombie, player, duration_sec, freeze_fx )
 		dur = maps\_bz_rules::bz_get_cryo_freeze_duration();
 	}
 
+	now = GetTime();
 	bz_elem_new_save_zombie_base_move_rate( zombie );
-	zombie.bz_cryo_frozen_until = GetTime() + Int( dur * 1000 );
+	zombie.bz_cryo_frozen_at = now;
+	zombie.bz_cryo_frozen_until = now + Int( dur * 1000 );
 	zombie.bz_is_frozen = true;
 	zombie.bz_cryo_frozen_by = player;
 	bz_elem_new_recompute_zombie_move_rate( zombie );
@@ -617,6 +744,7 @@ bz_elem_new_freeze_zombie( zombie, player, duration_sec, freeze_fx )
 	{
 		fx_pos = ( zombie.origin[0], zombie.origin[1], zombie.origin[2] + 36 );
 		PlayFX( freeze_fx, fx_pos );
+		PlayFXOnTag( freeze_fx, zombie, bz_elem_new_get_zombie_torso_tag( zombie ) );
 	}
 
 	if ( !IsDefined( zombie.bz_cryo_thaw_watcher_active ) || !zombie.bz_cryo_thaw_watcher_active )
@@ -636,6 +764,7 @@ bz_elem_new_thaw_zombie( zombie )
 
 	zombie.bz_is_frozen = false;
 	zombie.bz_cryo_frozen_until = 0;
+	zombie.bz_cryo_frozen_at = 0;
 	return bz_elem_new_recompute_zombie_move_rate( zombie );
 }
 
@@ -677,6 +806,54 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 	return bz_elem_new_is_shatter_mod( ctx.mod );
 }
 
+bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo_fx, now )
+{
+	if ( !IsDefined( player ) || !IsDefined( center ) || Int( splash_dmg ) <= 0 )
+	{
+		return 0;
+	}
+
+	splash_radius = 96.0;
+	splash_hits = 0;
+	zombies = GetAiSpeciesArray( "axis", "all" );
+	if ( !IsDefined( zombies ) )
+	{
+		return 0;
+	}
+
+	for ( i = 0; i < zombies.size; i++ )
+	{
+		z = zombies[i];
+		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
+		{
+			continue;
+		}
+		if ( IsDefined( source_zombie ) && z == source_zombie )
+		{
+			continue;
+		}
+		if ( Distance( z.origin, center ) > splash_radius )
+		{
+			continue;
+		}
+
+		dmg = Int( splash_dmg );
+		if ( bz_elem_new_is_acid_brittle_active( z ) )
+		{
+			dmg = Int( dmg * bz_get_acid_brittle_mult() );
+		}
+		z.bz_in_damage_dispatch = true;
+		z.bz_damage_dispatch_time = now;
+		z DoDamage( dmg, center, player );
+		if ( IsAlive( z ) && !bz_elem_new_is_cryo_frozen( z ) )
+		{
+			bz_elem_new_freeze_zombie( z, player, 2.5, cryo_fx.freeze_fx );
+		}
+		splash_hits = splash_hits + 1;
+	}
+	return splash_hits;
+}
+
 bz_elem_new_fire_cryo_cannon( player, weapon_name )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) )
@@ -686,15 +863,35 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 
 	bz_elem_new_ensure_level_tables();
 
+	now = GetTime();
 	trace_info = bz_elem_new_trace_forward_impact( player, 1024 );
 	is_pap = bz_elem_new_is_weapon_papped( player, weapon_name );
 	is_dpap = bz_elem_new_is_weapon_double_pap( player, weapon_name );
 	radius = bz_elem_new_get_cryo_cone_radius( is_pap, is_dpap );
 	duration = maps\_bz_rules::bz_get_cryo_freeze_duration();
+	round_num = bz_elem_new_get_current_round();
+	zhp = bz_elem_new_get_round_zombie_health( round_num );
+	blast_dmg = maps\_bz_rules::bz_calc_cryo_blast_damage( round_num, zhp, is_pap, is_dpap );
 	cryo_fx = bz_elem_new_resolve_cryo_fx();
 
 	if ( IsDefined( trace_info.impact ) )
 	{
+		beam_len = Distance( trace_info.start, trace_info.impact );
+		if ( beam_len >= 120.0 && IsDefined( cryo_fx.spray_fx ) )
+		{
+			mid1 = (
+				trace_info.start[0] + ( trace_info.fwd[0] * beam_len * 0.35 ),
+				trace_info.start[1] + ( trace_info.fwd[1] * beam_len * 0.35 ),
+				trace_info.start[2] + ( trace_info.fwd[2] * beam_len * 0.35 )
+			);
+			mid2 = (
+				trace_info.start[0] + ( trace_info.fwd[0] * beam_len * 0.70 ),
+				trace_info.start[1] + ( trace_info.fwd[1] * beam_len * 0.70 ),
+				trace_info.start[2] + ( trace_info.fwd[2] * beam_len * 0.70 )
+			);
+			PlayFX( cryo_fx.spray_fx, mid1 );
+			PlayFX( cryo_fx.spray_fx, mid2 );
+		}
 		if ( IsDefined( cryo_fx.freeze_fx ) )
 		{
 			PlayFX( cryo_fx.freeze_fx, trace_info.impact );
@@ -703,9 +900,11 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 		{
 			PlayFX( cryo_fx.spray_fx, trace_info.impact );
 		}
+		PlaySoundAtPosition( "bullet_small_glass", trace_info.impact );
 	}
 
 	frozen_count = 0;
+	shattered_count = 0;
 	zombies = GetAiSpeciesArray( "axis", "all" );
 	if ( IsDefined( zombies ) )
 	{
@@ -716,10 +915,54 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 			{
 				continue;
 			}
-			if ( bz_elem_new_is_point_in_cryo_beam_or_cone( z.origin, trace_info.start, trace_info.fwd, trace_info.impact, radius ) )
+			if ( !bz_elem_new_is_point_in_cryo_beam_or_cone( z.origin, trace_info.start, trace_info.fwd, trace_info.impact, radius ) )
 			{
-				if ( bz_elem_new_freeze_zombie( z, player, duration, cryo_fx.freeze_fx ) )
+				continue;
+			}
+
+			z_mid = ( z.origin[0], z.origin[1], z.origin[2] + 36.0 );
+			brittle_mult = 1.0;
+			if ( bz_elem_new_is_acid_brittle_active( z ) )
+			{
+				brittle_mult = bz_get_acid_brittle_mult();
+			}
+
+			was_already_frozen = bz_elem_new_is_cryo_frozen( z ) &&
+				( !IsDefined( z.bz_cryo_frozen_at ) || z.bz_cryo_frozen_at != now );
+			if ( was_already_frozen )
+			{
+				shatter_mult = bz_elem_new_execute_cryo_shatter( z, player, weapon_name, "MOD_CRYO_SHATTER", z_mid );
+				shatter_dmg = Int( blast_dmg * shatter_mult * brittle_mult );
+				z.bz_in_damage_dispatch = true;
+				z.bz_damage_dispatch_time = now;
+				z DoDamage( shatter_dmg, z_mid, player );
+				bz_elem_new_cryo_shatter_splash( player, z, z_mid, Int( blast_dmg * 0.65 ), cryo_fx, now );
+				shattered_count = shattered_count + 1;
+			}
+			else
+			{
+				dmg = Int( blast_dmg * brittle_mult );
+				z.bz_in_damage_dispatch = true;
+				z.bz_damage_dispatch_time = now;
+				z DoDamage( dmg, z_mid, player );
+				if ( IsAlive( z ) )
 				{
+					if ( bz_elem_new_freeze_zombie( z, player, duration, cryo_fx.freeze_fx ) )
+					{
+						frozen_count = frozen_count + 1;
+					}
+				}
+				else
+				{
+					if ( IsDefined( cryo_fx.shatter_fx ) )
+					{
+						PlayFX( cryo_fx.shatter_fx, z_mid );
+					}
+					if ( IsDefined( cryo_fx.spray_fx ) )
+					{
+						PlayFX( cryo_fx.spray_fx, z_mid );
+					}
+					PlaySoundAtPosition( "impact_hard_glass", z_mid );
 					frozen_count = frozen_count + 1;
 				}
 			}
@@ -727,16 +970,18 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "radius", radius );
 	fields[2] = bz_log_kv( "duration", duration );
-	fields[3] = bz_log_kv( "pap", maps\_bz_hooks::bz_bool_int( is_pap ) );
-	fields[4] = bz_log_kv( "dpap", maps\_bz_hooks::bz_bool_int( is_dpap ) );
-	fields[5] = bz_log_kv( "frozen", frozen_count );
-	fields[6] = bz_log_kv( "fx", cryo_fx.freeze_fx_path );
+	fields[3] = bz_log_kv( "damage", blast_dmg );
+	fields[4] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
+	fields[5] = bz_log_kv( "dpap", bz_bool_int( is_dpap ) );
+	fields[6] = bz_log_kv( "frozen", frozen_count );
+	fields[7] = bz_log_kv( "shattered", shattered_count );
+	fields[8] = bz_log_kv( "fx", cryo_fx.freeze_fx_path );
 	bz_log_emit( "ELEM_CRYO_FREEZE", bz_log_join( fields ) );
 
-	return frozen_count;
+	return frozen_count + shattered_count;
 }
 
 // ---------------------------------------------------------------------------
@@ -845,6 +1090,10 @@ bz_elem_new_on_pre_init()
 	{
 		level.bz_elem_new_fx["misc/fx_zombie_bloodsplat"] = LoadFX( "misc/fx_zombie_bloodsplat" );
 	}
+	if ( !IsDefined( level.bz_elem_new_fx["weapon/grenade/fx_trail_rifle_grenade"] ) )
+	{
+		level.bz_elem_new_fx["weapon/grenade/fx_trail_rifle_grenade"] = LoadFX( "weapon/grenade/fx_trail_rifle_grenade" );
+	}
 }
 
 bz_elem_new_on_init()
@@ -899,6 +1148,7 @@ bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
 		{
 			PlayFX( cryo_fx.spray_fx, shatter_pos );
 		}
+		PlaySoundAtPosition( "impact_hard_glass", shatter_pos );
 	}
 
 	weap_lbl = bz_normalize_id( weapon );
@@ -913,7 +1163,7 @@ bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( attacker ) );
 	fields[1] = bz_log_kv( "weapon", weap_lbl );
 	fields[2] = bz_log_kv( "mod", mod_lbl );
 	fields[3] = bz_log_kv( "mult", shatter_mult );
@@ -940,7 +1190,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 	mult = 1.0;
 	if ( bz_elem_new_is_acid_brittle_active( zombie ) )
 	{
-		mult = mult * maps\_bz_rules::bz_get_acid_brittle_mult();
+		mult = mult * bz_get_acid_brittle_mult();
 	}
 
 	norm_weap = bz_normalize_id( weapon );
@@ -963,7 +1213,7 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 	// Acid Brittle: ANY subsequent damage while brittle multiplies damage_mult by 1.50x.
 	if ( bz_elem_new_is_acid_brittle_active( zombie ) )
 	{
-		ctx.damage_mult = ctx.damage_mult * maps\_bz_rules::bz_get_acid_brittle_mult();
+		ctx.damage_mult = ctx.damage_mult * bz_get_acid_brittle_mult();
 	}
 
 	// Cryo Shatter: bullet/melee/explosive hit on a frozen zombie multiplies by 2.50x,
@@ -1039,6 +1289,21 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_get_acid_brittle_mult()
+{
+	return maps\_bz_rules::bz_get_acid_brittle_mult();
+}
+
+bz_get_player_label( player )
+{
+	return maps\_bz_hooks::bz_get_player_label( player );
+}
+
+bz_bool_int( flag )
+{
+	return maps\_bz_hooks::bz_bool_int( flag );
 }
 
 // Local function pointers used by the gated live selftests.
