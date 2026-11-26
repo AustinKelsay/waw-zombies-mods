@@ -31,6 +31,7 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
         known_materials = set(bz_models.ALL_CUSTOM_MATERIALS)
         for mesh in meshes:
             self.assertGreaterEqual(len(mesh.verts), 40, f"{mesh.name} has too few vertices")
+            self.assertLessEqual(len(mesh.verts), 4000, f"{mesh.name} exceeds WaW 1.7 safe viewmodel vertex budget")
             self.assertGreaterEqual(len(mesh.faces), 40, f"{mesh.name} has too few faces")
             self.assertGreaterEqual(len(mesh.materials), 2, f"{mesh.name} should use multi-material detailing")
             for mat_name in mesh.materials:
