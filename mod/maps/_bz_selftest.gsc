@@ -116,16 +116,16 @@ bz_run_p1_selftest()
 		IsDefined( level.bz_stations["class"] ) &&
 		IsDefined( level.bz_stations["arsenal"] ) &&
 		IsDefined( level.bz_stations["perks"].model ) &&
-		level.bz_stations["perks"].model == "bz_station_perks_kiosk" &&
+		level.bz_stations["perks"].model_name == "bz_station_perks_kiosk" &&
 		IsDefined( level.bz_stations["class"].model ) &&
-		level.bz_stations["class"].model == "bz_station_class_kiosk" &&
+		level.bz_stations["class"].model_name == "bz_station_class_kiosk" &&
 		IsDefined( level.bz_stations["arsenal"].model ) &&
-		level.bz_stations["arsenal"].model == "bz_station_arsenal_kiosk";
+		level.bz_stations["arsenal"].model_name == "bz_station_arsenal_kiosk";
 	if ( expected_stations == 4 )
 	{
 		stations_ok = stations_ok && IsDefined( level.bz_stations["pap"] ) &&
 			IsDefined( level.bz_stations["pap"].model ) &&
-			level.bz_stations["pap"].model == "bz_station_pap_kiosk";
+			level.bz_stations["pap"].model_name == "bz_station_pap_kiosk";
 	}
 	else
 	{
