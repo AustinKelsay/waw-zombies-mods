@@ -60,7 +60,7 @@ bz_perks_is_bullet_mod( mod )
 bz_perks_map_mod_to_self_damage_type( mod )
 {
 	m = bz_normalize_id( mod );
-	if ( m == "mod_grenade_splash" || m == "mod_projectile_splash" )
+	if ( m == "mod_grenade_splash" || m == "mod_projectile_splash" || m == "mod_projectile" )
 	{
 		return "splash";
 	}
@@ -120,7 +120,8 @@ bz_perks_get_weapon_move_scale( weapon_name )
 
 	// Launchers & flamethrower (heaviest)
 	if ( IsSubStr( w, "panzerschrek" ) || IsSubStr( w, "panzershreck" ) ||
-		IsSubStr( w, "bazooka" ) || IsSubStr( w, "flamethrower" ) )
+		IsSubStr( w, "bazooka" ) || IsSubStr( w, "flamethrower" ) ||
+		w == "bz_acid_sprayer" )
 	{
 		return 0.75;
 	}
@@ -133,7 +134,7 @@ bz_perks_get_weapon_move_scale( weapon_name )
 	}
 
 	// Medium LMGs & heavy wonder weapons
-	if ( IsSubStr( w, "fg42" ) || IsSubStr( w, "tesla_gun" ) ||
+	if ( IsSubStr( w, "fg42" ) || IsSubStr( w, "tesla_gun" ) || w == "bz_cryo_cannon" ||
 		w == "bar" || IsSubStr( w, "zombie_bar" ) || IsSubStr( w, "bar_bipod" ) )
 	{
 		return 0.82;
@@ -149,7 +150,7 @@ bz_perks_get_weapon_move_scale( weapon_name )
 	if ( IsSubStr( w, "stg44" ) || IsSubStr( w, "m1garand" ) || IsSubStr( w, "gewehr43" ) ||
 		IsSubStr( w, "svt40" ) || IsSubStr( w, "kar98k" ) || IsSubStr( w, "doublebarrel" ) ||
 		IsSubStr( w, "shotgun" ) || IsSubStr( w, "m1897" ) || IsSubStr( w, "m1carbine" ) ||
-		IsSubStr( w, "m1a1" ) || IsSubStr( w, "mosin" ) )
+		IsSubStr( w, "m1a1" ) || IsSubStr( w, "mosin" ) || w == "bz_multi_crossbow" )
 	{
 		return 0.9;
 	}
@@ -249,6 +250,8 @@ bz_perks_on_player_connect( player )
 	{
 		player.bz_perks_watchers_started = true;
 		player thread bz_perks_player_monitor();
+		player thread bz_perks_watch_weapon_change();
+		player thread bz_perks_watch_coop_speed_cola2();
 		player thread bz_perks_watch_disconnect();
 		player thread bz_perks_watch_max_ammo();
 		player thread bz_perks_watch_revived();
@@ -470,6 +473,7 @@ bz_perks_on_player_downed( player )
 	player.bz_fast_swap_active = false;
 	player.bz_reload_mult = 0.5;
 	player.bz_swap_mult = 1.0;
+	player.bz_qr_t1_solo_granted = false;
 	player.bz_staminup_sprint_scale = 1.5;
 	player.bz_ads_strafe_mult = 1.0;
 	player.bz_ap_active = false;
@@ -669,7 +673,8 @@ bz_perks_on_player_damage( player, ctx )
 		dmg_type = bz_perks_map_mod_to_self_damage_type( norm_mod );
 		is_self = ( norm_mod == "mod_falling" ) ||
 			( IsDefined( ctx.attacker ) && ctx.attacker == player ) ||
-			( IsDefined( ctx.inflictor ) && ctx.inflictor == player );
+			( IsDefined( ctx.inflictor ) && ctx.inflictor == player ) ||
+			( norm_mod == "mod_burned" && ( !IsDefined( ctx.attacker ) || !IsPlayer( ctx.attacker ) ) );
 
 		if ( is_self && dmg_type != "" && maps\_bz_rules::bz_is_self_damage_immune( true, "", dmg_type ) )
 		{
@@ -736,6 +741,7 @@ bz_perks_on_player_damage( player, ctx )
 		stun_sec = maps\_bz_rules::bz_get_second_chance_stun_duration();
 		bz_perks_grant_invuln( player, invuln_sec );
 		stunned_count = bz_perks_second_chance_push_and_stun( player, 256, stun_sec );
+		bz_perks_play_save_feedback( player, "second_chance" );
 
 		sfields = [];
 		sfields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
@@ -750,13 +756,14 @@ bz_perks_on_player_damage( player, ctx )
 		return;
 	}
 
-	// 4. Quick Revive II extra Solo revive charge (intercepts Solo game-over hit)
+	// 4. Quick Revive I / II Solo revive charge (intercepts Solo game-over hit with full HP & feedback)
 	if ( cur_hp > 0 && inc_dmg >= cur_hp )
 	{
 		solo_players = GetPlayers();
 		if ( IsDefined( solo_players ) && solo_players.size == 1 && bz_perks_try_consume_solo_revive( player ) )
 		{
 			ctx.cancelled = true;
+			bz_recompute_player_max_health( player );
 			max_hp = 100;
 			if ( IsDefined( player.maxhealth ) && Int( player.maxhealth ) > 0 )
 			{
@@ -765,7 +772,12 @@ bz_perks_on_player_damage( player, ctx )
 			player.maxhealth = max_hp;
 			player.health = max_hp;
 			player.maxhealth = max_hp;
-			bz_perks_apply_revive_completed( player, player );
+			if ( !bz_perks_apply_revive_completed( player, player ) )
+			{
+				bz_perks_grant_invuln( player, 1.5 );
+			}
+			bz_perks_play_save_feedback( player, "quick_revive" );
+			bz_perks_update_hud( player );
 			return;
 		}
 	}
@@ -918,6 +930,15 @@ bz_perks_apply_standard_perk( player, perk_id )
 			player SetPerk( "specialty_quickrevive" );
 		}
 		bz_perks_update_revive_state( player );
+		if ( !IsDefined( player.bz_qr_t1_solo_granted ) || !player.bz_qr_t1_solo_granted )
+		{
+			player.bz_qr_t1_solo_granted = true;
+			qr1_extra = maps\_bz_rules::bz_get_extra_solo_revives( true, false );
+			if ( !IsDefined( player.bz_extra_solo_revives ) || Int( player.bz_extra_solo_revives ) < qr1_extra )
+			{
+				player.bz_extra_solo_revives = qr1_extra;
+			}
+		}
 	}
 	else if ( id == "staminup" )
 	{
@@ -1475,6 +1496,39 @@ bz_perks_update_lightweight_heavy( player )
 	return bz_recompute_player_speed( player );
 }
 
+bz_perks_play_save_feedback( player, kind )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	player PlayLocalSound( "powerup_grabbed" );
+	if ( !IsDefined( player.origin ) )
+	{
+		return;
+	}
+	if ( kind == "second_chance" )
+	{
+		PlaySoundAtPosition( "couch_slam", player.origin );
+		Earthquake( 0.30, 0.26, player.origin, 220 );
+	}
+	else
+	{
+		Earthquake( 0.22, 0.22, player.origin, 160 );
+	}
+	if ( IsDefined( level._effect ) )
+	{
+		if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
+		{
+			PlayFX( level._effect["powerup_grabbed_wave"], player.origin );
+		}
+		else if ( IsDefined( level._effect["powerup_on"] ) )
+		{
+			PlayFX( level._effect["powerup_on"], player.origin );
+		}
+	}
+}
+
 bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 {
 	if ( !IsDefined( player ) || !IsDefined( player.origin ) )
@@ -1512,8 +1566,11 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 
 			if ( !maps\_bz_hooks::bz_is_dog_entity( z ) )
 			{
-				dx = z.origin[0] - p_org[0];
-				dy = z.origin[1] - p_org[1];
+				z0_x = z.origin[0];
+				z0_y = z.origin[1];
+				z0_z = z.origin[2];
+				dx = z0_x - p_org[0];
+				dy = z0_y - p_org[1];
 				nx = 1.0;
 				ny = 0.0;
 				if ( dist > 1.0 )
@@ -1522,10 +1579,10 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 					ny = dy / dist;
 				}
 
-				raw_push = ( z.origin[0] + ( nx * 96 ), z.origin[1] + ( ny * 96 ), z.origin[2] );
-				trace_start = ( z.origin[0], z.origin[1], z.origin[2] + 24 );
-				trace_end = ( raw_push[0], raw_push[1], raw_push[2] + 24 );
-				push_org = raw_push;
+				push_x = z0_x + ( nx * 96 );
+				push_y = z0_y + ( ny * 96 );
+				trace_start = ( z0_x, z0_y, z0_z + 24 );
+				trace_end = ( push_x, push_y, z0_z + 24 );
 				tr = BulletTrace( trace_start, trace_end, false, z );
 				if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
 				{
@@ -1534,8 +1591,20 @@ bz_perks_second_chance_push_and_stun( player, radius, stun_sec )
 					{
 						safe_frac = 0.0;
 					}
-					push_org = ( z.origin[0] + ( nx * 96 * safe_frac ), z.origin[1] + ( ny * 96 * safe_frac ), z.origin[2] );
+					push_x = z0_x + ( nx * 96 * safe_frac );
+					push_y = z0_y + ( ny * 96 * safe_frac );
 				}
+				push_z = z0_z;
+				ftr = BulletTrace( ( push_x, push_y, z0_z + 24.0 ), ( push_x, push_y, z0_z - 128.0 ), false, z );
+				if ( IsDefined( ftr ) && IsDefined( ftr["fraction"] ) && ftr["fraction"] > 0.02 && ftr["fraction"] < 1.0 && IsDefined( ftr["position"] ) )
+				{
+					snapped_z = ftr["position"][2];
+					if ( snapped_z <= z0_z + 36.0 && snapped_z >= z0_z - 128.0 )
+					{
+						push_z = snapped_z;
+					}
+				}
+				push_org = ( push_x, push_y, push_z );
 				z_ang = ( 0, 0, 0 );
 				if ( IsDefined( z.angles ) )
 				{
@@ -1633,9 +1702,11 @@ bz_perks_apply_revive_completed( reviver, revived )
 	dedupe_target.bz_last_qr2_revive_ms = now;
 
 	bz_perks_grant_invuln( reviver, dur );
-	if ( IsDefined( revived ) )
+	reviver PlayLocalSound( "powerup_grabbed" );
+	if ( IsDefined( revived ) && revived != reviver )
 	{
 		bz_perks_grant_invuln( revived, dur );
+		revived PlayLocalSound( "powerup_grabbed" );
 	}
 
 	fields = [];
@@ -1663,7 +1734,7 @@ bz_perks_sync_stock_perks( player )
 	{
 		return false;
 	}
-	if ( IsDefined( player.laststand ) && player.laststand )
+	if ( bz_perks_player_is_downed( player ) )
 	{
 		return false;
 	}
@@ -1951,6 +2022,82 @@ bz_perks_player_monitor()
 		{
 			last_ads = false;
 			bz_recompute_player_speed( self );
+		}
+	}
+}
+
+bz_perks_try_coop_speed_cola2_assist( player, weap )
+{
+	if ( !bz_perks_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_perks_player_is_downed( player ) )
+	{
+		return 0;
+	}
+	if ( bz_perks_is_solo() || !bz_state_has_perk_t2( player, "speed_cola" ) )
+	{
+		return 0;
+	}
+	if ( !IsDefined( weap ) || weap == "" || weap == "none" || !player HasWeapon( weap ) )
+	{
+		return 0;
+	}
+	clip_size = Int( WeaponClipSize( weap ) );
+	if ( clip_size <= 0 )
+	{
+		return 0;
+	}
+	cur_clip = Int( player GetWeaponAmmoClip( weap ) );
+	cur_stock = Int( player GetWeaponAmmoStock( weap ) );
+	need = clip_size - cur_clip;
+	if ( need <= 0 || cur_stock <= 0 )
+	{
+		return 0;
+	}
+	take = need;
+	if ( take > cur_stock )
+	{
+		take = cur_stock;
+	}
+	player SetWeaponAmmoClip( weap, cur_clip + take );
+	player SetWeaponAmmoStock( weap, cur_stock - take );
+	return take;
+}
+
+bz_perks_watch_weapon_change()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "weapon_change" );
+		if ( bz_perks_enabled() && bz_state_has_apex( self, "lightweight_heavy" ) )
+		{
+			bz_perks_update_lightweight_heavy( self );
+		}
+	}
+}
+
+bz_perks_watch_coop_speed_cola2()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		self waittill( "reload_start" );
+		if ( !bz_perks_enabled() || bz_perks_is_solo() || !bz_state_has_perk_t2( self, "speed_cola" ) )
+		{
+			continue;
+		}
+		reloading_weap = self GetCurrentWeapon();
+		wait( 0.45 );
+		if ( !IsDefined( self ) || !IsAlive( self ) || bz_perks_player_is_downed( self ) )
+		{
+			continue;
+		}
+		if ( self GetCurrentWeapon() == reloading_weap )
+		{
+			bz_perks_try_coop_speed_cola2_assist( self, reloading_weap );
 		}
 	}
 }

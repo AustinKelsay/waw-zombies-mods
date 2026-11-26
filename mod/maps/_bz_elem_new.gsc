@@ -492,9 +492,10 @@ bz_elem_new_apply_acid_to_zombie( zombie, puddle )
 
 	if ( IsDefined( puddle.tick_damage ) && Int( puddle.tick_damage ) > 0 )
 	{
+		tick_dmg = Int( Int( puddle.tick_damage ) * bz_elem_new_get_titan_mult( puddle.owner ) );
 		zombie.bz_in_damage_dispatch = true;
 		zombie.bz_damage_dispatch_time = now;
-		zombie DoDamage( Int( puddle.tick_damage ), puddle.origin, puddle.owner );
+		zombie DoDamage( tick_dmg, puddle.origin, puddle.owner );
 		return true;
 	}
 	return false;
@@ -536,9 +537,10 @@ bz_elem_new_apply_acid_direct_splash( player, impact_pos, hit_ent, direct_dmg, s
 		z.bz_acid_direct_hit_ms = now;
 		if ( IsDefined( direct_dmg ) && Int( direct_dmg ) > 0 )
 		{
+			final_direct_dmg = Int( Int( direct_dmg ) * bz_elem_new_get_titan_mult( player ) );
 			z.bz_in_damage_dispatch = true;
 			z.bz_damage_dispatch_time = now;
-			z DoDamage( Int( direct_dmg ), impact_pos, player );
+			z DoDamage( final_direct_dmg, impact_pos, player );
 		}
 		if ( IsDefined( splash_fx ) && IsAlive( z ) )
 		{
@@ -947,7 +949,7 @@ bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo
 			continue;
 		}
 
-		dmg = Int( splash_dmg );
+		dmg = Int( Int( splash_dmg ) * bz_elem_new_get_titan_mult( player ) );
 		if ( bz_elem_new_is_acid_brittle_active( z ) )
 		{
 			dmg = Int( dmg * bz_get_acid_brittle_mult() );
@@ -1188,10 +1190,11 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 
 			was_already_frozen = bz_elem_new_is_cryo_frozen( z ) &&
 				( !IsDefined( z.bz_cryo_frozen_at ) || z.bz_cryo_frozen_at != now );
+			titan_mult = bz_elem_new_get_titan_mult( player );
 			if ( was_already_frozen )
 			{
 				shatter_mult = bz_elem_new_execute_cryo_shatter( z, player, weapon_name, "MOD_CRYO_SHATTER", z_mid );
-				shatter_dmg = Int( blast_dmg * shatter_mult * brittle_mult );
+				shatter_dmg = Int( blast_dmg * shatter_mult * brittle_mult * titan_mult );
 				z.bz_in_damage_dispatch = true;
 				z.bz_damage_dispatch_time = now;
 				z DoDamage( shatter_dmg, z_mid, player );
@@ -1200,7 +1203,7 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 			}
 			else
 			{
-				dmg = Int( blast_dmg * brittle_mult );
+				dmg = Int( blast_dmg * brittle_mult * titan_mult );
 				z.bz_in_damage_dispatch = true;
 				z.bz_damage_dispatch_time = now;
 				z DoDamage( dmg, z_mid, player );
@@ -1541,9 +1544,22 @@ bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point )
 	return shatter_mult;
 }
 
+bz_elem_new_get_titan_mult( attacker )
+{
+	if ( GetDvarInt( "bz_classes_enabled" ) != 1 || !IsDefined( attacker ) || !IsPlayer( attacker ) )
+	{
+		return 1.0;
+	}
+	if ( IsDefined( attacker.bz_titan_is_stationary ) && attacker.bz_titan_is_stationary )
+	{
+		return 2.0;
+	}
+	return 1.0;
+}
+
 // Shared helper for scripted damage sources (Multi-Crossbow, Blade Boomerang, PaP Cluster,
-// Flamethrower DOT, War Club cleave) to compose Acid Brittle (1.5x) and Cryo Shatter (2.5x)
-// before guarded DoDamage() calls without double-multiplying through _bz_pap.
+// Flamethrower DOT, War Club cleave) to compose Acid Brittle (1.5x), Cryo Shatter (2.5x),
+// and Titan Stationary 2.0x before guarded DoDamage() calls without double-multiplying through _bz_pap.
 bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point )
 {
 	if ( !IsDefined( dmg ) || Int( dmg ) <= 0 )
@@ -1551,12 +1567,13 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 		return 0;
 	}
 	base_dmg = Int( dmg );
+	titan_mult = bz_elem_new_get_titan_mult( attacker );
 	if ( !bz_elements_enabled() || !IsDefined( zombie ) )
 	{
-		return base_dmg;
+		return Int( base_dmg * titan_mult );
 	}
 
-	mult = 1.0;
+	mult = titan_mult;
 	if ( bz_elem_new_is_acid_brittle_active( zombie ) )
 	{
 		mult = mult * bz_get_acid_brittle_mult();

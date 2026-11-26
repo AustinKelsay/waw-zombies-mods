@@ -859,6 +859,10 @@ SCRIPT_MENU_RESP_RE = re.compile(r'scriptMenuResponse\s+"([^"]+)"\s*;')
 
 EXPECTED_MENU_TOKENS: dict[str, set[str]] = {
     "bz_station_perks": {
+        "buy_perk:juggernog",
+        "buy_perk:speed_cola",
+        "buy_perk:double_tap",
+        "buy_perk:quick_revive",
         "buy_perk:staminup",
         "buy_perk:mule_kick",
         "buy_perk:ap",
@@ -966,10 +970,6 @@ class TestBzStationMenusManifestAndWaw17Compliance(unittest.TestCase):
 
         player = FakeEntity("TokenTester", ent_num=0)
         player.set_field("score", 500000)
-        player.give_perk("specialty_armorvest")
-        player.give_perk("specialty_fastreload")
-        player.give_perk("specialty_rof")
-        player.give_perk("specialty_quickrevive")
         player.give_perk("specialty_altmelee")
         player.give_weapon("thompson", make_current=True)
         gsc.players.append(player)

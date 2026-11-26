@@ -435,11 +435,34 @@ class BzGscRuntime(GscRuntime):
                 for k, v in res.items():
                     trace.set_item(k, v)
             else:
-                # Default ground plane sits at start_z - 64 (matching original origin.z)
-                hit_pos = GscArray([start[0], start[1], start[2] - 64])
-                trace.set_item("fraction", 0.25)
-                trace.set_item("position", hit_pos)
+                is_downward = (
+                    float(end[2]) < float(start[2]) - 50.0
+                    and abs(float(end[0]) - float(start[0])) < 1.0
+                    and abs(float(end[1]) - float(start[1])) < 1.0
+                )
+                if is_downward:
+                    # Default ground plane sits at start_z - 64 (matching original origin.z)
+                    hit_pos = GscArray([start[0], start[1], start[2] - 64])
+                    trace.set_item("fraction", 0.25)
+                    trace.set_item("position", hit_pos)
+                else:
+                    trace.set_item("fraction", 1.0)
+                    trace.set_item("position", end)
             return True, trace
+        if name_lower in ("playsoundatposition", "earthquake", "playfx"):
+            return True, UNDEFINED
+        if name_lower == "spawnfx":
+            ent = FakeEntity(name="script_fx", ent_num=600 + len(self.spawned_entities), is_player=False)
+            ent.classname = "script_fx"
+            ent.set_field("classname", "script_fx")
+            if len(args) > 1:
+                ent.set_field("origin", args[1])
+            self.spawned_entities.append(ent)
+            return True, ent
+        if name_lower == "triggerfx":
+            if args and isinstance(args[0], FakeEntity):
+                args[0].set_field("triggered", True)
+            return True, UNDEFINED
         if name_lower == "distance":
             a = args[0]
             b = args[1]
@@ -723,6 +746,10 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 return receiver.use_pressed
             return False
+        if method == "setorigin":
+            if isinstance(receiver, FakeEntity) and args:
+                receiver.set_field("origin", args[0])
+            return UNDEFINED
         if method == "notify":
             ev = _waw_to_str(args[0]) if args else ""
             self.notifies.append((receiver, ev))

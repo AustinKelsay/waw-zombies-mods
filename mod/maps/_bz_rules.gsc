@@ -1272,6 +1272,10 @@ bz_get_extra_solo_revives( has_quick_revive, has_quick_revive_t2 )
 {
 	if ( bz_is_true( has_quick_revive ) && bz_is_true( has_quick_revive_t2 ) )
 	{
+		return 2;
+	}
+	if ( bz_is_true( has_quick_revive ) )
+	{
 		return 1;
 	}
 

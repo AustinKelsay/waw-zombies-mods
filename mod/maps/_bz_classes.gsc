@@ -175,6 +175,86 @@ bz_class_get_frag_weapon( player )
 	return "stielhandgranate";
 }
 
+bz_classes_apply_status_mult( zombie, dmg )
+{
+	if ( !IsDefined( dmg ) || Int( dmg ) <= 0 )
+	{
+		return 0;
+	}
+	out = Int( dmg );
+	if ( !IsDefined( zombie ) || GetDvarInt( "bz_elements_enabled" ) != 1 )
+	{
+		return out;
+	}
+	mult = 1.0;
+	now = GetTime();
+	if ( IsDefined( zombie.bz_acid_brittle_until ) && now < Int( zombie.bz_acid_brittle_until ) )
+	{
+		mult = mult * 1.5;
+	}
+	if ( IsDefined( zombie.bz_is_frozen ) && zombie.bz_is_frozen )
+	{
+		mult = mult * 2.5;
+	}
+	return Int( out * mult );
+}
+
+bz_classes_resolve_stock_fx( kind )
+{
+	if ( kind == "marker" )
+	{
+		if ( IsDefined( level._effect ) )
+		{
+			if ( IsDefined( level._effect["zapper_light_ready"] ) )
+			{
+				return level._effect["zapper_light_ready"];
+			}
+			if ( IsDefined( level._effect["powerup_on"] ) )
+			{
+				return level._effect["powerup_on"];
+			}
+		}
+		return undefined;
+	}
+	if ( kind == "blast" )
+	{
+		if ( IsDefined( level._effect ) )
+		{
+			if ( IsDefined( level._effect["betty_explode"] ) )
+			{
+				return level._effect["betty_explode"];
+			}
+			if ( IsDefined( level._effect["molotov_exp"] ) )
+			{
+				return level._effect["molotov_exp"];
+			}
+			if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
+			{
+				return level._effect["powerup_grabbed_wave"];
+			}
+		}
+	}
+	if ( kind == "slam" )
+	{
+		if ( IsDefined( level._effect ) )
+		{
+			if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
+			{
+				return level._effect["powerup_grabbed_wave"];
+			}
+			if ( IsDefined( level._effect["betty_explode"] ) )
+			{
+				return level._effect["betty_explode"];
+			}
+		}
+	}
+	if ( IsDefined( level.bz_elem_new_fx ) && IsDefined( level.bz_elem_new_fx["misc/fx_exp_raygun_impact"] ) )
+	{
+		return level.bz_elem_new_fx["misc/fx_exp_raygun_impact"];
+	}
+	return undefined;
+}
+
 bz_class_format_hud_text( class_id )
 {
 	id = bz_normalize_id( class_id );
@@ -239,6 +319,10 @@ bz_class_update_hud( player )
 			cur_clip = 0;
 		}
 		badge_text = badge_text + " | GREN: " + cur_clip + "+" + Int( player.bz_sapper_grenade_reserve );
+	}
+	else if ( active_class == "titan" && IsDefined( player.bz_titan_is_stationary ) && player.bz_titan_is_stationary )
+	{
+		badge_text = badge_text + " | 2X DMG";
 	}
 
 	if ( !IsDefined( player.bz_class_hud ) )
@@ -916,21 +1000,19 @@ bz_medic_is_primary_ammo_weapon( weapon_name )
 {
 	w = bz_normalize_id( weapon_name );
 	if ( w == "" || w == "none" || w == "fraggrenade" || w == "stielhandgranate" ||
-		w == "zombie_knuckles" || w == "knife" || w == "bowie_knife" || w == "syrette" )
+		w == "zombie_knuckles" || w == "knife" || w == "bowie_knife" || w == "syrette" ||
+		w == "bz_blade_boomerang" || w == "bz_portal_grenade" || w == "bz_war_club" ||
+		w == "mine_bouncing_betty" || w == "zombie_bowie_flourish" ||
+		w == "molotov" || w == "monkey_bomb" || w == "zombie_cymbal_monkey" ||
+		IsSubStr( w, "perk_bottle" ) )
 	{
 		return false;
 	}
 	return true;
 }
 
-bz_medic_grant_reserve_ammo( target_player, mag_fraction )
+bz_medic_try_grant_weapon_ammo( target_player, weap, mag_fraction )
 {
-	if ( !IsDefined( target_player ) || !IsAlive( target_player ) || bz_class_player_is_downed( target_player ) )
-	{
-		return 0;
-	}
-
-	weap = target_player GetCurrentWeapon();
 	if ( !bz_medic_is_primary_ammo_weapon( weap ) )
 	{
 		return 0;
@@ -974,9 +1056,6 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		}
 	}
 
-	// A4: Account for script-side bz_overflow_reserve when Double Ammo / Double PaP raises
-	// effective reserve above the weapon's engine WeaponMaxAmmo cap. Write to engine stock
-	// first and bank any rounds clamped by the engine into bz_overflow_reserve.
 	total_cur = cur_stock + cur_overflow;
 	if ( total_cur >= eff_max )
 	{
@@ -1013,6 +1092,43 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		target_player.bz_overflow_reserve[norm_w] = cur_overflow + to_overflow;
 	}
 	return added;
+}
+
+bz_medic_grant_reserve_ammo( target_player, mag_fraction )
+{
+	if ( !IsDefined( target_player ) || !IsAlive( target_player ) || bz_class_player_is_downed( target_player ) )
+	{
+		return 0;
+	}
+
+	cur_weap = target_player GetCurrentWeapon();
+	added = bz_medic_try_grant_weapon_ammo( target_player, cur_weap, mag_fraction );
+	if ( added > 0 )
+	{
+		return added;
+	}
+
+	// Held weapon is full or non-primary (e.g. Boomerang/item) -> spill regen into first non-full stowed primary.
+	primaries = target_player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) )
+	{
+		return 0;
+	}
+	cur_norm = bz_normalize_id( cur_weap );
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		pw = primaries[i];
+		if ( !IsDefined( pw ) || bz_normalize_id( pw ) == cur_norm )
+		{
+			continue;
+		}
+		spilled = bz_medic_try_grant_weapon_ammo( target_player, pw, mag_fraction );
+		if ( spilled > 0 )
+		{
+			return spilled;
+		}
+	}
+	return 0;
 }
 
 bz_medic_ammo_regen_tick( medic )
@@ -1147,6 +1263,7 @@ bz_titan_update_stationary_state( player, dt )
 	hspeed_sq = ( vx * vx ) + ( vy * vy );
 
 	// Standing still threshold: horizontal speed < 15 u/s while grounded
+	was_stat = ( IsDefined( player.bz_titan_is_stationary ) && player.bz_titan_is_stationary );
 	if ( player IsOnGround() && hspeed_sq < 225.0 )
 	{
 		player.bz_titan_stationary_time = player.bz_titan_stationary_time + step;
@@ -1162,6 +1279,10 @@ bz_titan_update_stationary_state( player, dt )
 		player.bz_titan_is_stationary = false;
 	}
 
+	if ( player.bz_titan_is_stationary != was_stat )
+	{
+		bz_class_update_hud( player );
+	}
 	return player.bz_titan_is_stationary;
 }
 
@@ -1415,11 +1536,13 @@ bz_sapper_on_grenade_detonate( player, origin, base_radius, base_damage )
 			{
 				falloff = 0.4;
 			}
-			hit_dmg = Int( dmg_max * falloff );
+			hit_dmg = bz_classes_apply_status_mult( z, Int( dmg_max * falloff ) );
 			if ( hit_dmg < 1 )
 			{
 				hit_dmg = 1;
 			}
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = GetTime();
 			z DoDamage( hit_dmg, origin, player );
 			res.hits = res.hits + 1;
 		}
@@ -1596,7 +1719,9 @@ bz_sapper_track_thrown_grenade( grenade )
 
 	if ( bz_state_get_class( self ) == "sapper" )
 	{
-		bz_sapper_on_grenade_detonate( self, last_origin, 256, 300 );
+		r = bz_classes_get_round_safe();
+		outer_dmg = 300 + ( ( r - 1 ) * 140 );
+		bz_sapper_on_grenade_detonate( self, last_origin, 256, outer_dmg );
 	}
 }
 
@@ -1690,6 +1815,18 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	anchor = Spawn( "script_origin", pos );
 	level.bz_class_traps[level.bz_class_traps.size] = anchor;
 
+	marker_fx = bz_classes_resolve_stock_fx( "marker" );
+	fx_ent = undefined;
+	if ( IsDefined( marker_fx ) )
+	{
+		fx_ent = SpawnFx( marker_fx, pos );
+		if ( IsDefined( fx_ent ) )
+		{
+			TriggerFx( fx_ent );
+			level.bz_class_traps[level.bz_class_traps.size] = fx_ent;
+		}
+	}
+
 	r = bz_classes_get_round_safe();
 	trap = SpawnStruct();
 	trap.owner = player;
@@ -1697,6 +1834,7 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	trap.trap_type = trap_type;
 	trap.origin = pos;
 	trap.anchor = anchor;
+	trap.fx_ent = fx_ent;
 	trap.active = true;
 	trap.detonated = false;
 
@@ -1756,11 +1894,44 @@ bz_sapper_fire_trap_tick( trap )
 		}
 		if ( Distance( trap.origin, z.origin ) <= trap.radius )
 		{
-			z DoDamage( trap.tick_damage, trap.origin, trap.owner );
+			fdmg = bz_classes_apply_status_mult( z, trap.tick_damage );
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = GetTime();
+			z DoDamage( fdmg, trap.origin, trap.owner );
 			hits = hits + 1;
 		}
 	}
+	if ( hits > 0 )
+	{
+		fire_fx = bz_classes_resolve_stock_fx( "blast" );
+		if ( IsDefined( fire_fx ) )
+		{
+			PlayFX( fire_fx, trap.origin );
+		}
+	}
 	return hits;
+}
+
+bz_sapper_cleanup_trap_visuals( trap )
+{
+	if ( !IsDefined( trap ) )
+	{
+		return;
+	}
+	if ( IsDefined( trap.fx_ent ) )
+	{
+		fx_e = trap.fx_ent;
+		trap.fx_ent = undefined;
+		bz_sapper_untrack_trap_anchor( fx_e );
+		fx_e Delete();
+	}
+	if ( IsDefined( trap.anchor ) )
+	{
+		anchor = trap.anchor;
+		trap.anchor = undefined;
+		bz_sapper_untrack_trap_anchor( anchor );
+		anchor Delete();
+	}
 }
 
 bz_sapper_untrack_trap_anchor( anchor )
@@ -1794,13 +1965,7 @@ bz_sapper_fire_trap_think()
 	}
 
 	self.active = false;
-	if ( IsDefined( self.anchor ) )
-	{
-		anchor = self.anchor;
-		self.anchor = undefined;
-		bz_sapper_untrack_trap_anchor( anchor );
-		anchor Delete();
-	}
+	bz_sapper_cleanup_trap_visuals( self );
 }
 
 bz_sapper_betty_trap_check( trap )
@@ -1841,6 +2006,21 @@ bz_sapper_betty_trap_check( trap )
 
 	trap.detonated = true;
 	trap.active = false;
+	blast_fx = bz_classes_resolve_stock_fx( "blast" );
+	if ( IsDefined( blast_fx ) )
+	{
+		PlayFX( blast_fx, trap.origin );
+	}
+	PlaySoundAtPosition( "grenade_explode_default", trap.origin );
+	Earthquake( 0.26, 0.24, trap.origin, 180 );
+	if ( IsDefined( trap.fx_ent ) )
+	{
+		fx_e = trap.fx_ent;
+		trap.fx_ent = undefined;
+		bz_sapper_untrack_trap_anchor( fx_e );
+		fx_e Delete();
+	}
+
 	for ( i = 0; i < zombies.size; i++ )
 	{
 		z = zombies[i];
@@ -1854,7 +2034,10 @@ bz_sapper_betty_trap_check( trap )
 		}
 		if ( Distance( trap.origin, z.origin ) <= trap.blast_radius )
 		{
-			z DoDamage( trap.blast_damage, trap.origin, trap.owner );
+			bdmg = bz_classes_apply_status_mult( z, trap.blast_damage );
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = GetTime();
+			z DoDamage( bdmg, trap.origin, trap.owner );
 		}
 	}
 
@@ -1878,58 +2061,7 @@ bz_sapper_betty_trap_think()
 	}
 
 	self.active = false;
-	if ( IsDefined( self.anchor ) )
-	{
-		anchor = self.anchor;
-		self.anchor = undefined;
-		bz_sapper_untrack_trap_anchor( anchor );
-		anchor Delete();
-	}
-}
-
-bz_sapper_wall_buy_watch()
-{
-	self endon( "disconnect" );
-	self endon( "bz_class_changed" );
-	level endon( "end_game" );
-
-	last_score = maps\_bz_state::bz_state_get_score_safe( self );
-	for ( ;; )
-	{
-		wait( 0.1 );
-		if ( bz_state_get_class( self ) != "sapper" )
-		{
-			return;
-		}
-
-		cur_score = maps\_bz_state::bz_state_get_score_safe( self );
-		if ( cur_score < last_score && IsDefined( self.origin ) )
-		{
-			walls = GetEntArray( "weapon_upgrade", "targetname" );
-			if ( IsDefined( walls ) )
-			{
-				for ( i = 0; i < walls.size; i++ )
-				{
-					w = walls[i];
-					if ( !IsDefined( w ) || !IsDefined( w.origin ) )
-					{
-						continue;
-					}
-					if ( Distance( self.origin, w.origin ) <= 128 )
-					{
-						wid = "wall_" + i;
-						if ( IsDefined( w.zombie_weapon_upgrade ) && w.zombie_weapon_upgrade != "" )
-						{
-							wid = w.zombie_weapon_upgrade;
-						}
-						bz_sapper_on_wall_buy( self, wid, w.origin );
-						break;
-					}
-				}
-			}
-		}
-		last_score = cur_score;
-	}
+	bz_sapper_cleanup_trap_visuals( self );
 }
 
 // ---------------------------------------------------------------------------
@@ -1975,6 +2107,7 @@ bz_daredevil_movement_tick( player )
 		if ( !player.bz_daredevil_in_air )
 		{
 			player.bz_daredevil_in_air = true;
+			player.bz_daredevil_launch_z = z;
 			player.bz_daredevil_peak_z = z;
 			player.bz_daredevil_boosted = false;
 		}
@@ -2002,13 +2135,21 @@ bz_daredevil_movement_tick( player )
 		return undefined;
 	}
 
-	// Landed after being airborne
+	// Landed after being airborne: require a real drop below launch elevation (>= min_height)
+	// OR a large vertical drop (>= 145u) so flat-ground 3x jumps (~117u) do not spam slams.
 	if ( player.bz_daredevil_in_air )
 	{
 		player.bz_daredevil_in_air = false;
 		player.bz_daredevil_boosted = false;
 		fall_height = player.bz_daredevil_peak_z - z;
-		if ( fall_height >= maps\_bz_rules::bz_get_flopper_min_height() )
+		launch_z = player.bz_daredevil_peak_z;
+		if ( IsDefined( player.bz_daredevil_launch_z ) )
+		{
+			launch_z = player.bz_daredevil_launch_z;
+		}
+		net_drop = launch_z - z;
+		min_h = maps\_bz_rules::bz_get_flopper_min_height();
+		if ( fall_height >= min_h && ( net_drop >= min_h || fall_height >= 145.0 ) )
 		{
 			return bz_daredevil_execute_slam( player, fall_height, origin );
 		}
@@ -2042,6 +2183,15 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 		pos = ( 0, 0, 0 );
 	}
 
+	slam_fx = bz_classes_resolve_stock_fx( "slam" );
+	if ( IsDefined( slam_fx ) )
+	{
+		PlayFX( slam_fx, pos );
+	}
+	PlaySoundAtPosition( "couch_slam", pos );
+	Earthquake( 0.32, 0.28, pos, 180 );
+
+	trace_origin = ( pos[0], pos[1], pos[2] + 24 );
 	player.bz_daredevil_slamming = true;
 	hits = 0;
 	zombies = bz_class_get_zombies_safe();
@@ -2058,7 +2208,15 @@ bz_daredevil_execute_slam( player, fall_height, origin )
 		}
 		if ( Distance( pos, z.origin ) <= slam_radius )
 		{
-			z DoDamage( slam_dmg, pos, player );
+			tr = BulletTrace( trace_origin, ( z.origin[0], z.origin[1], z.origin[2] + 36 ), false, z );
+			if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 0.95 )
+			{
+				continue;
+			}
+			final_slam_dmg = bz_classes_apply_status_mult( z, slam_dmg );
+			z.bz_in_damage_dispatch = true;
+			z.bz_damage_dispatch_time = GetTime();
+			z DoDamage( final_slam_dmg, pos, player );
 			hits = hits + 1;
 		}
 	}
@@ -2194,15 +2352,13 @@ bz_assassin_acquire_ghost_on_zombie( player, zombie )
 		return;
 	}
 
-	if ( !IsDefined( zombie.bz_ghost_refs ) || zombie.bz_ghost_refs <= 0 )
+	// Never strip zombie contents (doing so makes zombies bulletproof in Solo & Co-op).
+	// Apply player-side slip-through contents on the Assassin only while slipping past contact zombies.
+	if ( !IsDefined( player.bz_assassin_ghosting ) || !player.bz_assassin_ghosting )
 	{
-		old_contents = zombie SetContents( 0 );
-		zombie.bz_orig_contents = old_contents;
-		zombie.bz_ghost_refs = 1;
-	}
-	else
-	{
-		zombie.bz_ghost_refs = zombie.bz_ghost_refs + 1;
+		old_p_contents = player SetContents( 0 );
+		player.bz_orig_player_contents = old_p_contents;
+		player.bz_assassin_ghosting = true;
 	}
 
 	idx = player.bz_ghost_zombies.size;
@@ -2211,41 +2367,64 @@ bz_assassin_acquire_ghost_on_zombie( player, zombie )
 
 bz_assassin_release_ghost_on_zombie( zombie )
 {
+	// Zombies never lose their contents; kept as safe no-op helper for legacy callers.
 	if ( !IsDefined( zombie ) )
 	{
 		return;
 	}
-	if ( !IsDefined( zombie.bz_ghost_refs ) || zombie.bz_ghost_refs <= 0 )
+}
+
+bz_assassin_unwedge_player_if_overlapping( player )
+{
+	if ( !IsDefined( player ) || !IsAlive( player ) || !IsDefined( player.origin ) )
 	{
 		return;
 	}
-
-	zombie.bz_ghost_refs = zombie.bz_ghost_refs - 1;
-	if ( zombie.bz_ghost_refs <= 0 )
+	zombies = bz_class_get_zombies_safe();
+	for ( i = 0; i < zombies.size; i++ )
 	{
-		zombie.bz_ghost_refs = 0;
-		if ( IsDefined( zombie.bz_orig_contents ) )
+		z = zombies[i];
+		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || maps\_bz_hooks::bz_is_dog_entity( z ) )
 		{
-			zombie SetContents( zombie.bz_orig_contents );
-			zombie.bz_orig_contents = undefined;
+			continue;
+		}
+		hdist = Distance( ( player.origin[0], player.origin[1], 0 ), ( z.origin[0], z.origin[1], 0 ) );
+		if ( hdist < 30.0 )
+		{
+			nx = 1.0;
+			ny = 0.0;
+			if ( hdist > 0.5 )
+			{
+				nx = ( player.origin[0] - z.origin[0] ) / hdist;
+				ny = ( player.origin[1] - z.origin[1] ) / hdist;
+			}
+			push = 36.0 - hdist;
+			target = ( player.origin[0] + ( nx * push ), player.origin[1] + ( ny * push ), player.origin[2] );
+			tr = BulletTrace( ( player.origin[0], player.origin[1], player.origin[2] + 24 ), ( target[0], target[1], target[2] + 24 ), false, player );
+			if ( !IsDefined( tr ) || !IsDefined( tr["fraction"] ) || tr["fraction"] >= 0.95 )
+			{
+				player SetOrigin( target );
+			}
+			return;
 		}
 	}
 }
 
 bz_assassin_restore_all_zombies( player )
 {
-	if ( !IsDefined( player ) || !IsDefined( player.bz_ghost_zombies ) )
+	if ( !IsDefined( player ) )
 	{
 		return;
 	}
-
-	for ( i = 0; i < player.bz_ghost_zombies.size; i++ )
+	if ( IsDefined( player.bz_assassin_ghosting ) && player.bz_assassin_ghosting )
 	{
-		z = player.bz_ghost_zombies[i];
-		if ( IsDefined( z ) )
+		bz_assassin_unwedge_player_if_overlapping( player );
+		if ( IsDefined( player.bz_orig_player_contents ) )
 		{
-			bz_assassin_release_ghost_on_zombie( z );
+			player SetContents( player.bz_orig_player_contents );
+			player.bz_orig_player_contents = undefined;
 		}
+		player.bz_assassin_ghosting = false;
 	}
 	player.bz_ghost_zombies = [];
 }
@@ -2344,6 +2523,10 @@ bz_assassin_ghost_tick( player )
 		}
 	}
 
+	if ( player.bz_ghost_zombies.size == 0 )
+	{
+		bz_assassin_restore_all_zombies( player );
+	}
 	return player.bz_ghost_zombies.size;
 }
 

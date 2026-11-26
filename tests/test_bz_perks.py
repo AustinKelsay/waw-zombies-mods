@@ -528,13 +528,15 @@ class TestBzStandardPerksAndTier2Upgrades(unittest.TestCase):
             places=4,
         )
 
-        # Quick Revive II -> 0.9s revive (30% of 3.0s) + 1 extra Solo revive charge
+        # Quick Revive II -> 0.9s revive (30% of 3.0s) + 2 total Solo revive charges (1 QR I + 1 QR II)
         self._buy_perks_menu("buy_t2:quick_revive")
         self.assertAlmostEqual(
             self.gsc.call(BZ_PERKS_MOD, "bz_perks_get_revive_time", self.player, 3.0),
             0.9,
             places=4,
         )
+        self.assertEqual(self.player.get_field("bz_extra_solo_revives"), 2)
+        self.assertTrue(self.gsc.call(BZ_PERKS_MOD, "bz_perks_try_consume_solo_revive", self.player))
         self.assertEqual(self.player.get_field("bz_extra_solo_revives"), 1)
         self.assertTrue(self.gsc.call(BZ_PERKS_MOD, "bz_perks_try_consume_solo_revive", self.player))
         self.assertEqual(self.player.get_field("bz_extra_solo_revives"), 0)
@@ -1145,6 +1147,65 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         sample_powerups = b"full_ammo_powerup( drop_item )\n{\n\tplayers = get_players();\n}\n"
         patched_p = bm.inject_zombiemode_powerups_hooks(sample_powerups).decode("latin1")
         self.assertIn("maps\\_bz_hooks::bz_normalize_all_player_stocks();", patched_p)
+
+    def test_p2o_t7_lightweight_phase2_blast_shield_molotov_and_coop_speed_cola2_assist(self) -> None:
+        # 1. Lightweight Heavy compensates all 3 heavy Phase 2 weapons
+        self.assertAlmostEqual(self.gsc.call(BZ_PERKS_MOD, "bz_perks_get_weapon_move_scale", "bz_acid_sprayer"), 0.75)
+        self.assertAlmostEqual(self.gsc.call(BZ_PERKS_MOD, "bz_perks_get_weapon_move_scale", "bz_cryo_cannon"), 0.82)
+        self.assertAlmostEqual(self.gsc.call(BZ_PERKS_MOD, "bz_perks_get_weapon_move_scale", "bz_multi_crossbow"), 0.9)
+
+        # 2. Blast Shield blocks MOD_PROJECTILE self-damage AND world-attributed MOD_BURNED Molotov fire
+        self.assertEqual(self.gsc.call(BZ_PERKS_MOD, "bz_perks_map_mod_to_self_damage_type", "MOD_PROJECTILE"), "splash")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_apex:blast_shield")
+        dmg_proj = self.gsc.call_on(
+            self.p1,
+            BZ_HOOKS_MOD,
+            "bz_player_damage_override",
+            self.p1,
+            self.p1,
+            60,
+            0,
+            "MOD_PROJECTILE",
+            "panzerschrek_zombie",
+            UNDEFINED,
+            UNDEFINED,
+            "none",
+            0,
+            0,
+        )
+        self.assertEqual(dmg_proj, 0)
+        dmg_world_fire = self.gsc.call_on(
+            self.p1,
+            BZ_HOOKS_MOD,
+            "bz_player_damage_override",
+            UNDEFINED,
+            UNDEFINED,
+            40,
+            0,
+            "MOD_BURNED",
+            "molotov",
+            UNDEFINED,
+            UNDEFINED,
+            "none",
+            0,
+            0,
+        )
+        self.assertEqual(dmg_world_fire, 0)
+
+        # 3. Co-op Speed Cola II reload assist refills clip from stock without touching global reload dvars
+        p2 = PerksFakeEntity("CoopAlly", ent_num=1)
+        p2.set_field("score", 50000)
+        self.gsc.players.append(p2)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_connect", p2)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_perk:speed_cola")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_t2:speed_cola")
+        self.p1.give_weapon("zombie_thompson", make_current=True)
+        self.gsc._exec_method(self.p1, "setweaponammoclip", ["zombie_thompson", 5], 0)
+        self.p1.weapon_stock["zombie_thompson"] = 100
+        taken = self.gsc.call(BZ_PERKS_MOD, "bz_perks_try_coop_speed_cola2_assist", self.p1, "zombie_thompson")
+        self.assertGreater(taken, 0)
+        self.assertEqual(self.gsc._exec_method(self.p1, "getweaponammoclip", ["zombie_thompson"], 0), 5 + taken)
+        self.assertEqual(self.p1.weapon_stock["zombie_thompson"], 100 - taken)
 
 
 if __name__ == "__main__":
