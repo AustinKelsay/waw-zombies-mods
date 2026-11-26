@@ -1218,8 +1218,8 @@ bz_run_visual_tour()
 	}
 
 	p endon( "disconnect" );
-	// Let WaW's level intro black fade-in (1.25s starting ~3-4.5s) finish completely before capturing.
-	wait( 4.5 );
+	// Let WaW's level intro black fade-in (1.25s starting ~3-5s) and first WineD3D frame settle before capturing.
+	wait( 6.0 );
 	p.maxhealth = 99999;
 	p.health = 99999;
 	p.score = 50000;
