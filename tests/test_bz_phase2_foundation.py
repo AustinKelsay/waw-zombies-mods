@@ -505,12 +505,12 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 "bz_acid_sprayer": (
                     "bz_acid",
                     "Acid Sprayer",
-                    "20",
+                    "100",
                     "360",
                     "120",
                     "viewmodel_bz_acid_sprayer",
                     "world_bz_acid_sprayer",
-                    "0.40",
+                    "0.10",
                 ),
                 "bz_cryo_cannon": (
                     "bz_cryo",
@@ -558,14 +558,16 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 pairs = dict(self.bm.parse_weapon_file(weap_path.read_text(encoding="latin1")))
                 staged_pairs[weap_name] = pairs
                 self.assertEqual(pairs["inventoryType"], "primary")
-                self.assertEqual(pairs["weaponType"], "bullet")
+                expected_wtype = "gas" if weap_name == "bz_acid_sprayer" else "bullet"
+                self.assertEqual(pairs["weaponType"], expected_wtype)
                 self.assertEqual(pairs["ammoName"], ammo)
                 self.assertEqual(pairs["clipName"], ammo)
                 self.assertEqual(pairs["displayName"], disp)
                 self.assertTrue(disp.isascii())
                 self.assertEqual(pairs["altWeapon"], "")
-                self.assertEqual(pairs["damage"], "1")
-                self.assertEqual(pairs["minDamage"], "1")
+                expected_base_dmg = "15" if weap_name == "bz_acid_sprayer" else "1"
+                self.assertEqual(pairs["damage"], expected_base_dmg)
+                self.assertEqual(pairs["minDamage"], expected_base_dmg)
                 for loc_key, loc_val in self.bm.BZ_ELEMENT_LOC_MULTIPLIERS.items():
                     self.assertEqual(
                         pairs.get(loc_key),
@@ -601,17 +603,27 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
 
             # Weapon-specific feel, ADS, and audio overrides
             acid = staged_pairs["bz_acid_sprayer"]
-            self.assertEqual(acid["weaponClass"], "rifle")
-            self.assertEqual(acid["fireType"], "Single Shot")
+            self.assertEqual(acid["weaponType"], "gas")
+            self.assertEqual(acid["weaponClass"], "gas")
+            self.assertEqual(acid["fireType"], "Full Auto")
+            self.assertEqual(acid["flameTableFirstPerson"], "bz_acid_flame_firstperson")
+            self.assertEqual(acid["flameTableThirdPerson"], "bz_acid_flame_thirdperson")
             self.assertEqual(acid["aimDownSight"], "0")
             self.assertEqual(acid["adsFire"], "0")
             for ads_key in ("adsUpAnim", "adsDownAnim", "adsFireAnim", "adsLastShotAnim", "adsRechamberAnim"):
                 self.assertEqual(acid[ads_key], "")
-            self.assertEqual(acid["fireSound"], "weap_raygun_fire")
-            self.assertEqual(acid["fireSoundPlayer"], "weap_raygun_fire_plr")
+            self.assertEqual(acid["fireSound"], "")
+            self.assertEqual(acid["fireSoundPlayer"], "")
             self.assertEqual(acid["emptyIdleAnim"], "viewmodel_flamethrower_idle")
             self.assertEqual(acid["reloadAnim"], "viewmodel_flamethrower_reload")
             self.assertEqual(acid["reloadEmptyAnim"], "viewmodel_flamethrower_reload")
+            for ft_name in ("bz_acid_flame_firstperson", "bz_acid_flame_thirdperson"):
+                ft_path = stage_dir / "weapons" / "sp" / ft_name
+                self.assertTrue(ft_path.is_file(), f"Missing staged flametable: {ft_path}")
+                ft_text = ft_path.read_text(encoding="latin1")
+                self.assertTrue(ft_text.startswith("FLAMETABLEFILE\\"))
+                self.assertIn("\\streamFuel\\mtl_bz_acid_stream", ft_text)
+                self.assertIn("\\flameVar_streamPrimaryLightG\\0.95", ft_text)
 
             xbow = staged_pairs["bz_multi_crossbow"]
             self.assertEqual(xbow["fireType"], "Single Shot")

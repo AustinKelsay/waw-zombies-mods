@@ -391,6 +391,10 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 	}
 
 	norm_weap = bz_normalize_id( ctx.weapon );
+	if ( norm_weap == "bz_acid_sprayer" )
+	{
+		return false;
+	}
 	if ( bz_is_flamethrower_weapon( norm_weap ) )
 	{
 		if ( norm_mod == "" || norm_mod == "mod_burned" )
@@ -402,6 +406,14 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 
 	if ( norm_mod == "mod_burned" && norm_weap == "" )
 	{
+		if ( IsDefined( ctx.attacker ) && IsPlayer( ctx.attacker ) )
+		{
+			cur_w = bz_normalize_id( ctx.attacker GetCurrentWeapon() );
+			if ( cur_w == "bz_acid_sprayer" )
+			{
+				return false;
+			}
+		}
 		return true;
 	}
 

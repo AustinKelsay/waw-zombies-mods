@@ -288,24 +288,26 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "gunModel": bz_models.CUSTOM_WEAPON_VIEWMODELS["bz_acid_sprayer"],
             "worldModel": bz_models.CUSTOM_WEAPON_WORLDMODELS["bz_acid_sprayer"],
             "inventoryType": "primary",
-            "weaponType": "bullet",
-            "weaponClass": "rifle",
-            "fireType": "Single Shot",
+            "weaponType": "gas",
+            "weaponClass": "gas",
+            "fireType": "Full Auto",
+            "flameTableFirstPerson": "bz_acid_flame_firstperson",
+            "flameTableThirdPerson": "bz_acid_flame_thirdperson",
             "ammoName": "bz_acid",
             "clipName": "bz_acid",
-            "clipSize": "20",
+            "clipSize": "100",
             "maxAmmo": "360",
             "startAmmo": "120",
             "dropAmmoMin": "20",
             "dropAmmoMax": "60",
-            "fireTime": "0.40",
+            "fireTime": "0.10",
             "reloadTime": "1.2",
             "reloadEmptyTime": "1.2",
             "emptyIdleAnim": "viewmodel_flamethrower_idle",
             "reloadAnim": "viewmodel_flamethrower_reload",
             "reloadEmptyAnim": "viewmodel_flamethrower_reload",
-            "damage": "1",
-            "minDamage": "1",
+            "damage": "15",
+            "minDamage": "15",
             "explosionInnerDamage": "0",
             "explosionOuterDamage": "0",
             "explosionRadius": "0",
@@ -317,8 +319,8 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
             "adsFireAnim": "",
             "adsLastShotAnim": "",
             "adsRechamberAnim": "",
-            "fireSound": "weap_raygun_fire",
-            "fireSoundPlayer": "weap_raygun_fire_plr",
+            "fireSound": "",
+            "fireSoundPlayer": "",
         },
     ),
     (
@@ -1887,12 +1889,104 @@ def clone_zero_fx_weapon_file(
     return serialize_weapon_file(sanitized)
 
 
+ACID_FLAMETABLE_DEFAULT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("fire", "mtl_bz_acid_billow"),
+    ("smoke", "mtl_bz_acid_mist"),
+    ("heat", ""),
+    ("drips", "mtl_bz_acid_drips"),
+    ("streamFuel", "mtl_bz_acid_stream"),
+    ("streamFlames", "mtl_bz_acid_billow"),
+    ("streamFuel2", "mtl_bz_acid_stream"),
+    ("streamFlames2", "mtl_bz_acid_billow"),
+    ("flameOffLoopSound", ""),
+    ("flameIgniteSound", "weap_flamethrower_start"),
+    ("flameOnLoopSound", "weap_flamethrower_fireloop"),
+    ("flameCooldownSound", "weap_flamethrower_cooldown"),
+    ("flameVar_streamChunkGravityStart", "250"),
+    ("flameVar_streamChunkGravityEnd", "200"),
+    ("flameVar_streamChunkMaxSize", "96"),
+    ("flameVar_streamChunkStartSize", "10"),
+    ("flameVar_streamChunkEndSize", "96"),
+    ("flameVar_streamChunkSpeed", "1050"),
+    ("flameVar_streamChunkDuration", "1.45"),
+    ("flameVar_streamFuelSizeStart", "3"),
+    ("flameVar_streamFuelSizeEnd", "16"),
+    ("flameVar_streamFuelLength", "320"),
+    ("flameVar_streamFuelNumSegments", "60"),
+    ("flameVar_streamFlameSizeStart", "3"),
+    ("flameVar_streamFlameSizeEnd", "15"),
+    ("flameVar_streamFlameLength", "280"),
+    ("flameVar_streamFlameNumSegments", "60"),
+    ("flameVar_streamPrimaryLightRadius", "320"),
+    ("flameVar_streamPrimaryLightRadiusFlutter", "80"),
+    ("flameVar_streamPrimaryLightR", "0.10"),
+    ("flameVar_streamPrimaryLightG", "0.95"),
+    ("flameVar_streamPrimaryLightB", "0.15"),
+    ("flameVar_dripsGravity", "360"),
+    ("flameVar_dripsGravityEnd", "440"),
+)
+
+ACID_FLAMETABLE_OVERRIDES: dict[str, str] = {
+    "fire": "mtl_bz_acid_billow",
+    "smoke": "mtl_bz_acid_mist",
+    "heat": "",
+    "drips": "mtl_bz_acid_drips",
+    "streamFuel": "mtl_bz_acid_stream",
+    "streamFlames": "mtl_bz_acid_billow",
+    "streamFuel2": "mtl_bz_acid_stream",
+    "streamFlames2": "mtl_bz_acid_billow",
+    "flameVar_streamChunkSpeed": "1050",
+    "flameVar_streamFuelLength": "320",
+    "flameVar_streamFlameLength": "280",
+    "flameVar_streamPrimaryLightR": "0.10",
+    "flameVar_streamPrimaryLightG": "0.95",
+    "flameVar_streamPrimaryLightB": "0.15",
+    "flameVar_dripsGravity": "360",
+    "flameVar_dripsGravityEnd": "440",
+}
+
+
+def build_acid_flametable_text(stock_text: str | None, table_name: str, is_third_person: bool = False) -> str:
+    """Build a WaW FLAMETABLEFILE with toxic-green 2D effect materials & green dynamic light (0 FX)."""
+    pairs: list[tuple[str, str]] = []
+    if stock_text and stock_text.startswith("FLAMETABLEFILE\\"):
+        tokens = stock_text.strip().split("\\")[1:]
+        for i in range(0, len(tokens) - 1, 2):
+            pairs.append((tokens[i], tokens[i + 1]))
+    else:
+        pairs.append(("name", table_name))
+        pairs.extend(ACID_FLAMETABLE_DEFAULT_FIELDS)
+
+    overrides = dict(ACID_FLAMETABLE_OVERRIDES)
+    overrides["name"] = table_name
+    if is_third_person and not stock_text:
+        overrides["flameIgniteSound"] = "weap_flamethrower_start_3p"
+        overrides["flameOnLoopSound"] = "weap_flamethrower_fireloop_3p"
+        overrides["flameCooldownSound"] = "weap_flamethrower_cooldown_3p"
+
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for k, v in pairs:
+        if k in overrides:
+            out.append((k, overrides[k]))
+        else:
+            out.append((k, v))
+        seen.add(k)
+    for k, v in overrides.items():
+        if k not in seen:
+            out.append((k, v))
+    flat = ["FLAMETABLEFILE"]
+    for k, v in out:
+        flat.extend((k, v))
+    return "\\".join(flat)
+
+
 def stage_bz_element_weapons(
     tools_root: Path,
     stage_dir: Path,
     allowed_fx_set: set[str] | frozenset[str] | None = None,
 ) -> list[str]:
-    """Generate and stage the 4 zero-FX cloned Phase 2 primary weapons under stage_dir/weapons/sp/.
+    """Generate and stage the 4 zero-FX cloned Phase 2 primary weapons (plus Acid flametables) under stage_dir/weapons/sp/.
 
     Returns the relative paths (e.g. `weapons/sp/bz_acid_sprayer`) staged. Returns an empty list
     if stock weapon templates are not present under `tools_root/raw/weapons/sp/`.
@@ -1905,6 +1999,18 @@ def stage_bz_element_weapons(
     xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
 
     out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Stage custom toxic-green FLAMETABLEFILEs for bz_acid_sprayer (0 added FX slots — ADR-0004).
+    for ft_name, stock_ft, is_3p in (
+        ("bz_acid_flame_firstperson", "quinn_flame_firstperson", False),
+        ("bz_acid_flame_thirdperson", "quinn_flame_thirdperson", True),
+    ):
+        stock_ft_path = raw_weapons_dir / stock_ft
+        stock_ft_text = stock_ft_path.read_text(encoding="latin1") if stock_ft_path.is_file() else None
+        ft_text = build_acid_flametable_text(stock_ft_text, ft_name, is_third_person=is_3p)
+        (out_dir / ft_name).write_text(ft_text, encoding="latin1")
+
     staged_relpaths: list[str] = []
     for weap_name, template_candidates, overrides in BZ_ELEMENT_WEAPON_SPECS:
         template_path: Path | None = None
@@ -1925,7 +2031,6 @@ def stage_bz_element_weapons(
             allowed_fx_set=allowed_fx_set,
             xanim_case_map=xanim_case_map,
         )
-        out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / weap_name
         out_path.write_text(cloned_text, encoding="latin1")
         staged_relpaths.append(f"weapons/sp/{weap_name}")
@@ -1963,7 +2068,7 @@ def _expected_custom_image_stems() -> tuple[list[str], list[str]]:
     spec_stems: list[str] = []
     for spec in bz_models.MATERIAL_SPECS:
         stem = spec.name.removeprefix("mtl_")
-        if spec.material_type == "model unlit":
+        if spec.material_type in ("model unlit", "effect"):
             direct_images.append(f"{stem}_c")
         else:
             direct_images.append(f"{stem}_c")
@@ -2376,6 +2481,7 @@ def generate_staged_mod_csv(
     staged_gsc_relpaths: list[str],
     staged_weapon_relpaths: list[str] | None = None,
     extra_xmodels: list[str] | None = None,
+    extra_materials: list[str] | None = None,
 ) -> str:
     """Ensure mod.csv includes all staged _bz_*.gsc, BZ-patched stock scripts, cloned bz_* weapons, and compat xmodels."""
     newline = "\r\n" if "\r\n" in base_csv_text else "\n"
@@ -2420,6 +2526,12 @@ def generate_staged_mod_csv(
 
     for xmodel in sorted(extra_xmodels or []):
         entry = f"xmodel,{xmodel}"
+        if entry.lower() not in existing_lines:
+            existing_lines.add(entry.lower())
+            additions.append(entry)
+
+    for mat in sorted(extra_materials or []):
+        entry = f"material,{mat}"
         if entry.lower() not in existing_lines:
             existing_lines.add(entry.lower())
             additions.append(entry)
@@ -2713,14 +2825,22 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         )
         if spawner_stock is not None and powerups_mod is not None and b"maps\\_zombiemode_powerups::" in spawner_stock:
             spawner_mod = zombiemode_spawner_module_for_map(map_name)
-            spawner_patched = _rewire_stock_module_refs(
+            spawner_text = _rewire_stock_module_refs(
                 spawner_stock.decode("latin1"),
                 rewire_weapons_module=weapons_mod,
                 rewire_perks_module=perks_mod,
                 rewire_dogs_module=dogs_mod,
                 rewire_powerups_module=powerups_mod,
                 rewire_spawner_module=spawner_mod,
-            ).encode("latin1")
+            )
+            # Prevent stock orange flame ignition when sprayed by bz_acid_sprayer (ADR-0004).
+            spawner_text = re.sub(
+                r"(zombie_flame_damage\s*\(\s*mod\s*,\s*player\s*\)\s*\{)",
+                r'\1\n\tif ( maps\\_bz_hooks::bz_elements_enabled() && IsDefined( player ) && IsPlayer( player ) && tolower( "" + player GetCurrentWeapon() ) == "bz_acid_sprayer" )\n\t{\n\t\treturn false;\n\t}',
+                spawner_text,
+                count=1,
+            )
+            spawner_patched = spawner_text.encode("latin1")
             spawner_dst = stage_dir / "maps" / f"{spawner_mod}.gsc"
             spawner_dst.parent.mkdir(parents=True, exist_ok=True)
             spawner_dst.write_bytes(spawner_patched)
@@ -2862,11 +2982,18 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             for xm in (*DER_RIESE_COMPAT_XMODELS, *bz_models.ALL_CUSTOM_XMODELS)
             if (raw_xmodel_dir / xm).is_file()
         ]
+        raw_mat_dir = tools_root / "raw" / "materials"
+        effect_materials = [
+            mat
+            for mat in bz_models.EFFECT_MATERIALS
+            if (raw_mat_dir / mat).is_file()
+        ]
         updated_csv = generate_staged_mod_csv(
             staged_mod_csv.read_text(encoding="latin1"),
             staged_gscs,
             staged_weapon_relpaths=staged_weapons,
             extra_xmodels=compat_xmodels,
+            extra_materials=effect_materials,
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
 

@@ -73,6 +73,17 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_acid_metal",
     "mtl_bz_acid_hazard",
     "mtl_bz_acid_glow",
+    "mtl_bz_acid_stream",
+    "mtl_bz_acid_billow",
+    "mtl_bz_acid_drips",
+    "mtl_bz_acid_mist",
+)
+
+EFFECT_MATERIALS: tuple[str, ...] = (
+    "mtl_bz_acid_stream",
+    "mtl_bz_acid_billow",
+    "mtl_bz_acid_drips",
+    "mtl_bz_acid_mist",
 )
 
 
@@ -1010,13 +1021,16 @@ def _height_to_normal_tga(path: Path, size: int, heightmap: list[float], strengt
 @dataclass(frozen=True)
 class MaterialSpec:
     name: str
-    material_type: str  # "model phong" or "model unlit"
+    material_type: str  # "model phong", "model unlit", or "effect"
     surface_type: str
     style: str
     base_rgb: tuple[int, int, int]
     accent_rgb: tuple[int, int, int]
     spec_rgb: tuple[int, int, int] = (140, 140, 140)
     gloss: int = 160
+    blend_func: str = "Replace*"
+    z_feather: bool = False
+    fogable: bool = True
 
 
 MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
@@ -1040,6 +1054,11 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_acid_metal", "model phong", "metal", "corroded_metal", (62, 68, 60), (96, 108, 86), (44, 48, 42), 145),
     MaterialSpec("mtl_bz_acid_hazard", "model phong", "metal", "hazard_stripes", (236, 194, 22), (26, 28, 26), (42, 40, 26), 130),
     MaterialSpec("mtl_bz_acid_glow", "model unlit", "glass", "acid_glow", (42, 242, 68), (182, 255, 116)),
+    # Acid Sprayer Gas Stream (2D FLAMETABLEFILE effect materials, 0 added FX slots — ADR-0004)
+    MaterialSpec("mtl_bz_acid_stream", "effect", "<none>", "acid_stream", (32, 235, 58), (190, 255, 120), blend_func="Add", z_feather=False, fogable=False),
+    MaterialSpec("mtl_bz_acid_billow", "effect", "<none>", "acid_billow", (28, 220, 52), (175, 255, 102), blend_func="Add", z_feather=True, fogable=False),
+    MaterialSpec("mtl_bz_acid_drips", "effect", "<none>", "acid_drips", (46, 248, 66), (215, 255, 138), blend_func="Add", z_feather=True, fogable=False),
+    MaterialSpec("mtl_bz_acid_mist", "effect", "<none>", "acid_mist", (72, 175, 62), (145, 220, 96), blend_func="Blend", z_feather=True, fogable=True),
 )
 
 
@@ -1141,6 +1160,49 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
                 b1 = math.sin(u * math.tau * 6.0) * math.sin(v * math.tau * 6.0)
                 b2 = math.cos((u * 9.0 - v * 7.0) * math.tau)
                 mix = clamp01(0.32 + max(0.0, b1) * 0.55 + max(0.0, b2) * 0.30)
+            elif spec.style in ("acid_stream", "acid_billow", "acid_drips", "acid_mist"):
+                # Alpha-feathered 2D chemical stream/cloud/droplet sprites for FLAMETABLEFILE
+                du = (u - 0.5) * 2.0
+                dv = (v - 0.5) * 2.0
+                r_dist = math.sqrt(du * du + dv * dv)
+                if spec.style == "acid_stream":
+                    # Continuous glowing liquid-jet ribbon running along U with soft cross-section V falloff
+                    core = clamp01(1.0 - abs(dv) * 1.15)
+                    streak = 0.65 + 0.35 * math.sin(u * math.tau * 5.0 + dv * 3.0)
+                    alpha_f = (core * core) * clamp01(streak + n_coarse * 0.25)
+                    mix = clamp01(core * 0.85)
+                elif spec.style == "acid_billow":
+                    # Billowing glowing acid vapor cloud with circular feather falloff
+                    radial = clamp01(1.0 - r_dist)
+                    swirl = 0.6 + 0.4 * math.sin((u * 3.0 + v * 2.0) * math.tau + n_coarse * 2.5)
+                    alpha_f = (radial * radial) * swirl
+                    mix = clamp01(radial * 0.90)
+                elif spec.style == "acid_drips":
+                    # Clustered bright sizzling acid droplets inside circular feather
+                    radial = clamp01(1.0 - r_dist * 1.05)
+                    drop = max(0.0, math.sin(u * math.tau * 4.0) * math.sin(v * math.tau * 4.0))
+                    alpha_f = clamp01((radial * radial) * (0.45 + 0.75 * drop))
+                    mix = clamp01(0.45 + 0.55 * drop)
+                else:
+                    # Soft lingering toxic yellow-green mist
+                    radial = clamp01(1.0 - r_dist)
+                    alpha_f = (radial * radial) * (0.42 + 0.22 * math.cos((u - v) * math.tau * 2.0))
+                    mix = clamp01(radial * 0.65)
+                r_c = clamp255(br * (1.0 - mix) + ar * mix)
+                g_c = clamp255(bg * (1.0 - mix) + ag * mix)
+                b_c = clamp255(bb * (1.0 - mix) + ab * mix)
+                a_c = clamp255(alpha_f * 255.0)
+                # Premultiply additive sprites so edges fade smoothly to zero
+                if spec.blend_func == "Add":
+                    r_c = clamp255(r_c * alpha_f)
+                    g_c = clamp255(g_c * alpha_f)
+                    b_c = clamp255(b_c * alpha_f)
+                off = (y * size + x) * 4
+                color_buf[off + 0] = r_c
+                color_buf[off + 1] = g_c
+                color_buf[off + 2] = b_c
+                color_buf[off + 3] = a_c
+                continue
 
             r = clamp255(br * (1.0 - mix) + ar * mix + n_fine * 10.0)
             g = clamp255(bg * (1.0 - mix) + ag * mix + n_fine * 10.0)
@@ -1195,11 +1257,39 @@ def build_gdt_text(
     """Build a valid WaW source_data/*.gdt manifest for converter.exe."""
     blocks: list[str] = ["{"]
     for mat_name, (spec, paths) in material_paths.items():
+        if spec.material_type == "effect":
+            lines = [
+                f'\t"{mat_name}" ( "material.gdf" )',
+                "\t{",
+                '\t\t"alphaTest" "Always*"',
+                f'\t\t"blendFunc" "{spec.blend_func}"',
+                f'\t\t"colorMap" "{paths["colorMap"]}"',
+                '\t\t"colorTint" "1.000000 1.000000 1.000000 1.000000"',
+                '\t\t"cullFace" "None*"',
+                '\t\t"depthTest" "LessEqual*"',
+                '\t\t"depthWrite" "Off*"',
+                '\t\t"filterColor" "mip standard (2x bilinear)*"',
+                f'\t\t"fogable" "{"1" if spec.fogable else "0"}"',
+                '\t\t"materialType" "effect"',
+                '\t\t"nopicmipColor" "0"',
+                '\t\t"polygonOffset" "None*"',
+                '\t\t"sort" "Effect - Auto Sort*"',
+                f'\t\t"surfaceType" "{spec.surface_type}"',
+                '\t\t"template" "material.template"',
+                '\t\t"tileColor" "no tile"',
+                '\t\t"usage" "<not in editor>"',
+                f'\t\t"zFeather" "{"1" if spec.z_feather else "0"}"',
+                '\t\t"zFeatherDepth" "40"',
+                "\t}",
+            ]
+            blocks.append("\n".join(lines))
+            continue
+
         lines = [
             f'\t"{mat_name}" ( "material.gdf" )',
             "\t{",
             '\t\t"alphaTest" "Always*"',
-            '\t\t"blendFunc" "Replace*"',
+            f'\t\t"blendFunc" "{spec.blend_func}"',
             f'\t\t"colorMap" "{paths["colorMap"]}"',
             '\t\t"colorTint" "1.000000 1.000000 1.000000 1.000000"',
             '\t\t"cullFace" "Back*"',
