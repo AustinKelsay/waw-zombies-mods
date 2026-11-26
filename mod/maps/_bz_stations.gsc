@@ -1540,13 +1540,21 @@ bz_stations_sync_player_ui( player, feedback )
 		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_pap_war_club", "NEED " + pap_wc_cost );
 	}
 
-	if ( !elements_on )
+	bowie_buy_cost = bz_get_special_gear_price( "equip_bowie" );
+	if ( !pap_on && !elements_on )
 	{
 		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "DISABLED" );
 	}
 	else if ( !owns_bowie )
 	{
-		bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "REQ BOWIE" );
+		if ( score >= bowie_buy_cost )
+		{
+			bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "BUY " + bowie_buy_cost );
+		}
+		else
+		{
+			bz_stations_set_client_dvar_cached( player, "ui_bz_gear_equip_bowie", "NEED " + bowie_buy_cost );
+		}
 	}
 	else if ( melee_slot == "bowie" )
 	{
@@ -2038,6 +2046,10 @@ bz_stations_on_menu_response( player, menu, response )
 	{
 		category = "special_gear";
 		gate = "elements";
+		if ( item_id == "equip_bowie" && maps\_bz_hooks::bz_is_gate_open( "pap" ) )
+		{
+			gate = "pap";
+		}
 	}
 	else
 	{
@@ -2132,8 +2144,11 @@ bz_stations_on_menu_response( player, menu, response )
 			}
 			else if ( item_id == "equip_bowie" )
 			{
+				SetDvar( "perk_altMeleeDamage", 1000 );
 				player SetPerk( "specialty_altmelee" );
 				player.has_altmelee = true;
+				player.bz_has_bowie = true;
+				player.bz_owns_bowie = true;
 			}
 		}
 	}

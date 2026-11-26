@@ -698,7 +698,16 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 	{
 		if ( !bz_state_owns_bowie( player ) )
 		{
-			return bz_make_purchase_result( "missing_prereq", id, 0, score );
+			cost = maps\_bz_rules::bz_get_special_gear_price( id );
+			if ( score < cost )
+			{
+				return bz_make_purchase_result( "insufficient_points", id, cost, score );
+			}
+			player.score = score - cost;
+			player.bz_owns_bowie = true;
+			player.bz_has_bowie = true;
+			player.bz_melee_slot = "bowie";
+			return bz_make_purchase_result( "ok", id, cost, player.score );
 		}
 		if ( prev_slot == "bowie" )
 		{

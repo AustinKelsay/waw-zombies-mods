@@ -2388,7 +2388,12 @@ bz_special_on_actor_damage( zombie, ctx )
 	}
 
 	has_pap_wc = maps\_bz_state::bz_state_has_pap_war_club( attacker );
-	target_dmg = maps\_bz_rules::bz_calc_war_club_damage( base_dmg, zhp, has_pap_wc );
+	effective_zhp = zhp;
+	if ( IsDefined( zombie ) && IsDefined( zombie.bz_in_post_hit_dispatch ) && zombie.bz_in_post_hit_dispatch && zhp > 0 )
+	{
+		effective_zhp = zhp + base_dmg;
+	}
+	target_dmg = maps\_bz_rules::bz_calc_war_club_damage( base_dmg, effective_zhp, has_pap_wc );
 	bonus = target_dmg - base_dmg;
 	if ( bonus > 0 )
 	{

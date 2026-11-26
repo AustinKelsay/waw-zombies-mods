@@ -660,7 +660,7 @@
 			decoration
 		}
 
-		// Equip Bowie Knife (Free Swap)
+		// Bowie Knife (3000 / Free Swap once owned)
 		itemDef
 		{
 			name			"btn_gear_equip_bowie"
@@ -671,7 +671,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.40
-			text			"Equip Bowie Knife (Free)"
+			text			"Bowie Knife (3000 / Swap)"
 			textfont		UI_FONT_NORMAL
 			textscale		0.24
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -692,7 +692,7 @@
 			name			"desc_gear_equip_bowie"
 			type			ITEM_TYPE_TEXT
 			rect			48 338 175 16
-			text			"Free melee-slot swap when Bowie is owned."
+			text			"1000-dmg Bowie; free swap once owned."
 			textfont		UI_FONT_NORMAL
 			textscale		0.19
 			textalign		ITEM_ALIGN_LEFT

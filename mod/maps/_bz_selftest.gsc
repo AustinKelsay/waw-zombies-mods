@@ -382,10 +382,16 @@ bz_run_p1_selftest()
 		bz_selftest_check( st, bz_is_double_pap_safe( p, cur_w ), "pap_double" );
 	}
 
-	p SetPerk( "specialty_altmelee" );
-	p.has_altmelee = true;
+	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:equip_bowie" );
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_bowie" );
-	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_bowie", "" ), "pap_bowie" );
+	bowie_dummy = SpawnStruct();
+	bowie_dummy.health = 2500;
+	bowie_dummy.maxhealth = 3500;
+	bowie_dummy.isdog = false;
+	bowie_dummy.is_boss = false;
+	bowie_final = maps\_bz_hooks::bz_actor_damage_dispatch( bowie_dummy, p, p, 1000, 0, "MOD_MELEE", "bowie_knife", p.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+	bowie_extra = Int( bowie_final ) - 1000;
+	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_bowie", "" ) && p HasPerk( "specialty_altmelee" ) && bowie_extra >= 3500, "pap_bowie" );
 
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_cluster" );
 	cluster_res = bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );

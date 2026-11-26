@@ -1080,10 +1080,14 @@ class TestPhase2PlayerStateAndTransitions(unittest.TestCase):
         self.assertFalse(no_club.ok)
         self.assertEqual(no_club.status, "missing_prereq")
 
-        # Equip Bowie fails when player does not own Bowie
-        no_bowie = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "equip_bowie", False)
-        self.assertFalse(no_bowie.ok)
-        self.assertEqual(no_bowie.status, "missing_prereq")
+        # Buying Bowie Knife when unowned succeeds for 3000 pts (cross-map Arsenal support)
+        # Reject cleanly if player has insufficient points first
+        self.player.set_field("score", 2999)
+        poor_bowie = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "equip_bowie", False)
+        self.assertFalse(poor_bowie.ok)
+        self.assertEqual(poor_bowie.status, "insufficient_points")
+        self.assertEqual(poor_bowie.cost, 3000)
+        self.player.set_field("score", 40000)
 
         # Acquire War Club (5000 pts) -> equips war_club
         buy_wc = self.gsc.call(STATE_MOD, "bz_try_buy_special_gear", self.player, "war_club", False)

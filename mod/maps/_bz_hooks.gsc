@@ -432,6 +432,8 @@ bz_init()
 	level.bz_initialized = true;
 	level.bz_end_game_notified = false;
 	SetDvar( "bz_build_id", maps\_bz_version::bz_get_build_id() );
+	// Ensure Bowie Knife deals canonical 1000 base damage across all 4 Stock Maps (not only Der Riese).
+	SetDvar( "perk_altMeleeDamage", 1000 );
 
 	ensure_bz_dvars();
 	ensure_hook_registry();
@@ -1105,8 +1107,15 @@ bz_handle_global_actor_damage( prev_cb, mod, hit_location, hit_origin, player, i
 	if ( IsDefined( self ) && IsDefined( self.bz_in_damage_dispatch ) && self.bz_in_damage_dispatch )
 	{
 		is_fresh = !IsDefined( self.bz_damage_dispatch_time ) || ( GetTime() - self.bz_damage_dispatch_time ) <= 100;
-		is_scripted_mod = !IsDefined( mod ) || tolower( "" + mod ) == "mod_unknown";
+		norm_re_mod = "";
+		if ( IsDefined( mod ) )
+		{
+			norm_re_mod = tolower( "" + mod );
+		}
+		is_fallback_echo = IsDefined( self.bz_in_damage_dispatch_fallback ) && self.bz_in_damage_dispatch_fallback && norm_re_mod == "mod_rifle_bullet";
+		is_scripted_mod = ( norm_re_mod == "" || norm_re_mod == "mod_unknown" || is_fallback_echo );
 		self.bz_in_damage_dispatch = false;
+		self.bz_in_damage_dispatch_fallback = false;
 		if ( is_fresh && is_scripted_mod )
 		{
 			// S7: Match stock _zombiemode_powerups::check_for_instakill using zombie_insta_kill
@@ -1196,13 +1205,41 @@ bz_handle_global_actor_damage( prev_cb, mod, hit_location, hit_origin, player, i
 		origin = ( 0, 0, 0 );
 	}
 
+	if ( IsDefined( mod ) && tolower( "" + mod ) == "mod_melee" )
+	{
+		if ( player HasPerk( "specialty_altmelee" ) || ( IsDefined( player.has_altmelee ) && player.has_altmelee ) )
+		{
+			maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+		}
+	}
+
+	pre_dispatch_hp = 0;
+	if ( IsDefined( self.health ) && Int( self.health ) > 0 )
+	{
+		pre_dispatch_hp = Int( self.health );
+	}
+
+	self.bz_in_post_hit_dispatch = true;
 	final_dmg = bz_actor_damage_dispatch( self, player, player, base_dmg, 0, mod, weap, origin, ( 0, 0, 0 ), hit_location, 0 );
+	self.bz_in_post_hit_dispatch = false;
 	extra = Int( final_dmg ) - Int( base_dmg );
 	if ( extra > 0 && IsDefined( self ) && IsAlive( self ) )
 	{
 		self.bz_in_damage_dispatch = true;
+		self.bz_in_damage_dispatch_fallback = false;
 		self.bz_damage_dispatch_time = GetTime();
 		self DoDamage( extra, origin, player );
+
+		// If a lethal follow-up (e.g. PaP Bowie instant_kill) was scaled down or zeroed
+		// by a held weapon's locNone multiplier (such as Flamethrower/Wunderwaffe),
+		// finish with WaW's stock riflebullet lethal bypass.
+		if ( pre_dispatch_hp > 0 && extra >= pre_dispatch_hp && IsDefined( self ) && IsAlive( self ) )
+		{
+			self.bz_in_damage_dispatch = true;
+			self.bz_in_damage_dispatch_fallback = true;
+			self.bz_damage_dispatch_time = GetTime();
+			self DoDamage( Int( self.health ) + 1000, origin, player, undefined, "riflebullet" );
+		}
 	}
 }
 
@@ -1245,15 +1282,20 @@ bz_actor_damage_dispatch( zombie, eInflictor, eAttacker, iDamage, iDFlags, sMean
 
 	if ( IsDefined( ctx.instant_kill ) && ctx.instant_kill )
 	{
+		base_floor = 0;
+		if ( IsDefined( iDamage ) && Int( iDamage ) > 0 )
+		{
+			base_floor = Int( iDamage );
+		}
 		if ( IsDefined( zombie ) && IsDefined( zombie.health ) && Int( zombie.health ) > 0 )
 		{
-			return Int( zombie.health ) + 1000;
+			return base_floor + Int( zombie.health ) + 1000;
 		}
 		if ( IsDefined( zombie ) && IsDefined( zombie.maxhealth ) && Int( zombie.maxhealth ) > 0 )
 		{
-			return Int( zombie.maxhealth ) + 1000;
+			return base_floor + Int( zombie.maxhealth ) + 1000;
 		}
-		return 999999;
+		return base_floor + 999999;
 	}
 
 	final_dmg = Int( ( ctx.damage * ctx.damage_mult ) + ctx.bonus_damage );

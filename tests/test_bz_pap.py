@@ -721,6 +721,62 @@ class TestBzPapMeleeUpgrades(unittest.TestCase):
         )
         self.assertGreaterEqual(post_down_dmg, 500000)
 
+    def test_pap_bowie_post_hit_global_wrapper_kills_with_high_base_dmg_and_locnone_fallback(self) -> None:
+        _dvars, gsc, player = _setup_pap_env(map_name="nazi_zombie_prototype")
+        # Cross-map Arsenal Bowie purchase (3000 pts) on Nacht der Untoten + PaP Bowie (5000 pts)
+        self.assertTrue(
+            gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_gear:equip_bowie")
+        )
+        self.assertTrue(player.has_perk("specialty_altmelee"))
+        self.assertEqual(_dvars.get_int("perk_altMeleeDamage"), 1000)
+        self.assertTrue(
+            gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_pap:pap_bowie")
+        )
+
+        # Case 1: Round 18 zombie with 2500 HP remaining after 1000-dmg Bowie melee hit (damagetaken=1000)
+        z1 = PapFakeEntity("ZHighHP1", ent_num=30, is_player=False)
+        z1.set_field("health", 2500)
+        z1.set_field("maxhealth", 3500)
+        z1.set_field("damagetaken", 1000)
+        z1.set_field("damageweapon", "thompson")
+        gsc.call_on(z1, BZ_HOOKS_MOD, "bz_global_damage_wrapper", "MOD_MELEE", "torso_upper", GscArray([0, 0, 0]), player)
+        self.assertEqual(len(z1.damage_events), 1)
+        self.assertGreaterEqual(z1.damage_events[0]["damage"], 3500)
+        self.assertLessEqual(z1.get_field("health"), 0)
+
+        # Case 2: Hitloc multiplier > 1.0 (damagetaken=1500) must STILL deal >= zombie.health + 1000 extra
+        z2 = PapFakeEntity("ZHighHP2", ent_num=31, is_player=False)
+        z2.set_field("health", 2500)
+        z2.set_field("maxhealth", 4000)
+        z2.set_field("damagetaken", 1500)
+        z2.set_field("damageweapon", "bowie_knife")
+        gsc.call_on(z2, BZ_HOOKS_MOD, "bz_global_damage_wrapper", "MOD_MELEE", "head", GscArray([0, 0, 0]), player)
+        self.assertEqual(len(z2.damage_events), 1)
+        self.assertGreaterEqual(z2.damage_events[0]["damage"], 3500)
+        self.assertLessEqual(z2.get_field("health"), 0)
+
+    def test_pap_bowie_first_swing_works_after_wall_buy_over_war_club(self) -> None:
+        _dvars, gsc, player = _setup_pap_env(map_name="nazi_zombie_factory")
+        # Own Bowie & PaP Bowie, then switch to War Club (unsets specialty_altmelee)
+        player.give_perk("specialty_altmelee")
+        player.set_field("has_altmelee", True)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", "buy_pap:pap_bowie")
+        player.set_field("bz_melee_slot", "war_club")
+        player.clear_perks()
+        player.set_field("has_altmelee", False)
+
+        # Simulate buying Bowie off the Der Riese wall while War Club was equipped
+        player.give_perk("specialty_altmelee")
+        player.set_field("has_altmelee", True)
+        z = PapFakeEntity("ZWallBowie", ent_num=32, is_player=False)
+        z.set_field("health", 4000)
+        z.set_field("maxhealth", 5000)
+        z.set_field("damagetaken", 1000)
+        gsc.call_on(z, BZ_HOOKS_MOD, "bz_global_damage_wrapper", "MOD_MELEE", "torso_upper", GscArray([0, 0, 0]), player)
+        self.assertEqual(player.get_field("bz_melee_slot"), "bowie")
+        self.assertGreaterEqual(z.damage_events[0]["damage"], 5000)
+        self.assertLessEqual(z.get_field("health"), 0)
+
 
 class TestBzPapClusterGrenade(unittest.TestCase):
     """Seam 4: PaP Cluster Grenade round-scaled primary + mini-clusters, Sapper & Blast Shield stacking."""
