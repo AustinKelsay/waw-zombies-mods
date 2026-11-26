@@ -377,6 +377,149 @@ bz_get_element_base_reserve( weapon_name )
 	return 0;
 }
 
+// Canonical 1x base reserve stock for all 72 build-staged 3x maxAmmo stock primary weapons
+// across Nacht, Verruckt, Shi No Numa, and Der Riese (ADR-0005).
+bz_get_staged_stock_base_reserve( weapon_name )
+{
+	w = bz_normalize_id( weapon_name );
+	if ( w == "zombie_thompson" || w == "thompson" || w == "ray_gun_upgraded" )
+	{
+		return 200;
+	}
+	if ( w == "zombie_thompson_upgraded" )
+	{
+		return 250;
+	}
+	if ( w == "zombie_mp40" || w == "zombie_mp40_upgraded" || w == "mp40" || w == "zombie_fg42" || w == "fg42_bipod" )
+	{
+		return 192;
+	}
+	if ( w == "zombie_fg42_upgraded" )
+	{
+		return 400;
+	}
+	if ( w == "zombie_stg44" || w == "stg44" || w == "zombie_bar_upgraded" )
+	{
+		return 180;
+	}
+	if ( w == "zombie_stg44_upgraded" || w == "m2_flamethrower_zombie" || w == "m2_flamethrower_zombie_upgraded" )
+	{
+		return 300;
+	}
+	if ( w == "zombie_colt" || w == "colt" || w == "walther" || w == "zombie_sw_357" || w == "zombie_sw_357_upgraded" || w == "sw_357" )
+	{
+		return 80;
+	}
+	if ( w == "zombie_colt_upgraded" )
+	{
+		return 40;
+	}
+	if ( w == "zombie_ppsh" || w == "ppsh" )
+	{
+		return 355;
+	}
+	if ( w == "zombie_ppsh_upgraded" )
+	{
+		return 700;
+	}
+	if ( w == "zombie_30cal" || w == "30cal_bipod" || w == "zombie_mg42" || w == "mg42_bipod" )
+	{
+		return 500;
+	}
+	if ( w == "zombie_30cal_upgraded" || w == "zombie_mg42_upgraded" )
+	{
+		return 750;
+	}
+	if ( w == "zombie_bar" || w == "bar" || w == "bar_bipod" )
+	{
+		return 140;
+	}
+	if ( w == "zombie_gewehr43" || w == "gewehr43" || w == "zombie_m1carbine" || w == "m1carbine" )
+	{
+		return 120;
+	}
+	if ( w == "zombie_gewehr43_upgraded" )
+	{
+		return 170;
+	}
+	if ( w == "zombie_m1carbine_upgraded" || w == "zombie_m1garand_upgraded" || w == "m1garand_gl_zombie_upgraded" )
+	{
+		return 150;
+	}
+	if ( w == "zombie_m1garand" || w == "m1garand" || w == "m1garand_gl" || w == "m1garand_gl_zombie" )
+	{
+		return 128;
+	}
+	if ( w == "zombie_kar98k" || w == "kar98k" || w == "kar98k_scoped_zombie" || w == "springfield" || w == "zombie_type99_rifle" || w == "type99_rifle_scoped_zombie" )
+	{
+		return 50;
+	}
+	if ( w == "zombie_kar98k_upgraded" || w == "zombie_type99_rifle_upgraded" || w == "zombie_shotgun" || w == "zombie_shotgun_upgraded" || w == "shotgun" || w == "zombie_doublebarrel" || w == "zombie_doublebarrel_upgraded" || w == "zombie_doublebarrel_sawed" || w == "doublebarrel" || w == "doublebarrel_sawed_grip" || w == "ptrs41_zombie" || w == "ptrs41_zombie_upgraded" )
+	{
+		return 60;
+	}
+	if ( w == "zombie_type100_smg" || w == "ray_gun" )
+	{
+		return 160;
+	}
+	if ( w == "zombie_type100_smg_upgraded" )
+	{
+		return 220;
+	}
+	if ( w == "tesla_gun" )
+	{
+		return 15;
+	}
+	if ( w == "tesla_gun_upgraded" || w == "panzerschrek_zombie_upgraded" )
+	{
+		return 30;
+	}
+	if ( w == "panzerschrek_zombie" )
+	{
+		return 20;
+	}
+	if ( w == "panzerschrek" )
+	{
+		return 4;
+	}
+	return 0;
+}
+
+// Resolves canonical 1x reserve stock cleanly for both 3x-staged mod.ff weapons
+// (where engine_max == 3 * base_1x) and un-staged 1x weapons / offline test mocks.
+bz_get_canonical_base_reserve( weapon_name, engine_max )
+{
+	w = bz_normalize_id( weapon_name );
+	if ( w == "" || w == "none" || bz_is_infinite_single_item_weapon( w ) )
+	{
+		return 0;
+	}
+
+	elem_base = bz_get_element_base_reserve( w );
+	if ( elem_base > 0 )
+	{
+		return elem_base;
+	}
+
+	emax = 0;
+	if ( IsDefined( engine_max ) && Int( engine_max ) > 0 )
+	{
+		emax = Int( engine_max );
+	}
+
+	staged_base = bz_get_staged_stock_base_reserve( w );
+	if ( staged_base > 0 )
+	{
+		if ( emax <= 0 || emax >= ( staged_base * 3 ) )
+		{
+			return staged_base;
+		}
+		return emax;
+	}
+
+	return emax;
+}
+
 bz_get_bowie_knife_price()
 {
 	return 3000;

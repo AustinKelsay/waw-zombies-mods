@@ -1056,6 +1056,96 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
                 f"Forbidden endon() inside synchronous caller {fn_name}()",
             )
 
+    def test_staged_3x_stock_weapons_write_native_2x_3x_hud_counts_and_strictly_clamp_classic_mode_to_1x(
+        self,
+    ) -> None:
+        import tempfile
+        from scripts import build_mod as bm
+
+        # 1. Every entry in build_mod.STOCK_3X_AMMO_WEAPONS must match _bz_rules.gsc 1x baseline table
+        for weap_name, base_1x in bm.STOCK_3X_AMMO_WEAPONS.items():
+            self.assertEqual(
+                int(self.gsc.call(r"maps\_bz_rules", "bz_get_staged_stock_base_reserve", weap_name)),
+                base_1x,
+                f"Mismatch in _bz_rules.gsc for staged stock weapon {weap_name}",
+            )
+
+        # 2. stage_bz_stock_3x_ammo_weapons raises maxAmmo to 3x, keeps startAmmo/clipSize, and remaps non-factory FX
+        with tempfile.TemporaryDirectory() as tmp:
+            tools_root = Path(tmp) / "tools"
+            stage_dir = Path(tmp) / "stage"
+            raw_w = tools_root / "raw" / "weapons" / "sp"
+            raw_w.mkdir(parents=True)
+            (raw_w / "zombie_thompson").write_text(
+                r"WEAPONFILE\displayName\Thompson\clipSize\20\startAmmo\200\maxAmmo\200\viewFlashEffect\weapon/muzzleflashes/standardflashview",
+                encoding="latin1",
+            )
+            (raw_w / "springfield").write_text(
+                r"WEAPONFILE\displayName\Springfield\clipSize\5\startAmmo\50\maxAmmo\50\viewFlashEffect\weapon/muzzleflashes/rifle_flash_view\worldFlashEffect\weapon/muzzleflashes/rifleflash",
+                encoding="latin1",
+            )
+            staged = bm.stage_bz_stock_3x_ammo_weapons(tools_root, stage_dir)
+            self.assertEqual(staged, ["weapons/sp/springfield", "weapons/sp/zombie_thompson"])
+            thomp = dict(bm.parse_weapon_file((stage_dir / "weapons" / "sp" / "zombie_thompson").read_text(encoding="latin1")))
+            self.assertEqual(thomp["maxAmmo"], "600")
+            self.assertEqual(thomp["startAmmo"], "200")
+            self.assertEqual(thomp["clipSize"], "20")
+            spr = dict(bm.parse_weapon_file((stage_dir / "weapons" / "sp" / "springfield").read_text(encoding="latin1")))
+            self.assertEqual(spr["maxAmmo"], "150")
+            self.assertEqual(spr["viewFlashEffect"], "weapon/muzzleflashes/fx_kar98k_view")
+            self.assertEqual(spr["worldFlashEffect"], "weapon/muzzleflashes/fx_kar98k")
+
+        # 3. Native 2x (400) & 3x (600) HUD stock counts with 0 overflow when weapon is 3x-staged (WeaponMaxAmmo=600)
+        self.gsc.weapon_max_ammo["zombie_thompson"] = 600
+        self.p1.give_weapon("zombie_thompson", stock=200, make_current=True)
+        self.assertEqual(int(self.gsc.call(BZ_HOOKS_MOD, "bz_get_effective_max_stock", self.p1, "zombie_thompson")), 200)
+        self.p1.weapon_stock["zombie_thompson"] = 600
+        self.gsc.call(BZ_HOOKS_MOD, "bz_normalize_weapon_stock", self.p1, "zombie_thompson")
+        self.assertEqual(self.p1.weapon_stock["zombie_thompson"], 200)
+
+        # Double Ammo -> writes 400 directly to engine stock with 0 hidden overflow!
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_apex:double_ammo")
+        self.assertEqual(self.p1.weapon_stock["zombie_thompson"], 400)
+        self.assertEqual(int(self.p1.get_field("bz_overflow_reserve")["zombie_thompson"]), 0)
+        self.assertEqual(int(self.gsc.call(BZ_HOOKS_MOD, "bz_get_effective_max_stock", self.p1, "zombie_thompson")), 400)
+
+        # Double Ammo + Double PaP -> writes 600 directly to engine stock with 0 hidden overflow!
+        self.dvars.set("bz_pap_enabled", "1")
+        self.gsc.call(BZ_STATE_MOD, "bz_state_mark_weapon_double_pap", self.p1, "zombie_thompson")
+        self.gsc.call(BZ_PERKS_MOD, "bz_perks_refill_ammo_for_player", self.p1, "zombie_thompson")
+        self.assertEqual(self.p1.weapon_stock["zombie_thompson"], 600)
+        self.assertEqual(int(self.p1.get_field("bz_overflow_reserve")["zombie_thompson"]), 0)
+        self.assertEqual(int(self.gsc.call(BZ_HOOKS_MOD, "bz_get_effective_max_stock", self.p1, "zombie_thompson")), 600)
+
+        # 4. Classic Mode (bz_enabled=0) STRICTLY clamps 3x-staged stock weapons back to 1x (200) with zero telemetry!
+        self.dvars.set("bz_enabled", "0")
+        self.gsc.emitted_events.clear()
+        self.p1.weapon_stock["zombie_thompson"] = 600
+        self.assertEqual(int(self.gsc.call(BZ_HOOKS_MOD, "bz_get_effective_max_stock", self.p1, "zombie_thompson")), 200)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_normalize_all_player_stocks")
+        self.assertEqual(self.p1.weapon_stock["zombie_thompson"], 200)
+        self.assertEqual(self.gsc.emitted_events, [])
+
+        # 5. Patched ammo_give() and full_ammo_powerup() wire bz_get_effective_max_stock & bz_normalize_*
+        sample_weapons = (
+            "init_weapons()\n{\n\tinclude_weapon( \"zombie_thompson\" );\n}\n"
+            "ammo_give( weapon, also_has_upgrade )\n{\n"
+            "\tstockMax = WeaponMaxAmmo( weapon );\n"
+            "\tif( also_has_upgrade )\n\t{\n\t\tstockMax += WeaponMaxAmmo( weapon+\"_upgraded\" );\n\t}\n"
+            "\tself GivemaxAmmo( weapon );\n\treturn true;\n}\n"
+            "weapon_give( weapon, is_upgrade )\n{\n"
+            "\tif( primaryWeapons.size >= 2 )\n\t{\n\t}\n"
+            "\tself GiveWeapon( weapon, 0 );\n\tself GiveMaxAmmo( weapon );\n}\n"
+        ).encode("latin1")
+        patched_w = bm.inject_zombiemode_weapons_hooks(sample_weapons).decode("latin1")
+        self.assertIn("stockMax = maps\\_bz_hooks::bz_get_effective_max_stock( self, weapon );", patched_w)
+        self.assertIn('stockMax += maps\\_bz_hooks::bz_get_effective_max_stock( self, weapon+"_upgraded" );', patched_w)
+        self.assertGreaterEqual(patched_w.count("maps\\_bz_hooks::bz_normalize_weapon_stock( self, weapon );"), 2)
+
+        sample_powerups = b"full_ammo_powerup( drop_item )\n{\n\tplayers = get_players();\n}\n"
+        patched_p = bm.inject_zombiemode_powerups_hooks(sample_powerups).decode("latin1")
+        self.assertIn("maps\\_bz_hooks::bz_normalize_all_player_stocks();", patched_p)
+
 
 if __name__ == "__main__":
     unittest.main()

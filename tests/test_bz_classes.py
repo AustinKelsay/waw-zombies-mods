@@ -299,6 +299,18 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
         self.assertEqual(self.p1.ammo_clip["stielhandgranate"], 10)
         self.assertEqual(len(self.gsc.hud_elems), 1, "HUD elem must be reused on swap, not leaked")
         self.assertEqual(hud.text, "CLASS: SAPPER")
+
+        # When WaW clamps clip to 4 and banks 6 extra grenades in bz_sapper_grenade_reserve, HUD displays GREN: 4+6 -> 4+5
+        self.p1.ammo_clip["stielhandgranate"] = 4
+        self.p1.set_field("bz_sapper_grenade_reserve", 6)
+        self.gsc.call(BZ_CLASSES_MOD, "bz_class_update_hud", self.p1)
+        self.assertEqual(hud.text, "CLASS: SAPPER | GREN: 4+6")
+        self.gsc.call(BZ_CLASSES_MOD, "bz_sapper_on_grenade_thrown", self.p1, "stielhandgranate")
+        self.assertEqual(hud.text, "CLASS: SAPPER | GREN: 5+5")
+        self.p1.set_field("bz_sapper_grenade_reserve", 0)
+        self.p1.ammo_clip["stielhandgranate"] = 10
+        self.gsc.call(BZ_CLASSES_MOD, "bz_class_update_hud", self.p1)
+        self.assertEqual(hud.text, "CLASS: SAPPER")
         self.assertIn(
             "BZ_EVENT|CLASS_EQUIPPED|player=PlayerOne;class=sapper;previous=titan;swapped=1",
             self.gsc.emitted_events,

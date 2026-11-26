@@ -932,9 +932,61 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
 
     text = WALL_AMMO_GIVEN_RE.sub(_inject_wall_ammo, text)
 
-    # Normalize Elemental weapon reserves after Mystery Box GiveMaxAmmo() calls
-    # (Elemental weaponfiles use maxAmmo = 3x base so Double PaP + Double Ammo fits;
-    # base box pulls must normalize to 1x/1.5x/2x/3x behind the elements gate).
+    # Normalize weapon reserves in ammo_give(), weapon_give(), and treasure_chest_give_weapon()
+    # so build-staged 3x maxAmmo stock weapons clamp strictly to 1x in Classic Mode and
+    # use true 1x/1.5x/2x/3x caps in Base Zombies (ADR-0005, fixes wall-buy ammo lockout).
+    ammo_give_match = re.search(r"^ammo_give\([^)]*\)[ \t]*\r?\n\{", text, re.MULTILINE | re.IGNORECASE)
+    if ammo_give_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=ammo_give_match.end())
+        ag_end = next_fn.start() if next_fn is not None else len(text)
+        ag_body = text[ammo_give_match.start() : ag_end]
+        ag_body = re.sub(
+            r"stockMax\s*=\s*WeaponMaxAmmo\s*\(\s*weapon\s*\)\s*;",
+            "stockMax = maps\\_bz_hooks::bz_get_effective_max_stock( self, weapon );",
+            ag_body,
+            flags=re.IGNORECASE,
+        )
+        ag_body = re.sub(
+            r'stockMax\s*\+=\s*WeaponMaxAmmo\s*\(\s*weapon\s*\+\s*"_upgraded"\s*\)\s*;',
+            'stockMax += maps\\_bz_hooks::bz_get_effective_max_stock( self, weapon+"_upgraded" );',
+            ag_body,
+            flags=re.IGNORECASE,
+        )
+
+        def _inject_after_give_max(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            ent = match.group("ent")
+            weap = match.group("weap").strip()
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}maps\\_bz_hooks::bz_normalize_weapon_stock( {ent}, {weap} );{ending}"
+            )
+
+        ag_body = PAP_TAKE_GIVE_MAX_AMMO_RE.sub(_inject_after_give_max, ag_body)
+        text = text[: ammo_give_match.start()] + ag_body + text[ag_end:]
+
+    weap_give_match = re.search(r"^weapon_give\([^)]*\)[ \t]*\r?\n\{", text, re.MULTILINE | re.IGNORECASE)
+    if weap_give_match is not None:
+        next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=weap_give_match.end())
+        wg_end = next_fn.start() if next_fn is not None else len(text)
+        wg_body = text[weap_give_match.start() : wg_end]
+
+        def _inject_wg_norm(match: re.Match[str]) -> str:
+            indent = match.group("indent")
+            ent = match.group("ent")
+            weap = match.group("weap").strip()
+            orig = match.group(0).rstrip("\r")
+            ending = "\r" if match.group(0).endswith("\r") else ""
+            return (
+                f"{orig}{newline}"
+                f"{indent}maps\\_bz_hooks::bz_normalize_weapon_stock( {ent}, {weap} );{ending}"
+            )
+
+        wg_body = PAP_TAKE_GIVE_MAX_AMMO_RE.sub(_inject_wg_norm, wg_body)
+        text = text[: weap_give_match.start()] + wg_body + text[wg_end:]
+
     box_give_match = re.search(r"^treasure_chest_give_weapon\([^)]*\)[ \t]*\r?\n\{", text, re.MULTILINE)
     if box_give_match is not None:
         next_fn = TOP_LEVEL_FUNC_DEF_RE.search(text, pos=box_give_match.end())
@@ -949,6 +1001,7 @@ def inject_zombiemode_weapons_hooks(script_bytes: bytes) -> bytes:
             ending = "\r" if match.group(0).endswith("\r") else ""
             return (
                 f"{orig}{newline}"
+                f"{indent}maps\\_bz_hooks::bz_normalize_weapon_stock( {ent}, {weap} );{newline}"
                 f"{indent}if ( maps\\_bz_hooks::bz_elements_enabled() ) "
                 f"{{ maps\\_bz_stations::bz_stations_normalize_box_element_ammo( {ent}, {weap} ); }}{ending}"
             )
@@ -1092,6 +1145,7 @@ def inject_zombiemode_perks_hooks(
                 ending = "\r" if match.group(0).endswith("\r") else ""
                 return (
                     f"{orig}{newline}"
+                    f"{indent}maps\\_bz_hooks::bz_normalize_weapon_stock( {ent}, {weap} );{newline}"
                     f"{indent}if ( maps\\_bz_hooks::bz_pap_enabled() ) "
                     f"{{ maps\\_bz_pap::bz_pap_on_native_weapon_taken( {ent}, {weap} ); }}{ending}"
                 )
@@ -1242,6 +1296,7 @@ def inject_zombiemode_powerups_hooks(
 
     hook = (
         f"{newline}"
+        f"\tmaps\\_bz_hooks::bz_normalize_all_player_stocks();{newline}"
         f"\tif ( maps\\_bz_hooks::bz_enabled() ){newline}"
         f"\t{{{newline}"
         f"\t\tmaps\\_bz_hooks::bz_notify_all_players_max_ammo();{newline}"
@@ -2038,6 +2093,156 @@ def stage_bz_element_weapons(
         staged_relpaths.append(f"weapons/sp/{weap_name}")
 
     return staged_relpaths
+
+
+# Canonical 1x base reserve stock for all 72 playable stock zombie primary weapons across
+# Nacht, Verruckt, Shi No Numa, and Der Riese (ADR-0005). Staged into mod.ff with maxAmmo = 3x
+# so Double Ammo (2x) and Double PaP (1.5x -> 3x) display true native WaW HUD counts while
+# Classic Mode (bz_enabled=0) strictly clamps back to 1x.
+STOCK_3X_AMMO_WEAPONS: dict[str, int] = {
+    "30cal_bipod": 500,
+    "bar": 140,
+    "bar_bipod": 140,
+    "colt": 80,
+    "doublebarrel": 60,
+    "doublebarrel_sawed_grip": 60,
+    "fg42_bipod": 192,
+    "gewehr43": 120,
+    "kar98k": 50,
+    "kar98k_scoped_zombie": 50,
+    "m1carbine": 120,
+    "m1garand": 128,
+    "m1garand_gl": 128,
+    "m1garand_gl_zombie": 128,
+    "m1garand_gl_zombie_upgraded": 150,
+    "m2_flamethrower_zombie": 300,
+    "m2_flamethrower_zombie_upgraded": 300,
+    "mg42_bipod": 500,
+    "mp40": 192,
+    "panzerschrek": 4,
+    "panzerschrek_zombie": 20,
+    "panzerschrek_zombie_upgraded": 30,
+    "ppsh": 355,
+    "ptrs41_zombie": 60,
+    "ptrs41_zombie_upgraded": 60,
+    "ray_gun": 160,
+    "ray_gun_upgraded": 200,
+    "shotgun": 60,
+    "springfield": 50,
+    "stg44": 180,
+    "sw_357": 80,
+    "tesla_gun": 15,
+    "tesla_gun_upgraded": 30,
+    "thompson": 200,
+    "type99_rifle_scoped_zombie": 50,
+    "walther": 80,
+    "zombie_30cal": 500,
+    "zombie_30cal_upgraded": 750,
+    "zombie_bar": 140,
+    "zombie_bar_upgraded": 180,
+    "zombie_colt": 80,
+    "zombie_colt_upgraded": 40,
+    "zombie_doublebarrel": 60,
+    "zombie_doublebarrel_sawed": 60,
+    "zombie_doublebarrel_upgraded": 60,
+    "zombie_fg42": 192,
+    "zombie_fg42_upgraded": 400,
+    "zombie_gewehr43": 120,
+    "zombie_gewehr43_upgraded": 170,
+    "zombie_kar98k": 50,
+    "zombie_kar98k_upgraded": 60,
+    "zombie_m1carbine": 120,
+    "zombie_m1carbine_upgraded": 150,
+    "zombie_m1garand": 128,
+    "zombie_m1garand_upgraded": 150,
+    "zombie_mg42": 500,
+    "zombie_mg42_upgraded": 750,
+    "zombie_mp40": 192,
+    "zombie_mp40_upgraded": 192,
+    "zombie_ppsh": 355,
+    "zombie_ppsh_upgraded": 700,
+    "zombie_shotgun": 60,
+    "zombie_shotgun_upgraded": 60,
+    "zombie_stg44": 180,
+    "zombie_stg44_upgraded": 300,
+    "zombie_sw_357": 80,
+    "zombie_sw_357_upgraded": 80,
+    "zombie_thompson": 200,
+    "zombie_thompson_upgraded": 250,
+    "zombie_type100_smg": 160,
+    "zombie_type100_smg_upgraded": 220,
+    "zombie_type99_rifle": 50,
+    "zombie_type99_rifle_upgraded": 60,
+}
+
+# Remap the 6 non-Der-Riese muzzleflash FX strings used by Nacht/Verruckt/Sumpf stock rifles
+# to exact Der Riese equivalents so staging all 72 stock weapons adds 0 FX slots (329/400).
+STOCK_WEAPON_FX_REMAP: dict[str, str] = {
+    "weapon/muzzleflashes/heavy_view": "weapon/muzzleflashes/fx_30cal_bulletweap_view",
+    "weapon/muzzleflashes/heavy": "weapon/muzzleflashes/fx_30cal_bulletweap",
+    "weapon/muzzleflashes/rifle_flash_view": "weapon/muzzleflashes/fx_kar98k_view",
+    "weapon/muzzleflashes/rifleflash": "weapon/muzzleflashes/fx_kar98k",
+    "weapon/muzzleflashes/fx_type99_rifle_view": "weapon/muzzleflashes/fx_kar98k_view",
+    "weapon/muzzleflashes/fx_type99_rifle": "weapon/muzzleflashes/fx_kar98k",
+}
+
+
+def build_stock_3x_ammo_weapon_file(
+    stock_text: str,
+    base_max_ammo: int,
+    *,
+    xanim_case_map: dict[str, str] | None = None,
+) -> str:
+    """Return a stock WEAPONFILE with maxAmmo raised to 3x and zero added Der Riese FX slots."""
+    pairs = parse_weapon_file(stock_text)
+    updated: list[tuple[str, str]] = []
+    seen_max = False
+    for k, v in pairs:
+        if k == "maxAmmo":
+            updated.append((k, str(int(base_max_ammo) * 3)))
+            seen_max = True
+        elif "effect" in k.lower() and v in STOCK_WEAPON_FX_REMAP:
+            updated.append((k, STOCK_WEAPON_FX_REMAP[v]))
+        elif xanim_case_map and k.lower().endswith("anim") and v and v.lower() in xanim_case_map:
+            updated.append((k, xanim_case_map[v.lower()]))
+        else:
+            updated.append((k, v))
+    if not seen_max:
+        updated.append(("maxAmmo", str(int(base_max_ammo) * 3)))
+    return serialize_weapon_file(updated)
+
+
+def stage_bz_stock_3x_ammo_weapons(
+    tools_root: Path,
+    stage_dir: Path,
+) -> list[str]:
+    """Stage 3x maxAmmo overrides for present stock zombie primary weapons under stage_dir/weapons/sp/."""
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
+
+    out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    staged: list[str] = []
+    for weap_name, base_max in sorted(STOCK_3X_AMMO_WEAPONS.items()):
+        src = raw_weapons_dir / weap_name
+        if not src.is_file():
+            continue
+        stock_text = src.read_text(encoding="latin1")
+        if not stock_text.startswith("WEAPONFILE"):
+            continue
+        out_text = build_stock_3x_ammo_weapon_file(
+            stock_text,
+            base_max,
+            xanim_case_map=xanim_case_map,
+        )
+        (out_dir / weap_name).write_text(out_text, encoding="latin1")
+        staged.append(f"weapons/sp/{weap_name}")
+    return staged
 
 
 # Stock iw_14.iwd ptrs41_zombie & m2_flamethrower_zombie reference these xmodels, which exist
@@ -2953,8 +3158,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         steam_game=steam_game,
     )
 
-    # Generate and stage zero-FX cloned Phase 2 primary weapons (when raw weapon templates exist)
+    # Generate and stage zero-FX cloned Phase 2 primary weapons + 3x maxAmmo stock primary overrides (ADR-0005)
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
+    staged_weapons.extend(stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir))
 
     # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, cloned bz_* weapons,
     # and Der Riese PTRS-41/Flamethrower compat xmodels (when raw xmodels exist).

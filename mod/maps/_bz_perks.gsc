@@ -1207,17 +1207,13 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 bz_perks_calc_weapon_max_reserve( player, weapon_name )
 {
 	w = bz_normalize_id( weapon_name );
-	if ( w == "" || w == "none" || maps\_bz_rules::bz_is_infinite_single_item_weapon( w ) )
+	if ( w == "" || w == "none" )
 	{
 		return 0;
 	}
 
-	base_max = maps\_bz_rules::bz_get_element_base_reserve( w );
+	base_max = maps\_bz_rules::bz_get_canonical_base_reserve( w, WeaponMaxAmmo( w ) );
 	if ( !IsDefined( base_max ) || Int( base_max ) <= 0 )
-	{
-		base_max = Int( WeaponMaxAmmo( w ) );
-	}
-	if ( base_max <= 0 )
 	{
 		return 0;
 	}
