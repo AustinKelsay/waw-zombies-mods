@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted (partially evolved by ADR-0004 and ADR-0006)
 date: 2026-11-23
 ---
 
