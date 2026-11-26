@@ -117,7 +117,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.65 0.55 1.0 0.50
-			text			"Pack-a-Punch Weapon (5000)"
+			text			"Pack-a-Punch Weapon"
 			textfont		UI_FONT_NORMAL
 			textscale		0.30
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -174,7 +174,7 @@
 			border			1
 			bordersize		1
 			bordercolor		1.0 0.55 0.85 0.55
-			text			"Double Pack-a-Punch (5000)"
+			text			"Double Pack-a-Punch"
 			textfont		UI_FONT_NORMAL
 			textscale		0.30
 			textstyle		ITEM_TEXTSTYLE_SHADOWED

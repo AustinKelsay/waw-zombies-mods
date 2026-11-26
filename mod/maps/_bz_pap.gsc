@@ -1291,7 +1291,7 @@ bz_pap_format_native_prompt_text( player, weapon_name )
 	if ( bz_pap_is_weapon_papped( player, weap ) )
 	{
 		dpap_cost = maps\_bz_rules::bz_get_pap_upgrade_price( "double_pap" );
-		return "Press [F] for Double Pack-a-Punch [Cost: " + dpap_cost + "]";
+		return "Press [{+activate}] for Double Pack-a-Punch [Cost: " + dpap_cost + "]";
 	}
 
 	if ( bz_pap_has_native_upgrade_entry( weap ) )
@@ -1302,7 +1302,7 @@ bz_pap_format_native_prompt_text( player, weapon_name )
 	if ( bz_pap_is_held_primary( player, weap ) )
 	{
 		spap_cost = bz_pap_get_single_pap_price();
-		return "Press [F] for Pack-a-Punch [Cost: " + spap_cost + "]";
+		return "Press [{+activate}] for Pack-a-Punch [Cost: " + spap_cost + "]";
 	}
 
 	return "";

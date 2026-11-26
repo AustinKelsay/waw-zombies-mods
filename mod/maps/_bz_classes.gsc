@@ -324,6 +324,10 @@ bz_class_update_hud( player )
 	{
 		badge_text = badge_text + " | 2X DMG";
 	}
+	else if ( active_class == "daredevil" && IsDefined( player.bz_daredevil_burst_active ) && player.bz_daredevil_burst_active )
+	{
+		badge_text = badge_text + " | BURST";
+	}
 
 	if ( !IsDefined( player.bz_class_hud ) )
 	{
@@ -2255,6 +2259,7 @@ bz_daredevil_start_burst( player )
 	mult = maps\_bz_rules::bz_get_daredevil_burst_mult();
 	maps\_bz_hooks::bz_set_speed_modifier( player, "bz_daredevil_burst", mult );
 	maps\_bz_hooks::bz_recompute_player_speed( player );
+	bz_class_update_hud( player );
 
 	player thread bz_daredevil_burst_timer( gen );
 }
@@ -2270,6 +2275,7 @@ bz_daredevil_end_burst( player )
 	player.bz_daredevil_burst_gen = player.bz_daredevil_burst_gen + 1;
 	maps\_bz_hooks::bz_clear_speed_modifier( player, "bz_daredevil_burst" );
 	maps\_bz_hooks::bz_recompute_player_speed( player );
+	bz_class_update_hud( player );
 }
 
 bz_daredevil_burst_timer( gen )

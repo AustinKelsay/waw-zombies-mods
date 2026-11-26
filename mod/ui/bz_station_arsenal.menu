@@ -774,7 +774,7 @@
 			decoration
 		}
 
-		// Phase 3 Read-Only Placeholder Banner
+		// Phase 3 Read-Only Placeholder Banner (hidden cleanly when bz_companions_enabled == 0)
 		itemDef
 		{
 			name			"bz_arsenal_p3_panel"
@@ -784,7 +784,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.55 0.55 0.62 0.40
-			visible			1
+			visible			when( dvarInt( "bz_companions_enabled" ) == 1 );
 			decoration
 		}
 		itemDef
@@ -799,7 +799,7 @@
 			textalign		ITEM_ALIGN_LEFT
 			textaligny		12
 			forecolor		0.72 0.76 0.82 0.95
-			visible			1
+			visible			when( dvarInt( "bz_companions_enabled" ) == 1 );
 			decoration
 		}
 		itemDef
@@ -813,7 +813,7 @@
 			textalign		ITEM_ALIGN_LEFT
 			textaligny		11
 			forecolor		0.62 0.66 0.72 0.90
-			visible			1
+			visible			when( dvarInt( "bz_companions_enabled" ) == 1 );
 			decoration
 		}
 

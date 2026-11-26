@@ -1778,14 +1778,13 @@ bz_perks_sync_stock_perks( player )
 // Compact ASCII Right-Lane Perks HUD (Per-Player, Zero Leaks)
 // ---------------------------------------------------------------------------
 
-bz_perks_format_hud_text( player )
+bz_perks_collect_hud_tokens( player )
 {
+	tokens = [];
 	if ( !IsDefined( player ) )
 	{
-		return "";
+		return tokens;
 	}
-
-	tokens = [];
 
 	// Tier 2 upgrades on stock perks
 	if ( bz_state_has_perk_t2( player, "juggernog" ) )
@@ -1865,17 +1864,57 @@ bz_perks_format_hud_text( player )
 		tokens[tokens.size] = "BLAST";
 	}
 
-	if ( tokens.size == 0 )
+	// Compact live Solo QR charge & active invulnerability tags
+	if ( bz_perks_is_solo() && IsDefined( player.bz_extra_solo_revives ) && Int( player.bz_extra_solo_revives ) > 0 )
+	{
+		tokens[tokens.size] = "QRx" + Int( player.bz_extra_solo_revives );
+	}
+	if ( bz_perks_is_invulnerable( player ) )
+	{
+		tokens[tokens.size] = "INVULN";
+	}
+
+	return tokens;
+}
+
+bz_perks_format_hud_range( tokens, start_idx, end_idx, prefix )
+{
+	if ( !IsDefined( tokens ) || start_idx >= end_idx || start_idx >= tokens.size )
 	{
 		return "";
 	}
-
-	out = "PERKS: " + tokens[0];
-	for ( i = 1; i < tokens.size; i++ )
+	lim = end_idx;
+	if ( lim > tokens.size )
+	{
+		lim = tokens.size;
+	}
+	out = prefix + tokens[start_idx];
+	for ( i = start_idx + 1; i < lim; i++ )
 	{
 		out = out + " | " + tokens[i];
 	}
 	return out;
+}
+
+bz_perks_format_hud_text( player )
+{
+	tokens = bz_perks_collect_hud_tokens( player );
+	if ( tokens.size == 0 )
+	{
+		return "";
+	}
+	// Cap row 1 at 5 tokens (~46 chars) so maxed perk loadouts never overflow a 640px virtual HUD
+	return bz_perks_format_hud_range( tokens, 0, 5, "PERKS: " );
+}
+
+bz_perks_format_hud_row2_text( player )
+{
+	tokens = bz_perks_collect_hud_tokens( player );
+	if ( tokens.size <= 5 )
+	{
+		return "";
+	}
+	return bz_perks_format_hud_range( tokens, 5, tokens.size, "PERKS+: " );
 }
 
 bz_perks_update_hud( player )
@@ -1886,12 +1925,18 @@ bz_perks_update_hud( player )
 	}
 
 	text = bz_perks_format_hud_text( player );
+	text2 = bz_perks_format_hud_row2_text( player );
 	if ( text == "" )
 	{
 		if ( IsDefined( player.bz_perks_hud ) )
 		{
 			player.bz_perks_hud.alpha = 0;
 			player.bz_perks_hud_text = "";
+		}
+		if ( IsDefined( player.bz_perks_hud_row2 ) )
+		{
+			player.bz_perks_hud_row2.alpha = 0;
+			player.bz_perks_hud_row2_text = "";
 		}
 		return true;
 	}
@@ -1908,7 +1953,7 @@ bz_perks_update_hud( player )
 		hud.foreground = true;
 		hud.sort = 5;
 		hud.hidewheninmenu = true;
-		hud.fontScale = 1.15;
+		hud.fontScale = 1.05;
 		hud.color = ( 0.65, 0.92, 1.0 );
 		hud.alpha = 0.92;
 		player.bz_perks_hud = hud;
@@ -1921,13 +1966,52 @@ bz_perks_update_hud( player )
 	}
 
 	player.bz_perks_hud.alpha = 0.92;
-	if ( IsDefined( player.bz_perks_hud_text ) && player.bz_perks_hud_text == text )
+	if ( !IsDefined( player.bz_perks_hud_text ) || player.bz_perks_hud_text != text )
 	{
+		player.bz_perks_hud SetText( text );
+		player.bz_perks_hud_text = text;
+	}
+
+	if ( text2 == "" )
+	{
+		if ( IsDefined( player.bz_perks_hud_row2 ) )
+		{
+			player.bz_perks_hud_row2.alpha = 0;
+			player.bz_perks_hud_row2_text = "";
+		}
 		return true;
 	}
 
-	player.bz_perks_hud SetText( text );
-	player.bz_perks_hud_text = text;
+	if ( !IsDefined( player.bz_perks_hud_row2 ) )
+	{
+		hud2 = NewClientHudElem( player );
+		hud2.alignX = "right";
+		hud2.alignY = "top";
+		hud2.horzAlign = "right";
+		hud2.vertAlign = "top";
+		hud2.x = -12;
+		hud2.y = maps\_bz_hooks::bz_get_hud_lane_y( 84 );
+		hud2.foreground = true;
+		hud2.sort = 5;
+		hud2.hidewheninmenu = true;
+		hud2.fontScale = 1.05;
+		hud2.color = ( 0.95, 0.85, 0.45 );
+		hud2.alpha = 0.92;
+		player.bz_perks_hud_row2 = hud2;
+
+		if ( !IsDefined( level.bz_perks_hud_elems ) )
+		{
+			level.bz_perks_hud_elems = [];
+		}
+		level.bz_perks_hud_elems[level.bz_perks_hud_elems.size] = hud2;
+	}
+
+	player.bz_perks_hud_row2.alpha = 0.92;
+	if ( !IsDefined( player.bz_perks_hud_row2_text ) || player.bz_perks_hud_row2_text != text2 )
+	{
+		player.bz_perks_hud_row2 SetText( text2 );
+		player.bz_perks_hud_row2_text = text2;
+	}
 	return true;
 }
 
@@ -1936,6 +2020,26 @@ bz_perks_destroy_hud( player )
 	if ( !IsDefined( player ) )
 	{
 		return false;
+	}
+
+	destroyed = false;
+	if ( IsDefined( player.bz_perks_hud_row2 ) )
+	{
+		hud2 = player.bz_perks_hud_row2;
+		hud2 Destroy();
+		if ( IsDefined( level.bz_perks_hud_elems ) )
+		{
+			for ( i = 0; i < level.bz_perks_hud_elems.size; i++ )
+			{
+				if ( IsDefined( level.bz_perks_hud_elems[i] ) && level.bz_perks_hud_elems[i] == hud2 )
+				{
+					level.bz_perks_hud_elems[i] = undefined;
+				}
+			}
+		}
+		player.bz_perks_hud_row2 = undefined;
+		player.bz_perks_hud_row2_text = undefined;
+		destroyed = true;
 	}
 
 	if ( IsDefined( player.bz_perks_hud ) )
@@ -1954,11 +2058,12 @@ bz_perks_destroy_hud( player )
 		}
 		player.bz_perks_hud = undefined;
 		player.bz_perks_hud_text = undefined;
-		return true;
+		destroyed = true;
 	}
 
 	player.bz_perks_hud_text = undefined;
-	return false;
+	player.bz_perks_hud_row2_text = undefined;
+	return destroyed;
 }
 
 // ---------------------------------------------------------------------------

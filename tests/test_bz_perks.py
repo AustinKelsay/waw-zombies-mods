@@ -1005,10 +1005,29 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         self.assertIsInstance(hud_p2, FakeHudElem)
         self.assertIn("BLAST", hud_p2.text)
 
-        # Disconnect destroys p1 HUD cleanly without touching p2
+        # Maxed perk loadout wraps cleanly into 2 compact non-overflowing right-hand HUD rows (y=32 & y=84)
+        for tok in (
+            "buy_perk:juggernog", "buy_t2:juggernog",
+            "buy_perk:speed_cola", "buy_t2:speed_cola",
+            "buy_perk:double_tap", "buy_t2:double_tap",
+            "buy_perk:quick_revive", "buy_t2:quick_revive",
+            "buy_perk:mule_kick", "buy_t2:mule_kick",
+            "buy_perk:ap", "buy_t2:ap",
+            "buy_apex:double_ammo", "buy_apex:lightweight_heavy", "buy_apex:blast_shield",
+        ):
+            self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", tok)
+        hud_p1_row2 = self.p1.get_field("bz_perks_hud_row2")
+        self.assertIsInstance(hud_p1_row2, FakeHudElem)
+        self.assertEqual(hud_p1_row2.get_field("y"), 84)
+        self.assertLessEqual(len(hud_p1.text), 56)
+        self.assertIn("BLAST", hud_p1_row2.text)
+
+        # Disconnect destroys both p1 HUD rows cleanly without touching p2
         self.gsc.call(BZ_PERKS_MOD, "bz_perks_destroy_hud", self.p1)
         self.assertTrue(hud_p1.destroyed)
+        self.assertTrue(hud_p1_row2.destroyed)
         self.assertIs(self.p1.get_field("bz_perks_hud"), UNDEFINED)
+        self.assertIs(self.p1.get_field("bz_perks_hud_row2"), UNDEFINED)
         self.assertFalse(hud_p2.destroyed)
 
         # end_game destroys all remaining HUDs with zero leaks
