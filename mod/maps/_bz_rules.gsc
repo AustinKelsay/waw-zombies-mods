@@ -1569,9 +1569,9 @@ bz_get_war_club_aoe_radius( is_pap_war_club )
 {
 	if ( bz_is_true( is_pap_war_club ) )
 	{
-		return 160;
+		return 168;
 	}
-	return 96;
+	return 112;
 }
 
 bz_get_crossbow_bolt_count()

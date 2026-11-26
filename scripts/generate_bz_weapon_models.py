@@ -48,10 +48,12 @@ CUSTOM_PROJECTILE_XMODELS: tuple[str, ...] = (
 
 CUSTOM_SPECIAL_WEAPON_VIEWMODELS: dict[str, str] = {
     "bz_portal_grenade": "viewmodel_bz_portal_grenade",
+    "bz_war_club": "viewmodel_bz_war_club",
 }
 
 CUSTOM_SPECIAL_WEAPON_WORLDMODELS: dict[str, str] = {
     "bz_portal_grenade": "world_bz_portal_grenade",
+    "bz_war_club": "world_bz_war_club",
 }
 
 ALL_CUSTOM_XMODELS: tuple[str, ...] = (
@@ -68,6 +70,8 @@ ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "viewmodel_bz_portal_grenade",
     "world_bz_portal_grenade",
     "bz_portal_orb_air",
+    "viewmodel_bz_war_club",
+    "world_bz_war_club",
 )
 
 ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
@@ -92,6 +96,9 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_portal_ring",
     "mtl_bz_portal_core",
     "mtl_bz_portal_trim",
+    "mtl_bz_club_wood",
+    "mtl_bz_club_iron",
+    "mtl_bz_club_glow",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -1135,6 +1142,67 @@ def build_portal_orb_air() -> MeshBuilder:
     return m
 
 
+def build_war_club_held(name: str, is_world: bool) -> MeshBuilder:
+    """Custom 3D iron-banded spiked trench War Club (viewmodel & worldmodel)."""
+    bones = world_weapon_bones((12.0, 0.0, 2.5)) if is_world else BONES_COLT45
+    m = MeshBuilder(name, bones, model_type="animated")
+    b_gun = 0
+    s = 1.85 if is_world else 1.0
+
+    wood = "mtl_bz_club_wood"
+    iron = "mtl_bz_club_iron"
+    glow = "mtl_bz_club_glow"
+    leather = "mtl_bz_blade_leather"
+
+    # Club axis sweeps forward-upward from the right grip so it fills the melee swing arc boldly
+    def pt(t: float) -> Vec3:
+        return (
+            (-1.2 + t * 11.4) * s,
+            (0.0) * s,
+            (-2.4 + t * 10.6) * s,
+        )
+
+    axis = v_norm(v_sub(pt(1.0), pt(0.0)))
+    side_u = (0.0, 1.0, 0.0)
+    side_v = v_norm(v_cross(axis, side_u))
+
+    # 1. Forged iron pommel cap & butt spike
+    m.add_tapered_prism(iron, pt(-0.14), pt(-0.04), 0.14 * s, 0.72 * s, sides=8, bone_idx=b_gun)
+    m.add_tapered_prism(iron, pt(-0.04), pt(0.06), 0.76 * s, 0.62 * s, sides=10, bone_idx=b_gun)
+
+    # 2. Ribbed leather grip & wrist-guard collar
+    m.add_tapered_prism(leather, pt(0.06), pt(0.38), 0.56 * s, 0.60 * s, sides=10, bone_idx=b_gun)
+    for gt in (0.12, 0.20, 0.28, 0.36):
+        m.add_tapered_prism(iron, pt(gt - 0.015), pt(gt + 0.015), 0.64 * s, 0.64 * s, sides=10, bone_idx=b_gun)
+
+    # 3. Heavy octagonal hardwood war-club shaft flaring into a brutal striking head
+    m.add_tapered_prism(wood, pt(0.38), pt(0.68), 0.64 * s, 1.05 * s, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(wood, pt(0.68), pt(0.96), 1.05 * s, 1.38 * s, sides=10, bone_idx=b_gun)
+
+    # 4. Three bolted forged-iron reinforcement collars around the striking head
+    for band_t, r0, r1 in ((0.64, 1.06, 1.14), (0.80, 1.26, 1.36), (0.94, 1.42, 1.46)):
+        m.add_tapered_prism(iron, pt(band_t - 0.045), pt(band_t + 0.045), r0 * s, r1 * s, sides=10, bone_idx=b_gun)
+
+    # 5. Recessed glowing kinetic forge bands (shockwave energy rings on club head)
+    for glow_t, gr in ((0.72, 1.18), (0.87, 1.36)):
+        m.add_tapered_prism(glow, pt(glow_t - 0.018), pt(glow_t + 0.018), gr * s, gr * s, sides=10, bone_idx=b_gun)
+
+    # 6. Heavy domed iron crown & top impact spike
+    m.add_tapered_prism(iron, pt(0.96), pt(1.06), 1.40 * s, 0.86 * s, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(iron, pt(1.06), pt(1.18), 0.56 * s, 0.10 * s, sides=8, bone_idx=b_gun)
+
+    # 7. 12 forged conical iron spikes radiating around the two head collars (2 rings x 6 spikes)
+    for ring_t, base_r, spike_len, phase_deg in ((0.80, 1.24, 0.92, 0.0), (0.94, 1.36, 1.02, 30.0)):
+        c = pt(ring_t)
+        for k in range(6):
+            ang = math.radians(phase_deg + k * 60.0)
+            rad_dir = v_add(v_scale(side_u, math.cos(ang)), v_scale(side_v, math.sin(ang)))
+            sp0 = v_add(c, v_scale(rad_dir, base_r * s))
+            sp1 = v_add(c, v_scale(rad_dir, (base_r + spike_len) * s))
+            m.add_tapered_prism(iron, sp0, sp1, 0.24 * s, 0.05 * s, sides=6, bone_idx=b_gun)
+    return m
+
+
 # ---------------------------------------------------------------------------
 # Procedural 32-bit Uncompressed TGA Texture Generator (Diffuse, Normal, Spec)
 # ---------------------------------------------------------------------------
@@ -1227,6 +1295,10 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_portal_ring", "model phong", "metal", "brushed_metal", (76, 68, 112), (142, 128, 188), (62, 56, 74), 210),
     MaterialSpec("mtl_bz_portal_core", "model unlit", "glass", "portal_glow", (112, 42, 248), (186, 232, 255)),
     MaterialSpec("mtl_bz_portal_trim", "model phong", "metal", "brushed_metal", (208, 166, 72), (138, 100, 32), (66, 54, 26), 205),
+    # War Club (forged iron-banded hardwood trench club + glowing shockwave runes)
+    MaterialSpec("mtl_bz_club_wood", "model phong", "wood", "wood_grain", (84, 48, 26), (44, 24, 12), (22, 18, 14), 78),
+    MaterialSpec("mtl_bz_club_iron", "model phong", "metal", "corroded_metal", (54, 58, 64), (92, 98, 108), (58, 62, 68), 180),
+    MaterialSpec("mtl_bz_club_glow", "model unlit", "glass", "amber_glow", (245, 118, 22), (255, 214, 110)),
 )
 
 
@@ -1563,6 +1635,8 @@ def build_all_meshes() -> list[MeshBuilder]:
         build_portal_grenade_held("viewmodel_bz_portal_grenade", is_world=False),
         build_portal_grenade_held("world_bz_portal_grenade", is_world=True),
         build_portal_orb_air(),
+        build_war_club_held("viewmodel_bz_war_club", is_world=False),
+        build_war_club_held("world_bz_war_club", is_world=True),
     ]
 
 
