@@ -430,6 +430,10 @@ bz_stations_pre_init()
 	{
 		PrecacheMenu( menus[i] );
 	}
+	PrecacheModel( "bz_station_perks_kiosk" );
+	PrecacheModel( "bz_station_class_kiosk" );
+	PrecacheModel( "bz_station_arsenal_kiosk" );
+	PrecacheModel( "bz_station_pap_kiosk" );
 }
 
 bz_stations_init()
@@ -464,86 +468,24 @@ bz_stations_init()
 
 bz_stations_get_model_for_station( map_name, station_id )
 {
-	norm_map = bz_normalize_id( map_name );
 	sid = bz_normalize_id( station_id );
 
-	// Per-map models verified precached inside each stock map's .ff fastfile
-	// (zero new FX or custom model assets added to mod.csv).
-	if ( norm_map == "nazi_zombie_factory" )
+	// Custom color-coded 3D Station Kiosk XMODELs shared across all 4 Stock Maps (0 added FX slots).
+	if ( sid == "perks" )
 	{
-		if ( sid == "perks" )
-		{
-			return "zombie_vending_jugg_on";
-		}
-		if ( sid == "class" )
-		{
-			return "zombie_vending_revive_on";
-		}
-		if ( sid == "arsenal" )
-		{
-			return "zombie_treasure_box";
-		}
-		if ( sid == "pap" )
-		{
-			return "zombie_vending_packapunch_on";
-		}
+		return "bz_station_perks_kiosk";
 	}
-	else if ( norm_map == "nazi_zombie_sumpf" )
+	if ( sid == "class" )
 	{
-		if ( sid == "perks" )
-		{
-			return "zombie_vending_jugg_on_price";
-		}
-		if ( sid == "class" )
-		{
-			return "zombie_sumpf_zipcage_box";
-		}
-		if ( sid == "arsenal" )
-		{
-			return "zombie_treasure_box";
-		}
-		if ( sid == "pap" )
-		{
-			return "zombie_vending_sleight_on_price";
-		}
+		return "bz_station_class_kiosk";
 	}
-	else if ( norm_map == "nazi_zombie_asylum" )
+	if ( sid == "arsenal" )
 	{
-		if ( sid == "perks" )
-		{
-			return "zombie_vending_jugg_on";
-		}
-		if ( sid == "class" )
-		{
-			return "zombie_zapper_power_box_on";
-		}
-		if ( sid == "arsenal" )
-		{
-			return "zombie_treasure_box";
-		}
-		if ( sid == "pap" )
-		{
-			return "zombie_vending_revive_on";
-		}
+		return "bz_station_arsenal_kiosk";
 	}
-	else if ( norm_map == "nazi_zombie_prototype" )
+	if ( sid == "pap" )
 	{
-		if ( sid == "perks" )
-		{
-			return "static_berlin_ger_radio";
-		}
-		if ( sid == "class" )
-		{
-			return "dest_peleliu_generator_mobile_dmg0";
-		}
-		if ( sid == "arsenal" )
-		{
-			return "german_grenade_bag";
-		}
-		if ( sid == "pap" )
-		{
-			return "global_explosive_barrel_japanese";
-		}
+		return "bz_station_pap_kiosk";
 	}
 	return "";
 }
@@ -795,7 +737,7 @@ bz_stations_get_prompt_color( station_id )
 
 bz_stations_format_prompt_text( station_id, display_name )
 {
-	return bz_stations_get_prompt_tag( station_id ) + " " + display_name + " - Press [F]";
+	return bz_stations_get_prompt_tag( station_id ) + " " + display_name + " - Press [{+activate}]";
 }
 
 bz_stations_ensure_prompt_hud( player )
@@ -1218,6 +1160,80 @@ bz_stations_is_element_ammo_full( player, weap_name )
 	return !IsDefined( clip_size ) || clip_size <= 0 || player GetWeaponAmmoClip( weap_name ) >= clip_size;
 }
 
+bz_stations_get_weapon_display_name( weapon_name )
+{
+	w = bz_normalize_id( weapon_name );
+	if ( w == "" || w == "none" )
+	{
+		return "NONE";
+	}
+	if ( w == "bz_acid_sprayer" )
+	{
+		return "Acid Sprayer";
+	}
+	if ( w == "bz_cryo_cannon" )
+	{
+		return "Cryo Cannon";
+	}
+	if ( w == "bz_multi_crossbow" )
+	{
+		return "Multi-Crossbow";
+	}
+	if ( w == "bz_blade_boomerang" )
+	{
+		return "Blade Boomerang";
+	}
+
+	is_upg = IsSubStr( w, "_upgraded" );
+	base = w;
+	if ( is_upg )
+	{
+		base = GetSubStr( w, 0, w.size - 9 );
+	}
+	if ( IsSubStr( base, "zombie_" ) && GetSubStr( base, 0, 7 ) == "zombie_" )
+	{
+		base = GetSubStr( base, 7, base.size );
+	}
+
+	label = base;
+	if ( base == "colt" ) { label = "M1911"; }
+	else if ( base == "thompson" ) { label = "Thompson"; }
+	else if ( base == "mp40" ) { label = "MP40"; }
+	else if ( base == "stg44" ) { label = "STG-44"; }
+	else if ( base == "bar" || base == "bar_bipod" ) { label = "BAR"; }
+	else if ( base == "30cal" || base == "30cal_bipod" ) { label = "Browning M1919"; }
+	else if ( base == "fg42" || base == "fg42_bipod" ) { label = "FG42"; }
+	else if ( base == "mg42" || base == "mg42_bipod" ) { label = "MG42"; }
+	else if ( base == "ppsh" ) { label = "PPSh-41"; }
+	else if ( base == "shotgun" ) { label = "M1897 Trench Gun"; }
+	else if ( base == "doublebarrel" ) { label = "Double-Barreled Shotgun"; }
+	else if ( base == "doublebarrel_sawed_grip" ) { label = "Sawed-Off Shotgun"; }
+	else if ( base == "gewehr43" ) { label = "Gewehr 43"; }
+	else if ( base == "m1carbine" ) { label = "M1A1 Carbine"; }
+	else if ( base == "m1garand" ) { label = "M1 Garand"; }
+	else if ( base == "m1garand_gl" || base == "m1garand_gl_zombie" ) { label = "M1 Garand w/ Launcher"; }
+	else if ( base == "kar98k" ) { label = "Kar98k"; }
+	else if ( base == "kar98k_scoped" || base == "kar98k_scoped_zombie" ) { label = "Scoped Kar98k"; }
+	else if ( base == "springfield" ) { label = "Springfield"; }
+	else if ( base == "sw_357" ) { label = ".357 Magnum"; }
+	else if ( base == "walther" ) { label = "Walther P38"; }
+	else if ( base == "type100_smg" ) { label = "Type 100"; }
+	else if ( base == "type99_lmg" ) { label = "Type 99"; }
+	else if ( base == "arisaka" ) { label = "Arisaka"; }
+	else if ( base == "ray_gun" ) { label = "Ray Gun"; }
+	else if ( base == "tesla_gun" ) { label = "Wunderwaffe DG-2"; }
+	else if ( base == "ptrs41_zombie" || base == "ptrs41" ) { label = "PTRS-41"; }
+	else if ( base == "m2_flamethrower_zombie" || base == "m2_flamethrower" ) { label = "M2 Flamethrower"; }
+	else if ( base == "panzerschrek" || base == "panzerschrek_zombie" ) { label = "Panzerschreck"; }
+	else if ( base == "colt_dirty_harry" ) { label = "M1911"; }
+
+	if ( is_upg )
+	{
+		return label + " (PaP)";
+	}
+	return label;
+}
+
 // Public UI sync seam for Chunk 3 modules (T4/T5/T6) and Station menu refreshes.
 // Uses per-player SetClientDvar exclusively so Co-op teammates are never affected.
 bz_stations_sync_player_ui( player, feedback )
@@ -1350,7 +1366,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 	else
 	{
-		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_weapon", "WEAPON: " + weapon_name );
+		bz_stations_set_client_dvar_cached( player, "ui_bz_pap_weapon", "WEAPON: " + bz_stations_get_weapon_display_name( weapon_name ) );
 	}
 
 	is_pap = valid_primary && bz_stations_is_weapon_pap( player, weapon_name );

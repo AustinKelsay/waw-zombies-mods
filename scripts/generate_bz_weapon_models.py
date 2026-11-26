@@ -56,6 +56,13 @@ CUSTOM_SPECIAL_WEAPON_WORLDMODELS: dict[str, str] = {
     "bz_war_club": "world_bz_war_club",
 }
 
+CUSTOM_STATION_XMODELS: tuple[str, ...] = (
+    "bz_station_perks_kiosk",
+    "bz_station_class_kiosk",
+    "bz_station_arsenal_kiosk",
+    "bz_station_pap_kiosk",
+)
+
 ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "viewmodel_bz_acid_sprayer",
     "world_bz_acid_sprayer",
@@ -72,6 +79,10 @@ ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "bz_portal_orb_air",
     "viewmodel_bz_war_club",
     "world_bz_war_club",
+    "bz_station_perks_kiosk",
+    "bz_station_class_kiosk",
+    "bz_station_arsenal_kiosk",
+    "bz_station_pap_kiosk",
 )
 
 ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
@@ -99,6 +110,12 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_club_wood",
     "mtl_bz_club_iron",
     "mtl_bz_club_glow",
+    "mtl_bz_kiosk_frame",
+    "mtl_bz_kiosk_brass",
+    "mtl_bz_kiosk_perks_glow",
+    "mtl_bz_kiosk_class_glow",
+    "mtl_bz_kiosk_arsenal_glow",
+    "mtl_bz_kiosk_pap_glow",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -1203,6 +1220,76 @@ def build_war_club_held(name: str, is_world: bool) -> MeshBuilder:
     return m
 
 
+def build_station_kiosk(name: str, kind: str) -> MeshBuilder:
+    """Tall color-coded 3D In-World Station Kiosk (rigid, z=0 floor flush, 0 added FX)."""
+    m = MeshBuilder(name, BONES_RIGID, model_type="rigid")
+    frame = "mtl_bz_kiosk_frame"
+    brass = "mtl_bz_kiosk_brass"
+    glow_by_kind = {
+        "perks": "mtl_bz_kiosk_perks_glow",
+        "class": "mtl_bz_kiosk_class_glow",
+        "arsenal": "mtl_bz_kiosk_arsenal_glow",
+        "pap": "mtl_bz_kiosk_pap_glow",
+    }
+    glow = glow_by_kind[kind]
+
+    # Heavy beveled steel floor plinth (flush at z=0 so floor-snap seats it cleanly)
+    m.add_box(frame, (-15.0, -21.0, 0.0), (15.0, 21.0, 6.0), bone_idx=0)
+    m.add_box(brass, (-13.5, -19.5, 6.0), (13.5, 19.5, 8.5), bone_idx=0)
+
+    if kind == "perks":
+        # Emerald/Amber Perk Vending Terminal: tall cabinet + 3 glowing vertical elixir tubes + canopy marquee
+        m.add_box(frame, (-12.0, -17.0, 8.5), (10.0, 17.0, 62.0), bone_idx=0)
+        m.add_box(brass, (-13.0, -18.5, 62.0), (13.5, 18.5, 66.0), bone_idx=0)
+        m.add_box(glow, (-10.0, -15.5, 66.0), (12.0, 15.5, 76.0), bone_idx=0)
+        m.add_box(frame, (-11.5, -17.5, 76.0), (12.5, 17.5, 80.0), bone_idx=0)
+        for ty in (-10.0, 0.0, 10.0):
+            m.add_tapered_prism(glow, (10.8, ty, 18.0), (10.8, ty, 56.0), 2.8, 2.8, sides=10, bone_idx=0)
+            m.add_tapered_prism(brass, (10.8, ty, 14.0), (10.8, ty, 18.5), 3.4, 3.2, sides=10, bone_idx=0)
+            m.add_tapered_prism(brass, (10.8, ty, 55.5), (10.8, ty, 60.0), 3.2, 3.4, sides=10, bone_idx=0)
+        m.add_box(glow, (9.8, -14.0, 11.0), (12.2, 14.0, 14.0), bone_idx=0)
+    elif kind == "class":
+        # Cobalt/Gold Class Altar Console: octagonal dais + angled lectern + twin gold crest pylons + floating crystal
+        m.add_tapered_prism(frame, (0.0, 0.0, 8.5), (0.0, 0.0, 42.0), 13.5, 9.5, sides=8, bone_idx=0)
+        m.add_box(brass, (-9.0, -14.0, 42.0), (12.0, 14.0, 47.0), bone_idx=0)
+        m.add_box(glow, (-7.0, -12.0, 47.0), (11.0, 12.0, 50.5), bone_idx=0)
+        for sy in (-16.5, 16.5):
+            m.add_tapered_prism(frame, (-2.0, sy, 8.5), (-2.0, sy, 66.0), 3.4, 2.4, sides=8, bone_idx=0)
+            m.add_tapered_prism(brass, (-2.0, sy, 66.0), (-2.0, sy, 74.0), 2.8, 0.6, sides=8, bone_idx=0)
+            m.add_box(glow, (1.0, sy - 1.2, 22.0), (3.0, sy + 1.2, 60.0), bone_idx=0)
+        _add_octa_sphere_core(m, glow, (0.0, 0.0, 66.0), 6.2, bone_idx=0)
+        _add_gyro_ring(m, brass, (0.0, 0.0, 66.0), 9.2, 0.75, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), segs=14, bone_idx=0)
+    elif kind == "arsenal":
+        # Cyan/Gunmetal Arsenal Weapon Locker & Workbench: armored rack + twin light masts + cyan display board
+        m.add_box(frame, (-12.0, -20.0, 8.5), (12.0, 20.0, 34.0), bone_idx=0)
+        m.add_box(brass, (-13.0, -21.0, 34.0), (14.0, 21.0, 37.5), bone_idx=0)
+        m.add_box(frame, (-11.0, -18.5, 37.5), (-2.0, 18.5, 68.0), bone_idx=0)
+        m.add_box(glow, (-2.0, -15.5, 42.0), (1.0, 15.5, 64.0), bone_idx=0)
+        # Rack crossbars across glowing weapon display
+        for rz in (46.0, 53.0, 60.0):
+            m.add_box(brass, (0.8, -14.0, rz), (3.2, 14.0, rz + 1.8), bone_idx=0)
+        for sy in (-19.5, 19.5):
+            m.add_tapered_prism(frame, (8.0, sy, 37.5), (8.0, sy, 72.0), 2.0, 1.6, sides=8, bone_idx=0)
+            m.add_box(glow, (5.5, sy - 2.0, 72.0), (11.5, sy + 2.0, 76.5), bone_idx=0)
+        m.add_box(frame, (-12.5, -20.5, 68.0), (11.0, 20.5, 72.0), bone_idx=0)
+        m.add_box(glow, (9.5, -17.0, 68.8), (11.8, 17.0, 71.2), bone_idx=0)
+    else:
+        # Violet/Crimson Pack-a-Punch Forge Console: vaulted chassis + intake bay + twin plasma coils + beacon spire
+        m.add_box(frame, (-13.0, -19.0, 8.5), (11.0, 19.0, 44.0), bone_idx=0)
+        m.add_box(glow, (8.5, -12.0, 24.0), (12.5, 12.0, 38.0), bone_idx=0)
+        m.add_box(brass, (9.0, -14.0, 21.0), (13.5, 14.0, 24.0), bone_idx=0)
+        m.add_box(brass, (9.0, -14.0, 38.0), (13.5, 14.0, 41.0), bone_idx=0)
+        m.add_box(frame, (-11.0, -15.0, 44.0), (9.0, 15.0, 66.0), bone_idx=0)
+        m.add_box(glow, (7.0, -11.5, 48.0), (10.5, 11.5, 62.0), bone_idx=0)
+        for sy in (-18.5, 18.5):
+            m.add_tapered_prism(glow, (0.0, sy, 14.0), (0.0, sy, 66.0), 3.0, 2.4, sides=10, bone_idx=0)
+            for cz in (24.0, 38.0, 52.0):
+                m.add_tapered_prism(brass, (0.0, sy, cz - 1.5), (0.0, sy, cz + 1.5), 3.9, 3.9, sides=10, bone_idx=0)
+        m.add_tapered_prism(brass, (0.0, 0.0, 66.0), (0.0, 0.0, 74.0), 10.0, 4.5, sides=8, bone_idx=0)
+        m.add_tapered_prism(glow, (0.0, 0.0, 74.0), (0.0, 0.0, 82.0), 4.2, 0.6, sides=8, bone_idx=0)
+    return m
+
+
 # ---------------------------------------------------------------------------
 # Procedural 32-bit Uncompressed TGA Texture Generator (Diffuse, Normal, Spec)
 # ---------------------------------------------------------------------------
@@ -1299,6 +1386,13 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_club_wood", "model phong", "wood", "wood_grain", (84, 48, 26), (44, 24, 12), (22, 18, 14), 78),
     MaterialSpec("mtl_bz_club_iron", "model phong", "metal", "corroded_metal", (54, 58, 64), (92, 98, 108), (58, 62, 68), 180),
     MaterialSpec("mtl_bz_club_glow", "model unlit", "glass", "amber_glow", (245, 118, 22), (255, 214, 110)),
+    # In-World Station Kiosks (Perks, Class Altar, Arsenal, Pack-a-Punch)
+    MaterialSpec("mtl_bz_kiosk_frame", "model phong", "metal", "panel_metal", (46, 52, 60), (78, 86, 98), (52, 56, 62), 180),
+    MaterialSpec("mtl_bz_kiosk_brass", "model phong", "metal", "brushed_metal", (198, 152, 62), (132, 94, 30), (64, 52, 24), 200),
+    MaterialSpec("mtl_bz_kiosk_perks_glow", "model unlit", "glass", "acid_glow", (36, 232, 138), (190, 255, 224)),
+    MaterialSpec("mtl_bz_kiosk_class_glow", "model unlit", "glass", "cryo_glow", (46, 152, 255), (196, 232, 255)),
+    MaterialSpec("mtl_bz_kiosk_arsenal_glow", "model unlit", "glass", "edge_glow", (44, 214, 240), (212, 248, 255)),
+    MaterialSpec("mtl_bz_kiosk_pap_glow", "model unlit", "glass", "portal_glow", (188, 48, 248), (255, 168, 236)),
 )
 
 
@@ -1637,6 +1731,10 @@ def build_all_meshes() -> list[MeshBuilder]:
         build_portal_orb_air(),
         build_war_club_held("viewmodel_bz_war_club", is_world=False),
         build_war_club_held("world_bz_war_club", is_world=True),
+        build_station_kiosk("bz_station_perks_kiosk", "perks"),
+        build_station_kiosk("bz_station_class_kiosk", "class"),
+        build_station_kiosk("bz_station_arsenal_kiosk", "arsenal"),
+        build_station_kiosk("bz_station_pap_kiosk", "pap"),
     ]
 
 

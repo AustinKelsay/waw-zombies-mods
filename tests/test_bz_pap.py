@@ -1295,8 +1295,8 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
         prompt2 = p2.get_field("bz_pap_prompt_hud")
         self.assertIsInstance(prompt1, FakeHudElem)
         self.assertIsInstance(prompt2, FakeHudElem)
-        self.assertEqual(prompt1.current_text, "Press [F] for Double Pack-a-Punch [Cost: 5000]")
-        self.assertEqual(prompt2.current_text, "Press [F] for Pack-a-Punch [Cost: 5000]")
+        self.assertEqual(prompt1.current_text, "Press [{+activate}] for Double Pack-a-Punch [Cost: 5000]")
+        self.assertEqual(prompt2.current_text, "Press [{+activate}] for Pack-a-Punch [Cost: 5000]")
         self.assertEqual(prompt1.get_field("alpha"), 1)
         self.assertEqual(prompt2.get_field("alpha"), 1)
         # Global trigger hint string was NEVER mutated for teammates!
@@ -1309,7 +1309,7 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
             )
         )
         self.assertEqual(prompt1.current_text, "Weapon Already Double Pack-a-Punched (PAP II)")
-        self.assertEqual(prompt2.current_text, "Press [F] for Pack-a-Punch [Cost: 5000]")
+        self.assertEqual(prompt2.current_text, "Press [{+activate}] for Pack-a-Punch [Cost: 5000]")
 
         # P1 walks away (> 110u) -> P1 prompt hides, P2 prompt stays visible
         p1.set_field("origin", GscArray([500, 500, 153]))

@@ -449,6 +449,11 @@ class BzGscRuntime(GscRuntime):
                     trace.set_item("fraction", 1.0)
                     trace.set_item("position", end)
             return True, trace
+        if name_lower == "getsubstr":
+            s = _waw_to_str(args[0]) if len(args) > 0 else ""
+            start = int(args[1]) if len(args) > 1 else 0
+            end = int(args[2]) if len(args) > 2 else len(s)
+            return True, s[start:end]
         if name_lower in ("playsoundatposition", "earthquake", "playfx"):
             return True, UNDEFINED
         if name_lower == "spawnfx":

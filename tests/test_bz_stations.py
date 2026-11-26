@@ -344,15 +344,11 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
                 f"Expected {expected_count} station script_models on {map_name}",
             )
             models_by_station = {mdl.get_field("bz_station_id"): mdl.get_field("model") for mdl in models}
-            if map_name == "nazi_zombie_prototype":
-                self.assertEqual(models_by_station["perks"], "static_berlin_ger_radio")
-                self.assertEqual(models_by_station["class"], "dest_peleliu_generator_mobile_dmg0")
-                self.assertEqual(models_by_station["arsenal"], "german_grenade_bag")
-                self.assertEqual(models_by_station["pap"], "global_explosive_barrel_japanese")
-            else:
-                self.assertEqual(models_by_station["arsenal"], "zombie_treasure_box")
-                if map_name == "nazi_zombie_factory":
-                    self.assertEqual(models_by_station["class"], "zombie_vending_revive_on")
+            self.assertEqual(models_by_station["perks"], "bz_station_perks_kiosk")
+            self.assertEqual(models_by_station["class"], "bz_station_class_kiosk")
+            self.assertEqual(models_by_station["arsenal"], "bz_station_arsenal_kiosk")
+            if "pap" in models_by_station:
+                self.assertEqual(models_by_station["pap"], "bz_station_pap_kiosk")
 
             for mdl in models:
                 self.assertEqual(
@@ -416,10 +412,10 @@ class TestBzStationProximityPrompt(unittest.TestCase):
 
     def test_moving_between_stations_updates_text_and_color_on_one_client_hud(self) -> None:
         cases = (
-            ((-140, 460, 24), "[PERKS] Specialty Perk Station - Press [F]", (1.0, 0.35, 0.35)),
-            ((-140, 320, 24), "[CLASS] Class Altar - Press [F]", (0.35, 0.85, 1.0)),
-            ((150, 460, 24), "[ARSENAL] Arsenal & Squad Station - Press [F]", (0.45, 1.0, 0.55)),
-            ((150, 320, 24), "[PAP] Pack-a-Punch Station - Press [F]", (1.0, 0.85, 0.30)),
+            ((-140, 460, 24), "[PERKS] Specialty Perk Station - Press [{+activate}]", (1.0, 0.35, 0.35)),
+            ((-140, 320, 24), "[CLASS] Class Altar - Press [{+activate}]", (0.35, 0.85, 1.0)),
+            ((150, 460, 24), "[ARSENAL] Arsenal & Squad Station - Press [{+activate}]", (0.45, 1.0, 0.55)),
+            ((150, 320, 24), "[PAP] Pack-a-Punch Station - Press [{+activate}]", (1.0, 0.85, 0.30)),
         )
         self.assertEqual(self.gsc.hud_elems, [])
         for origin, label, color in cases:
@@ -1076,6 +1072,39 @@ class TestBzStationMenusManifestAndWaw17Compliance(unittest.TestCase):
             _ast_contains_method_call(hooks_mod["bz_on_item_purchased"].body, "endon"),
             "Forbidden endon() inside synchronous caller bz_on_item_purchased()",
         )
+
+    def test_p2o_t9_human_weapon_names_aligned_footers_and_phase3_visibility(self) -> None:
+        import build_mod as bm
+
+        gsc = BzGscRuntime(MOD_ROOT, FakeDvarStore())
+        expected_names = {
+            "bz_acid_sprayer": "Acid Sprayer",
+            "bz_cryo_cannon": "Cryo Cannon",
+            "bz_multi_crossbow": "Multi-Crossbow",
+            "bz_blade_boomerang": "Blade Boomerang",
+            "zombie_thompson": "Thompson",
+            "zombie_thompson_upgraded": "Thompson (PaP)",
+            "ray_gun_upgraded": "Ray Gun (PaP)",
+            "tesla_gun": "Wunderwaffe DG-2",
+        }
+        for raw_w, display_w in expected_names.items():
+            self.assertEqual(gsc.call(BZ_STATIONS_MOD, "bz_stations_get_weapon_display_name", raw_w), display_w)
+
+        # Per-menu build-parity footer rect matches each panel's bottom border
+        pap_stamped = bm.stamp_bz_station_menu_build_parity(
+            (MOD_ROOT / "ui" / "bz_station_pap.menu").read_text(encoding="latin1"),
+            "0.9.0-test",
+        )
+        self.assertIn("rect\t\t\t86 404 468 14", pap_stamped)
+        perks_stamped = bm.stamp_bz_station_menu_build_parity(
+            (MOD_ROOT / "ui" / "bz_station_perks.menu").read_text(encoding="latin1"),
+            "0.9.0-test",
+        )
+        self.assertIn("rect\t\t\t28 456 584 14", perks_stamped)
+
+        # Phase 3 companions banner hides cleanly when bz_companions_enabled == 0
+        arsenal_text = (MOD_ROOT / "ui" / "bz_station_arsenal.menu").read_text(encoding="latin1")
+        self.assertGreaterEqual(arsenal_text.count('dvarInt( "bz_companions_enabled" ) == 1'), 3)
 
 
 if __name__ == "__main__":

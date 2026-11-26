@@ -123,7 +123,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Juggernog (2500)"
+			text			"Juggernog"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -166,7 +166,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Speed Cola (3000)"
+			text			"Speed Cola"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -209,7 +209,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Double Tap (2000)"
+			text			"Double Tap"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -252,7 +252,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Quick Revive (1500)"
+			text			"Quick Revive"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -295,7 +295,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Stamin-Up (2000)"
+			text			"Stamin-Up"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -338,7 +338,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Mule Kick (4000)"
+			text			"Mule Kick"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -381,7 +381,7 @@
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.88 1.0 0.35
-			text			"Armor Piercing (3000)"
+			text			"Armor Piercing"
 			textfont		UI_FONT_NORMAL
 			textscale		0.23
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -421,7 +421,7 @@
 			name			"bz_col2_hdr"
 			type			ITEM_TYPE_TEXT
 			rect			222 72 196 18
-			text			"PERK TIER 2 (5000 EACH)"
+			text			"PERK TIER 2 UPGRADES"
 			textfont		UI_FONT_NORMAL
 			textscale		0.26
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -741,7 +741,7 @@
 			name			"bz_col3_hdr"
 			type			ITEM_TYPE_TEXT
 			rect			430 72 184 18
-			text			"APEX PERKS (8000 EACH)"
+			text			"APEX PERKS"
 			textfont		UI_FONT_NORMAL
 			textscale		0.26
 			textstyle		ITEM_TEXTSTYLE_SHADOWED

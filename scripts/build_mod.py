@@ -1910,6 +1910,15 @@ def stamp_bz_station_menu_build_parity(menu_text: str, build_id: str) -> str:
     if match is None:
         raise ValueError("Could not locate closing menuDef brace in Base Zombies station menu")
 
+    # Align build parity footer directly beneath each station menu's panel border
+    footer_rect = "28 456 584 14"
+    if '"bz_station_pap"' in menu_text:
+        footer_rect = "86 404 468 14"
+    elif '"bz_station_class"' in menu_text:
+        footer_rect = "38 452 564 14"
+    elif '"bz_station_arsenal"' in menu_text:
+        footer_rect = "34 465 572 14"
+
     snippet = (
         f"{newline}"
         f"\t\t// Build-stamped local mod.ff fingerprint & retail-visible host parity alert{newline}"
@@ -1917,7 +1926,7 @@ def stamp_bz_station_menu_build_parity(menu_text: str, build_id: str) -> str:
         f"\t\t{{{newline}"
         f'\t\t\tname\t\t\t"bz_parity_ok"{newline}'
         f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
-        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f"\t\t\trect\t\t\t{footer_rect}{newline}"
         f'\t\t\ttext\t\t\t"BUILD: {build_id}"{newline}'
         f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
         f"\t\t\ttextscale\t\t0.22{newline}"
@@ -1932,7 +1941,7 @@ def stamp_bz_station_menu_build_parity(menu_text: str, build_id: str) -> str:
         f"\t\t{{{newline}"
         f'\t\t\tname\t\t\t"bz_parity_mismatch"{newline}'
         f"\t\t\ttype\t\t\tITEM_TYPE_TEXT{newline}"
-        f"\t\t\trect\t\t\t28 465 584 14{newline}"
+        f"\t\t\trect\t\t\t{footer_rect}{newline}"
         f'\t\t\texp\t\t\t\ttext( "BUILD MISMATCH! LOCAL {build_id} != HOST " + dvarString( "bz_host_build_id" ) );{newline}'
         f"\t\t\ttextfont\t\tUI_FONT_NORMAL{newline}"
         f"\t\t\ttextscale\t\t0.22{newline}"

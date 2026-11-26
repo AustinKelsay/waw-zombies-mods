@@ -79,6 +79,16 @@ bz_state_get_score_safe( player )
 	return pts;
 }
 
+bz_state_norm( val )
+{
+	return maps\_bz_rules::bz_normalize_id( val );
+}
+
+bz_state_gear_price( id )
+{
+	return maps\_bz_rules::bz_get_special_gear_price( id );
+}
+
 bz_make_purchase_result( status, item_id, cost, remaining_score )
 {
 	res = SpawnStruct();
@@ -104,7 +114,7 @@ bz_state_has_perk( player, perk_id )
 		return false;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_state_norm( perk_id );
 	if ( id == "" )
 	{
 		return false;
@@ -120,7 +130,7 @@ bz_state_has_perk_t2( player, perk_id )
 		return false;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_state_norm( perk_id );
 	if ( id == "" )
 	{
 		return false;
@@ -136,7 +146,7 @@ bz_state_has_apex( player, apex_id )
 		return false;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( apex_id );
+	id = bz_state_norm( apex_id );
 	if ( id == "" )
 	{
 		return false;
@@ -167,7 +177,7 @@ bz_state_mark_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_state_norm( weapon_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -184,7 +194,7 @@ bz_state_unmark_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_state_norm( weapon_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -206,7 +216,7 @@ bz_state_is_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = maps\_bz_rules::bz_normalize_id( weapon_name );
+	norm = bz_state_norm( weapon_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -222,7 +232,7 @@ bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
 		return false;
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( upgrade_id );
+	id = bz_state_norm( upgrade_id );
 	if ( id == "double_pap" )
 	{
 		return bz_state_is_weapon_double_pap( player, weapon_name );
@@ -389,7 +399,7 @@ bz_try_buy_perk( player, perk_id )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_state_norm( perk_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_standard_perk_price( id );
 	if ( !IsDefined( cost ) )
@@ -419,7 +429,7 @@ bz_try_buy_perk_t2( player, perk_id )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( perk_id );
+	id = bz_state_norm( perk_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_perk_t2_price( id );
 	if ( !IsDefined( cost ) )
@@ -455,7 +465,7 @@ bz_try_buy_apex( player, apex_id )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( apex_id );
+	id = bz_state_norm( apex_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_apex_perk_price( id );
 	if ( !IsDefined( cost ) )
@@ -490,7 +500,7 @@ bz_try_buy_class( player, class_id )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( class_id );
+	id = bz_state_norm( class_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_class_price( id );
 	if ( !IsDefined( cost ) )
@@ -530,7 +540,7 @@ bz_try_buy_pap_upgrade( player, upgrade_id, weapon_name, has_prereq )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( upgrade_id );
+	id = bz_state_norm( upgrade_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_pap_upgrade_price( id );
 	if ( !IsDefined( cost ) )
@@ -540,7 +550,7 @@ bz_try_buy_pap_upgrade( player, upgrade_id, weapon_name, has_prereq )
 
 	if ( id == "double_pap" )
 	{
-		norm_weap = maps\_bz_rules::bz_normalize_id( weapon_name );
+		norm_weap = bz_state_norm( weapon_name );
 		if ( norm_weap != "" && bz_state_is_weapon_double_pap( player, norm_weap ) )
 		{
 			return bz_make_purchase_result( "already_owned", id, cost, score );
@@ -617,7 +627,7 @@ bz_try_buy_element_weapon( player, item_id, already_has_weapon )
 		return bz_make_purchase_result( "invalid_item", "", 0, 0 );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( item_id );
+	id = bz_state_norm( item_id );
 	score = bz_state_get_score_safe( player );
 	cost = maps\_bz_rules::bz_get_element_weapon_price( id );
 	if ( !IsDefined( cost ) )
@@ -665,7 +675,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 		bz_state_sync_bowie_ownership( player, true );
 	}
 
-	id = maps\_bz_rules::bz_normalize_id( item_id );
+	id = bz_state_norm( item_id );
 	score = bz_state_get_score_safe( player );
 
 	if ( id == "war_club" )
@@ -682,7 +692,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 			return swap_res;
 		}
 
-		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		cost = bz_state_gear_price( id );
 		if ( score < cost )
 		{
 			return bz_make_purchase_result( "insufficient_points", id, cost, score );
@@ -698,7 +708,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 	{
 		if ( !bz_state_owns_bowie( player ) )
 		{
-			cost = maps\_bz_rules::bz_get_special_gear_price( id );
+			cost = bz_state_gear_price( id );
 			if ( score < cost )
 			{
 				return bz_make_purchase_result( "insufficient_points", id, cost, score );
@@ -721,7 +731,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 
 	if ( id == "pap_war_club" )
 	{
-		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		cost = bz_state_gear_price( id );
 		if ( bz_state_has_pap_war_club( player ) )
 		{
 			return bz_make_purchase_result( "already_owned", id, cost, score );
@@ -743,7 +753,7 @@ bz_try_buy_special_gear( player, item_id, owns_bowie_override )
 
 	if ( id == "portal_grenade" )
 	{
-		cost = maps\_bz_rules::bz_get_special_gear_price( id );
+		cost = bz_state_gear_price( id );
 		if ( bz_state_owns_portal_grenade( player ) )
 		{
 			return bz_make_purchase_result( "already_owned", id, cost, score );
