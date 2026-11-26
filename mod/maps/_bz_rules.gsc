@@ -330,9 +330,20 @@ bz_get_element_weapon_cost( item_id )
 	return undefined;
 }
 
+bz_is_infinite_single_item_weapon( weapon_name )
+{
+	weap = bz_normalize_id( weapon_name );
+	return weap == "bz_blade_boomerang";
+}
+
 bz_get_element_ammo_cost( item_id )
 {
-	cost = bz_get_element_weapon_cost( item_id );
+	id = bz_normalize_id( item_id );
+	if ( id == "blade_boomerang" || id == "bz_blade_boomerang" )
+	{
+		return 0;
+	}
+	cost = bz_get_element_weapon_cost( id );
 	if ( !IsDefined( cost ) )
 	{
 		return 0;
@@ -341,8 +352,9 @@ bz_get_element_ammo_cost( item_id )
 }
 
 // Canonical 1x base reserve stock for the 4 cloned Elemental Weapons.
-// Their weaponfiles set maxAmmo = 3 * base (360/288/108/60) so WaW 1.7's
+// Their weaponfiles set maxAmmo = 3 * base (360/288/108) so WaW 1.7's
 // SetWeaponAmmoStock clamp allows full Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x.
+// Blade Boomerang is a single infinite-use throwable item (clipSize=1, maxAmmo=0).
 bz_get_element_base_reserve( weapon_name )
 {
 	weap = bz_normalize_id( weapon_name );
@@ -360,7 +372,7 @@ bz_get_element_base_reserve( weapon_name )
 	}
 	if ( weap == "bz_blade_boomerang" )
 	{
-		return 20;
+		return 0;
 	}
 	return 0;
 }
@@ -1218,6 +1230,17 @@ bz_get_cryo_shatter_splash_radius( is_pap, is_dpap )
 	return 96;
 }
 
+bz_get_cryo_chain_config( is_pap, is_dpap )
+{
+	cfg = SpawnStruct();
+	cfg.max_chain = bz_get_cryo_max_chain( is_pap, is_dpap );
+	cfg.chain_radius = bz_get_cryo_chain_radius_start( is_pap, is_dpap );
+	cfg.chain_decay = bz_get_cryo_chain_radius_decay();
+	cfg.splash_radius = bz_get_cryo_shatter_splash_radius( is_pap, is_dpap );
+	cfg.duration = bz_get_cryo_freeze_duration();
+	return cfg;
+}
+
 bz_calc_acid_direct_damage( round_num, zombie_health, is_pap, is_dpap )
 {
 	zhp = bz_resolve_zombie_health( round_num, zombie_health );
@@ -1290,13 +1313,17 @@ bz_calc_cryo_blast_damage( round_num, zombie_health, is_pap, is_dpap )
 	return dmg;
 }
 
-bz_calc_crossbow_impact_damage( round_num, zombie_health, is_double_pap )
+bz_calc_crossbow_impact_damage( round_num, zombie_health, is_double_pap, is_pap )
 {
 	zhp = bz_resolve_zombie_health( round_num, zombie_health );
 	dmg = Int( zhp * 0.55 );
 	if ( dmg < 500 )
 	{
 		dmg = 500;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		dmg = Int( dmg * 1.50 );
 	}
 	if ( bz_is_true( is_double_pap ) )
 	{
@@ -1409,13 +1436,30 @@ bz_get_crossbow_bolt_count()
 	return 3;
 }
 
-bz_calc_crossbow_bolt_damage( round_num, zombie_health, is_double_pap )
+bz_get_crossbow_blast_radius( is_pap, is_double_pap )
+{
+	if ( bz_is_true( is_double_pap ) )
+	{
+		return 176;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		return 144;
+	}
+	return 112;
+}
+
+bz_calc_crossbow_bolt_damage( round_num, zombie_health, is_double_pap, is_pap )
 {
 	zhp = bz_resolve_zombie_health( round_num, zombie_health );
 	dmg = Int( zhp * 0.80 );
 	if ( dmg < 900 )
 	{
 		dmg = 900;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		dmg = Int( dmg * 1.50 );
 	}
 	if ( bz_is_true( is_double_pap ) )
 	{
@@ -1424,18 +1468,30 @@ bz_calc_crossbow_bolt_damage( round_num, zombie_health, is_double_pap )
 	return dmg;
 }
 
-bz_get_boomerang_max_pierce()
+bz_get_boomerang_max_pierce( is_pap, is_double_pap )
 {
+	if ( bz_is_true( is_double_pap ) )
+	{
+		return 12;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		return 9;
+	}
 	return 6;
 }
 
-bz_calc_boomerang_damage( round_num, zombie_health, is_double_pap )
+bz_calc_boomerang_damage( round_num, zombie_health, is_double_pap, is_pap )
 {
 	zhp = bz_resolve_zombie_health( round_num, zombie_health );
 	dmg = Int( zhp * 0.75 );
 	if ( dmg < 800 )
 	{
 		dmg = 800;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		dmg = Int( dmg * 1.50 );
 	}
 	if ( bz_is_true( is_double_pap ) )
 	{
@@ -1479,6 +1535,7 @@ bz_rules_get_stations_api()
 	api.bz_get_special_gear_price = ::bz_get_special_gear_price;
 	api.bz_get_standard_perk_ids = ::bz_get_standard_perk_ids;
 	api.bz_get_standard_perk_price = ::bz_get_standard_perk_price;
+	api.bz_is_infinite_single_item_weapon = ::bz_is_infinite_single_item_weapon;
 	api.bz_normalize_id = ::bz_normalize_id;
 	return api;
 }
