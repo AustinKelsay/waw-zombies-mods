@@ -810,6 +810,15 @@ bz_pap_apply_melee_upgrade( player, upgrade_id )
 	else if ( id == "pap_bowie" )
 	{
 		player.bz_pap_bowie = true;
+		player.bz_owns_bowie = true;
+		player.bz_has_bowie = true;
+		SetDvar( "perk_altMeleeDamage", 1000 );
+		if ( maps\_bz_state::bz_state_get_melee_slot( player ) != "war_club" )
+		{
+			player.bz_melee_slot = "bowie";
+			player SetPerk( "specialty_altmelee" );
+			player.has_altmelee = true;
+		}
 		effect = "bowie_instant_kill";
 	}
 	else
@@ -1875,6 +1884,15 @@ bz_pap_on_actor_damage( zombie, ctx )
 	// Defers cleanly when the player currently has the Phase 2 War Club equipped in their melee slot.
 	if ( mod == "mod_melee" )
 	{
+		if ( attacker HasPerk( "specialty_altmelee" ) || ( IsDefined( attacker.has_altmelee ) && attacker.has_altmelee ) )
+		{
+			maps\_bz_state::bz_state_sync_bowie_ownership( attacker, true );
+			if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) == "war_club" )
+			{
+				attacker.bz_melee_slot = "bowie";
+			}
+		}
+
 		if ( maps\_bz_state::bz_state_get_melee_slot( attacker ) == "war_club" )
 		{
 			return;

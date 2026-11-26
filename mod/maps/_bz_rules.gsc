@@ -365,6 +365,11 @@ bz_get_element_base_reserve( weapon_name )
 	return 0;
 }
 
+bz_get_bowie_knife_price()
+{
+	return 3000;
+}
+
 bz_get_special_gear_price( item_id )
 {
 	id = bz_normalize_id( item_id );
@@ -380,6 +385,10 @@ bz_get_special_gear_price( item_id )
 	{
 		// Portal Grenade uses the tuned 5,000-point cap.
 		return 5000;
+	}
+	if ( id == "equip_bowie" )
+	{
+		return bz_get_bowie_knife_price();
 	}
 
 	return undefined;

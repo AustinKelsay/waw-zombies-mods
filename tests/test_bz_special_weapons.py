@@ -640,6 +640,26 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertGreater(z_neighbor.get_pos()[0], 150.0)
         self.assertEqual(len(gsc.earthquakes), 1)
 
+        # Alive high-round primary hit via post-hit bz_global_damage_wrapper must NOT lose 150 HP to double subtraction!
+        z_live_primary = SpecialFakeEntity("ZLivePrimary", ent_num=73, is_player=False)
+        z_live_primary.set_field("health", 2500)
+        z_live_primary.set_field("maxhealth", 2650)
+        z_live_primary.set_field("damagetaken", 150)
+        z_live_primary.set_pos(48.0, 0.0, 0.0)
+        gsc.ai_enemies.append(z_live_primary)
+        gsc.call_on(
+            z_live_primary,
+            BZ_HOOKS_MOD,
+            "bz_global_damage_wrapper",
+            "MOD_MELEE",
+            "torso_upper",
+            GscArray([48.0, 0.0, 0.0]),
+            p1,
+        )
+        self.assertEqual(len(z_live_primary.damage_events), 1)
+        self.assertGreaterEqual(z_live_primary.damage_events[0]["damage"], 2500)
+        self.assertLessEqual(z_live_primary.get_field("health"), 0)
+
         # Now simulate buying stock Bowie Knife off the wall AFTER equipping War Club
         p1.give_perk("specialty_altmelee")
         p1.set_field("has_altmelee", True)
