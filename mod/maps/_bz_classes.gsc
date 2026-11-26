@@ -230,6 +230,16 @@ bz_class_update_hud( player )
 		bz_class_destroy_hud( player );
 		return undefined;
 	}
+	if ( active_class == "sapper" && IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
+	{
+		frag = bz_class_get_frag_weapon( player );
+		cur_clip = Int( player GetWeaponAmmoClip( frag ) );
+		if ( cur_clip < 0 )
+		{
+			cur_clip = 0;
+		}
+		badge_text = badge_text + " | GREN: " + cur_clip + "+" + Int( player.bz_sapper_grenade_reserve );
+	}
 
 	if ( !IsDefined( player.bz_class_hud ) )
 	{
@@ -926,23 +936,14 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		return 0;
 	}
 
-	if ( maps\_bz_rules::bz_is_infinite_single_item_weapon( weap ) )
-	{
-		return 0;
-	}
-
 	clip_size = Int( WeaponClipSize( weap ) );
 	if ( clip_size <= 0 )
 	{
 		return 0;
 	}
 
-	max_stock = maps\_bz_rules::bz_get_element_base_reserve( weap );
+	max_stock = maps\_bz_rules::bz_get_canonical_base_reserve( weap, WeaponMaxAmmo( weap ) );
 	if ( !IsDefined( max_stock ) || Int( max_stock ) <= 0 )
-	{
-		max_stock = Int( WeaponMaxAmmo( weap ) );
-	}
-	if ( max_stock <= 0 )
 	{
 		return 0;
 	}
@@ -1458,6 +1459,7 @@ bz_sapper_set_grenades( player, total_count )
 		reserve = 0;
 	}
 	player.bz_sapper_grenade_reserve = reserve;
+	bz_class_update_hud( player );
 	return actual_clip + reserve;
 }
 
@@ -1516,6 +1518,7 @@ bz_sapper_on_grenade_thrown( player, weap_name )
 		player.bz_sapper_grenade_reserve = Int( player.bz_sapper_grenade_reserve ) - 1;
 		cur_clip = Int( player GetWeaponAmmoClip( frag ) );
 		player SetWeaponAmmoClip( frag, cur_clip + 1 );
+		bz_class_update_hud( player );
 	}
 	return bz_sapper_get_total_grenades( player );
 }

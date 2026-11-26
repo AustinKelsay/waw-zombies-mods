@@ -975,6 +975,97 @@ bz_get_max_primary_weapons( player )
 }
 
 // ---------------------------------------------------------------------------
+// Unified Reserve Ammo Cap & Strict 1x Classic Mode Clamp (ADR-0005)
+// ---------------------------------------------------------------------------
+
+// Returns the exact effective reserve cap for weapon_name:
+//   - Classic Mode (bz_enabled == 0): strictly 1x canonical stock reserve
+//   - Base Zombies: 1x base, 1.5x Double PaP, 2.0x Double Ammo, 3.0x both
+bz_get_effective_max_stock( player, weapon_name )
+{
+	if ( !IsDefined( weapon_name ) || weapon_name == "" || weapon_name == "none" )
+	{
+		return 0;
+	}
+	engine_max = Int( WeaponMaxAmmo( weapon_name ) );
+	base_max = maps\_bz_rules::bz_get_canonical_base_reserve( weapon_name, engine_max );
+	if ( base_max <= 0 )
+	{
+		return 0;
+	}
+	if ( !bz_enabled() || !IsDefined( player ) )
+	{
+		return base_max;
+	}
+
+	has_double_ammo = bz_perks_enabled() && bz_has_apex_safe( player, "double_ammo" );
+	is_double_pap = bz_pap_enabled() && bz_is_double_pap_safe( player, weapon_name );
+	mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_double_pap );
+	return Int( base_max * mult );
+}
+
+// Normalizes reserve stock right after GiveMaxAmmo() / weapon pickup / Max Ammo.
+// In Classic Mode, silently clamps 3x-staged stock weapons strictly to 1x with zero BZ side effects.
+bz_normalize_weapon_stock( player, weapon_name )
+{
+	if ( !IsDefined( player ) || !IsDefined( weapon_name ) || weapon_name == "" || weapon_name == "none" )
+	{
+		return 0;
+	}
+	if ( !player HasWeapon( weapon_name ) )
+	{
+		return 0;
+	}
+
+	eff_max = bz_get_effective_max_stock( player, weapon_name );
+	cur_stock = Int( player GetWeaponAmmoStock( weapon_name ) );
+
+	if ( !bz_enabled() )
+	{
+		if ( eff_max >= 0 && cur_stock > eff_max )
+		{
+			player SetWeaponAmmoStock( weapon_name, eff_max );
+			return eff_max;
+		}
+		return cur_stock;
+	}
+
+	player SetWeaponAmmoStock( weapon_name, eff_max );
+	return eff_max;
+}
+
+// Normalizes all primary weapons for all players (called unconditionally at end of full_ammo_powerup
+// so Classic Mode Max Ammo always enforces exact 1x stock reserve across all 72 staged stock weapons).
+bz_normalize_all_player_stocks()
+{
+	players = GetPlayers();
+	if ( !IsDefined( players ) )
+	{
+		return 0;
+	}
+	updated = 0;
+	for ( i = 0; i < players.size; i++ )
+	{
+		p = players[i];
+		if ( !IsDefined( p ) )
+		{
+			continue;
+		}
+		primaries = p GetWeaponsListPrimaries();
+		if ( !IsDefined( primaries ) )
+		{
+			continue;
+		}
+		for ( j = 0; j < primaries.size; j++ )
+		{
+			bz_normalize_weapon_stock( p, primaries[j] );
+			updated++;
+		}
+	}
+	return updated;
+}
+
+// ---------------------------------------------------------------------------
 // Chainable Player Damage Override Seam (Second Chance, Blast Shield, Daredevil)
 // ---------------------------------------------------------------------------
 
