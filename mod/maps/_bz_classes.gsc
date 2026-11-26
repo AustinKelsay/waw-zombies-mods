@@ -926,6 +926,11 @@ bz_medic_grant_reserve_ammo( target_player, mag_fraction )
 		return 0;
 	}
 
+	if ( maps\_bz_rules::bz_is_infinite_single_item_weapon( weap ) )
+	{
+		return 0;
+	}
+
 	clip_size = Int( WeaponClipSize( weap ) );
 	if ( clip_size <= 0 )
 	{

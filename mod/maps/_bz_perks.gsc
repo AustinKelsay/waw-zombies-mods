@@ -1207,7 +1207,7 @@ bz_perks_strip_excess_mule_weapons( player, target_cap )
 bz_perks_calc_weapon_max_reserve( player, weapon_name )
 {
 	w = bz_normalize_id( weapon_name );
-	if ( w == "" || w == "none" )
+	if ( w == "" || w == "none" || maps\_bz_rules::bz_is_infinite_single_item_weapon( w ) )
 	{
 		return 0;
 	}

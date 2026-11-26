@@ -1058,6 +1058,84 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         self.assertEqual(p1_blade.delete_count, 1)
         self.assertEqual(p2_blade.delete_count, 1)
 
+    def test_tier1_pap_scales_crossbow_and_boomerang_and_boomerang_is_infinite_single_item(self) -> None:
+        _dvars, gsc, player = _setup_special_env(map_name="nazi_zombie_prototype")
+        gsc.level.set_field("round_number", 16)
+        gsc.level.set_field("zombie_health", 2000)
+        gsc.call(BZ_HOOKS_MOD, "bz_on_round_start", 16)
+        gsc.sim_time_ms = 5000
+
+        player.set_pos(0.0, 0.0, 0.0)
+        player.set_angles(0.0, 0.0, 0.0)
+        player.give_weapon("bz_multi_crossbow", make_current=True)
+        player.give_weapon("bz_blade_boomerang")
+        player.weapon_clips = {"bz_blade_boomerang": 0}
+        player.weapon_stocks = {"bz_blade_boomerang": 0}
+
+        # 1. Tier 1 PaP boosts Multi-Crossbow impact/blast damage (1.50x) & blast radius (112 -> 144)
+        gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_multi_crossbow")
+        z_t1 = SpecialFakeEntity("ZXbowT1", ent_num=88, is_player=False)
+        z_t1.set_field("health", 5000)
+        z_t1.set_pos(200.0, 0.0, 0.0)
+        gsc.ai_enemies.append(z_t1)
+        bolt = SpecialFakeEntity("BoltT1", ent_num=89, is_player=False)
+        bolt.set_pos(200.0, 0.0, 0.0)
+        bolt.set_field("bz_detonated", False)
+        bolt.set_field("bz_is_pap", True)
+        bolt.set_field("bz_is_double_pap", False)
+        res_t1 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, bolt, False, 16)
+        self.assertEqual(res_t1.get_field("damage"), 2400)  # 1600 * 1.50
+        self.assertEqual(res_t1.get_field("radius"), 144)
+
+        # Double PaP stacks cleanly on top of Tier 1 PaP -> 1600 * 1.50 * 1.75 = 4200, radius 176
+        gsc.call(BZ_STATE_MOD, "bz_state_mark_weapon_double_pap", player, "bz_multi_crossbow")
+        bolt2 = SpecialFakeEntity("BoltT2", ent_num=90, is_player=False)
+        bolt2.set_pos(200.0, 0.0, 0.0)
+        bolt2.set_field("bz_detonated", False)
+        bolt2.set_field("bz_is_pap", True)
+        bolt2.set_field("bz_is_double_pap", True)
+        res_t2 = gsc.call(BZ_SPECIAL_MOD, "bz_special_detonate_crossbow_bolt", player, bolt2, True, 16)
+        self.assertEqual(res_t2.get_field("damage"), 4200)
+        self.assertEqual(res_t2.get_field("radius"), 176)
+
+        # 2. Tier 1 PaP boosts Blade Boomerang damage (1.50x -> 2250), pierce (6 -> 9), and flight speed
+        gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_blade_boomerang")
+        player.weapon_clips["bz_blade_boomerang"] = 0  # engine consumes the single boomerang from clip on throw
+        throw_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        self.assertEqual(throw_res.get_field("damage"), 2250)  # 1500 * 1.50
+        self.assertEqual(throw_res.get_field("max_pierce"), 9)
+        self.assertTrue(player.get_field("bz_boomerang_in_flight"))
+
+        # Even if player sprints 300u away behind a wall during return, infinite boomerang returns to hand (clip 0 -> 1, stock 0)!
+        player.set_pos(300.0, 250.0, 0.0)
+        gsc.trace_handler = lambda s, e, hc, ig: {"fraction": 0.4, "position": s}
+        ret = gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_run_boomerang_flight",
+            player,
+            throw_res.get_field("blade"),
+            throw_res.get_field("start_pos"),
+            throw_res.get_field("apex"),
+            throw_res.get_field("damage"),
+            throw_res.get_field("max_pierce"),
+        )
+        self.assertTrue(ret.get_field("caught"))
+        self.assertTrue(ret.get_field("refilled_clip"))
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
+        self.assertEqual(player.weapon_stocks["bz_blade_boomerang"], 0)
+        self.assertFalse(bool(player.get_field("bz_boomerang_in_flight")))
+
+        # Failsafe recovery restores clip 0 -> 1 if flight ever aborted or exceeded 1350ms
+        player.weapon_clips["bz_blade_boomerang"] = 0
+        player.set_field("bz_boomerang_in_flight", True)
+        player.set_field("bz_boomerang_throw_time", 5000)
+        gsc.sim_time_ms = 5800
+        self.assertFalse(gsc.call(BZ_SPECIAL_MOD, "bz_special_ensure_boomerang_recovered", player, False))
+        gsc.sim_time_ms = 6500
+        self.assertTrue(gsc.call(BZ_SPECIAL_MOD, "bz_special_ensure_boomerang_recovered", player, False))
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
+        self.assertEqual(player.weapon_stocks["bz_blade_boomerang"], 0)
+
 
 class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
     """Seam 4: Portal Grenade +actionslot 2 binding, cooldown/charges, squad warp & zombie exclusion."""
@@ -1505,6 +1583,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         for child_fn in (
             "bz_special_watch_portal_command",
             "bz_special_watch_portal_notify",
+            "bz_special_watch_boomerang_recovery",
             "bz_special_watch_player_disconnect",
             "bz_special_watch_max_ammo",
         ):

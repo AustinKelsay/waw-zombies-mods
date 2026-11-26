@@ -732,76 +732,92 @@ def build_multi_crossbow(name: str, is_world: bool = False) -> MeshBuilder:
     brass = "mtl_bz_xbow_brass"
     glow = "mtl_bz_xbow_glow"
 
-    # Contoured dark-walnut crossbow stock & sculpted grip
-    m.add_tapered_prism(wood, (-7.2, 0.0, -0.1), (0.8, 0.0, 1.05), 1.05, 1.35, sides=10, bone_idx=b_gun, scale_y=0.72, scale_z=1.18)
-    m.add_tapered_prism(wood, (0.5, 0.0, 1.05), (16.5, 0.0, 1.35), 1.32, 1.12, sides=10, bone_idx=b_gun, scale_y=0.85, scale_z=0.92)
-    m.add_tapered_prism(wood, (-1.1, 0.0, -2.7), (-0.2, 0.0, 0.5), 0.72, 0.85, sides=10, bone_idx=b_gun)
-    m.add_box(brass, (1.0, 0.0, -0.95), (2.6, 0.28, 1.25), bone_idx=b_gun)
+    # Sculpted dark-walnut crossbow stock, recoil buttpad, cheek rest, pistol grip & brass trigger assembly
+    m.add_tapered_prism(metal, (-7.8, 0.0, -0.25), (-7.0, 0.0, -0.08), 1.12, 1.06, sides=12, bone_idx=b_gun, scale_y=0.70, scale_z=1.24)
+    m.add_tapered_prism(wood, (-7.2, 0.0, -0.1), (0.8, 0.0, 1.05), 1.06, 1.38, sides=12, bone_idx=b_gun, scale_y=0.74, scale_z=1.20)
+    m.add_tapered_prism(wood, (-5.4, 0.0, 0.92), (-1.2, 0.0, 1.48), 0.72, 0.86, sides=10, bone_idx=b_gun, scale_y=0.88, scale_z=0.58)
+    m.add_tapered_prism(wood, (0.5, 0.0, 1.05), (16.8, 0.0, 1.35), 1.34, 1.14, sides=12, bone_idx=b_gun, scale_y=0.86, scale_z=0.92)
+    m.add_tapered_prism(wood, (-1.1, 0.0, -2.85), (-0.2, 0.0, 0.5), 0.72, 0.86, sides=12, bone_idx=b_gun)
+    m.add_tapered_prism(brass, (-1.25, 0.0, -3.05), (-1.05, 0.0, -2.75), 0.78, 0.74, sides=12, bone_idx=b_gun)
+    m.add_box(brass, (1.0, 0.0, -0.95), (2.7, 0.28, 1.28), bone_idx=b_gun)
+    m.add_box(metal, (0.65, 0.0, -0.70), (0.28, 0.14, 0.78), bone_idx=b_gun, rot_xyz=(0.0, -18.0, 0.0))
 
-    # Tapered transition ramp into the wide 3-rail machined steel bolt flight deck
-    m.add_tapered_prism(metal, (1.5, 0.0, 1.95), (6.5, 0.0, 2.05), 1.25, 2.35, sides=8, bone_idx=b_gun, scale_y=1.05, scale_z=0.38)
-    m.add_box(metal, (14.0, 0.0, 2.05), (16.0, 4.6, 0.92), bone_idx=b_gun)
-    for ry in (-2.08, -0.68, +0.68, +2.08):
-        m.add_box(brass, (13.8, ry, 2.58), (15.8, 0.20, 0.30), bone_idx=b_gun)
-    m.add_box(metal, (7.0, -1.65, 1.45), (11.0, 0.25, 0.95), bone_idx=b_gun, rot_xyz=(20.0, 0.0, 0.0))
-    m.add_box(metal, (7.0, +1.65, 1.45), (11.0, 0.25, 0.95), bone_idx=b_gun, rot_xyz=(-20.0, 0.0, 0.0))
+    # Tapered machined steel receiver ramp & beveled 3-rail bolt flight deck with brass retention guides
+    m.add_tapered_prism(metal, (1.5, 0.0, 1.95), (6.5, 0.0, 2.05), 1.25, 2.38, sides=10, bone_idx=b_gun, scale_y=1.06, scale_z=0.38)
+    m.add_box(metal, (14.0, 0.0, 2.05), (16.2, 4.7, 0.94), bone_idx=b_gun)
+    for ry in (-2.12, -0.68, +0.68, +2.12):
+        m.add_box(brass, (13.8, ry, 2.58), (16.0, 0.22, 0.30), bone_idx=b_gun)
+    # Angled side cheek-guards & vented forend ribs
+    for side in (-1.0, +1.0):
+        m.add_box(metal, (7.0, side * 1.72, 1.45), (11.2, 0.26, 0.96), bone_idx=b_gun, rot_xyz=(-side * 20.0, 0.0, 0.0))
+        m.add_box(brass, (13.5, side * 2.40, 2.08), (11.8, 0.18, 0.34), bone_idx=b_gun)
+        m.add_tapered_prism(glow, (10.0, side * 2.48, 2.08), (18.2, side * 2.48, 2.08), 0.08, 0.08, sides=6, bone_idx=b_gun)
 
     # Removable 3-bolt tactical cassette + 3 glowing explosive bolts skinned to j_clip (animates on reload!)
-    m.add_box(metal, (9.5, 0.0, 2.48), (4.2, 3.6, 0.26), bone_idx=b_clip)
+    m.add_box(metal, (9.5, 0.0, 2.48), (4.4, 3.7, 0.28), bone_idx=b_clip)
+    m.add_box(brass, (9.5, 0.0, 2.66), (1.1, 3.85, 0.18), bone_idx=b_clip)
     for by in (-1.38, 0.0, +1.38):
-        m.add_tapered_prism(metal, (7.2, by, 2.66), (22.2, by, 2.66), 0.15, 0.15, sides=8, bone_idx=b_clip)
-        m.add_tapered_prism(brass, (21.6, by, 2.66), (22.6, by, 2.66), 0.22, 0.22, sides=8, bone_idx=b_clip)
-        m.add_tapered_prism(glow, (22.5, by, 2.66), (25.2, by, 2.66), 0.34, 0.05, sides=4, bone_idx=b_clip, angle_offset_deg=45.0)
-        m.add_box(brass, (8.2, by, 2.94), (2.0, 0.07, 0.42), bone_idx=b_clip)
+        m.add_tapered_prism(metal, (7.0, by, 2.66), (22.3, by, 2.66), 0.16, 0.16, sides=10, bone_idx=b_clip)
+        m.add_tapered_prism(brass, (21.5, by, 2.66), (22.7, by, 2.66), 0.24, 0.24, sides=10, bone_idx=b_clip)
+        m.add_tapered_prism(glow, (22.5, by, 2.66), (25.4, by, 2.66), 0.36, 0.05, sides=4, bone_idx=b_clip, angle_offset_deg=45.0)
+        m.add_box(brass, (8.2, by, 2.94), (2.1, 0.08, 0.44), bone_idx=b_clip)
+        m.add_tapered_prism(glow, (6.7, by, 2.66), (7.3, by, 2.66), 0.20, 0.18, sides=8, bone_idx=b_clip)
 
-    # Heavy forward steel riser block
-    m.add_box(metal, (20.8, 0.0, 2.15), (3.0, 6.0, 1.95), bone_idx=b_gun)
-    m.add_box(brass, (21.7, 0.0, 2.15), (0.95, 5.2, 2.15), bone_idx=b_gun)
+    # Heavy beveled forward steel riser block + reinforced limb pockets
+    m.add_box(metal, (20.8, 0.0, 2.15), (3.2, 6.2, 2.00), bone_idx=b_gun)
+    m.add_box(brass, (21.7, 0.0, 2.15), (1.00, 5.4, 2.20), bone_idx=b_gun)
+    m.add_box(metal, (19.6, 0.0, 1.35), (2.2, 3.4, 0.85), bone_idx=b_gun)
 
-    # Wide swept split-limb compound crossbow prods (+/- 11.8u wide!)
+    # Wide swept split-limb compound crossbow prods (+/- 12.0u wide!) with dual machined brass eccentric cams
     for side in (-1.0, +1.0):
         pts = [
             (20.6, side * 2.6, 2.35),
             (20.2, side * 5.6, 2.42),
             (18.5, side * 8.6, 2.52),
-            (15.6, side * 10.9, 2.62),
-            (12.6, side * 11.8, 2.68),
+            (15.6, side * 11.0, 2.62),
+            (12.5, side * 12.0, 2.68),
         ]
-        for dz in (+0.36, -0.36):
+        # Reinforced brass limb-pocket clamp at riser junction
+        m.add_box(brass, (20.5, side * 3.1, 2.38), (1.35, 1.15, 1.38), bone_idx=b_gun)
+        for dz in (+0.38, -0.38):
             for i in range(len(pts) - 1):
                 p0 = (pts[i][0], pts[i][1], pts[i][2] + dz)
                 p1 = (pts[i + 1][0], pts[i + 1][1], pts[i + 1][2] + dz)
-                r0 = 0.38 - i * 0.045
-                r1 = 0.38 - (i + 1) * 0.045
-                m.add_tapered_prism(metal, p0, p1, r0, r1, sides=8, bone_idx=b_gun)
+                r0 = 0.40 - i * 0.048
+                r1 = 0.40 - (i + 1) * 0.048
+                m.add_tapered_prism(metal, p0, p1, r0, r1, sides=10, bone_idx=b_gun)
         tip = pts[-1]
-        m.add_tapered_prism(brass, (tip[0], tip[1], tip[2] - 0.55), (tip[0], tip[1], tip[2] + 0.55), 1.05, 1.05, sides=12, bone_idx=b_gun)
-        m.add_tapered_prism(metal, (tip[0], tip[1], tip[2] - 0.62), (tip[0], tip[1], tip[2] + 0.62), 0.42, 0.42, sides=10, bone_idx=b_gun)
-        m.add_tapered_prism(brass, (tip[0], tip[1], tip[2] + 0.12), (6.5, 0.0, 2.74), 0.08, 0.08, sides=6, bone_idx=b_gun)
-        m.add_tapered_prism(metal, (tip[0], tip[1], tip[2] - 0.25), (17.5, -side * 1.2, 1.9), 0.06, 0.06, sides=6, bone_idx=b_gun)
+        # Machined brass cam pulley + center axle + glowing amber cam bearing cap
+        m.add_tapered_prism(brass, (tip[0], tip[1], tip[2] - 0.58), (tip[0], tip[1], tip[2] + 0.58), 1.12, 1.12, sides=14, bone_idx=b_gun)
+        m.add_tapered_prism(metal, (tip[0], tip[1], tip[2] - 0.66), (tip[0], tip[1], tip[2] + 0.66), 0.48, 0.48, sides=10, bone_idx=b_gun)
+        m.add_tapered_prism(glow, (tip[0], tip[1], tip[2] - 0.70), (tip[0], tip[1], tip[2] + 0.70), 0.22, 0.22, sides=8, bone_idx=b_gun)
+        # Taut bowstring + crossed buss cables
+        m.add_tapered_prism(brass, (tip[0], tip[1], tip[2] + 0.14), (6.5, 0.0, 2.74), 0.085, 0.085, sides=6, bone_idx=b_gun)
+        m.add_tapered_prism(metal, (tip[0], tip[1], tip[2] - 0.26), (17.5, -side * 1.2, 1.9), 0.065, 0.065, sides=6, bone_idx=b_gun)
 
-    # Forward steel foot-stirrup loop
+    # Forward steel foot-stirrup loop with rubberized toe grip sleeve
     stirrup = [
         (22.0, -2.4, 1.6),
         (25.8, -2.2, 1.0),
-        (26.8, 0.0, 0.8),
+        (26.9, 0.0, 0.8),
         (25.8, +2.2, 1.0),
         (22.0, +2.4, 1.6),
     ]
     for i in range(len(stirrup) - 1):
-        m.add_tapered_prism(metal, stirrup[i], stirrup[i + 1], 0.22, 0.22, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(metal, stirrup[i], stirrup[i + 1], 0.24, 0.24, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(brass, (25.6, -1.3, 0.92), (25.6, +1.3, 0.92), 0.28, 0.28, sides=10, bone_idx=b_gun)
 
     # Low-profile brass-ringed tactical rail optic scope kept strictly below Z=3.60 (0 ADS occlusion, O10!)
-    m.add_box(brass, (0.8, -0.18, 2.74), (0.68, 0.80, 0.56), bone_idx=b_gun)
-    m.add_box(brass, (5.2, -0.18, 2.74), (0.68, 0.80, 0.56), bone_idx=b_gun)
-    m.add_tapered_prism(metal, (-0.8, -0.18, 3.06), (7.6, -0.18, 3.06), 0.36, 0.42, sides=14, bone_idx=b_gun, cap_start=False, cap_end=False)
-    m.add_tapered_prism(brass, (-1.15, -0.18, 3.06), (-0.75, -0.18, 3.06), 0.40, 0.38, sides=14, bone_idx=b_gun, cap_start=False, cap_end=False)
-    # Side-mounted windage & elevation turrets (never protruding into upper ADS sightline!)
-    m.add_tapered_prism(brass, (3.0, +0.20, 3.06), (3.0, +0.58, 3.06), 0.18, 0.18, sides=10, bone_idx=b_gun)
-    m.add_tapered_prism(brass, (3.0, -0.54, 3.06), (3.0, -0.90, 3.06), 0.18, 0.18, sides=10, bone_idx=b_gun)
-    m.add_tapered_prism(metal, (7.4, -0.18, 3.06), (9.2, -0.18, 3.06), 0.42, 0.50, sides=14, bone_idx=b_gun, cap_start=False, cap_end=False)
-    m.add_tapered_prism(brass, (9.0, -0.18, 3.06), (9.45, -0.18, 3.06), 0.52, 0.52, sides=14, bone_idx=b_gun, cap_start=False, cap_end=False)
-    m.add_tapered_prism(glow, (9.35, -0.18, 3.06), (9.50, -0.18, 3.06), 0.53, 0.53, sides=14, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_box(brass, (0.8, -0.18, 2.74), (0.72, 0.84, 0.56), bone_idx=b_gun)
+    m.add_box(brass, (5.2, -0.18, 2.74), (0.72, 0.84, 0.56), bone_idx=b_gun)
+    m.add_tapered_prism(metal, (-0.8, -0.18, 3.04), (7.6, -0.18, 3.04), 0.36, 0.42, sides=16, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(brass, (-1.18, -0.18, 3.04), (-0.74, -0.18, 3.04), 0.41, 0.38, sides=16, bone_idx=b_gun, cap_start=False, cap_end=False)
+    # Side-mounted knurled windage & elevation turrets (never protruding into upper ADS sightline!)
+    m.add_tapered_prism(brass, (3.0, +0.20, 3.04), (3.0, +0.60, 3.04), 0.19, 0.19, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(brass, (3.0, -0.54, 3.04), (3.0, -0.92, 3.04), 0.19, 0.19, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(metal, (7.4, -0.18, 3.04), (9.2, -0.18, 3.04), 0.42, 0.50, sides=16, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(brass, (9.0, -0.18, 3.04), (9.48, -0.18, 3.04), 0.52, 0.52, sides=16, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(glow, (9.36, -0.18, 3.04), (9.52, -0.18, 3.04), 0.53, 0.53, sides=16, bone_idx=b_gun, cap_start=False, cap_end=False)
 
     return m
 
@@ -813,23 +829,25 @@ def build_crossbow_bolt() -> MeshBuilder:
     brass = "mtl_bz_xbow_brass"
     glow = "mtl_bz_xbow_glow"
 
-    # Centered along +X (total 20u length so flying & zombie-pinned bolts read clearly!)
-    m.add_tapered_prism(metal, (-9.0, 0.0, 0.0), (5.0, 0.0, 0.0), 0.28, 0.28, sides=8, bone_idx=0)
-    # Brass collar
-    m.add_tapered_prism(brass, (4.2, 0.0, 0.0), (6.0, 0.0, 0.0), 0.44, 0.48, sides=8, bone_idx=0)
+    # Centered along +X (total 21u length so flying & zombie-pinned bolts read clearly!)
+    m.add_tapered_prism(metal, (-9.2, 0.0, 0.0), (5.0, 0.0, 0.0), 0.28, 0.28, sides=10, bone_idx=0)
+    # Fluted brass retention collar + glowing explosive charge ring
+    m.add_tapered_prism(brass, (3.8, 0.0, 0.0), (5.2, 0.0, 0.0), 0.44, 0.50, sides=10, bone_idx=0)
+    m.add_tapered_prism(glow, (5.1, 0.0, 0.0), (6.0, 0.0, 0.0), 0.54, 0.56, sides=10, bone_idx=0)
+    m.add_tapered_prism(brass, (5.9, 0.0, 0.0), (6.4, 0.0, 0.0), 0.50, 0.44, sides=10, bone_idx=0)
     # Glowing amber-orange diamond explosive broadhead tip
-    m.add_tapered_prism(glow, (5.8, 0.0, 0.0), (11.0, 0.0, 0.0), 0.78, 0.08, sides=4, bone_idx=0, angle_offset_deg=45.0)
-    # 3 swept brass/glow fletching vanes at tail
+    m.add_tapered_prism(glow, (6.2, 0.0, 0.0), (11.4, 0.0, 0.0), 0.82, 0.06, sides=4, bone_idx=0, angle_offset_deg=45.0)
+    # 3 swept brass fletching vanes at tail
     for fdeg in (0.0, 120.0, 240.0):
         rad = math.radians(fdeg)
         cy, cz = math.cos(rad), math.sin(rad)
-        p0 = (-8.5, cy * 0.25, cz * 0.25)
-        p1 = (-4.0, cy * 0.25, cz * 0.25)
-        p2 = (-6.2, cy * 1.45, cz * 1.45)
-        p3 = (-9.2, cy * 1.35, cz * 1.35)
+        p0 = (-8.8, cy * 0.26, cz * 0.26)
+        p1 = (-3.8, cy * 0.26, cz * 0.26)
+        p2 = (-6.2, cy * 1.55, cz * 1.55)
+        p3 = (-9.4, cy * 1.42, cz * 1.42)
         m.add_quad(brass, p0, p1, p2, p3, bone_idx=0, double_sided=True)
-    # Glowing tail nock beacon so pinned bolts visibly pulse before detonation
-    m.add_tapered_prism(glow, (-9.8, 0.0, 0.0), (-8.4, 0.0, 0.0), 0.42, 0.34, sides=8, bone_idx=0)
+    # Bright glowing tail nock beacon so pinned bolts visibly pulse before detonation
+    m.add_tapered_prism(glow, (-10.0, 0.0, 0.0), (-8.5, 0.0, 0.0), 0.46, 0.34, sides=10, bone_idx=0)
     return m
 
 

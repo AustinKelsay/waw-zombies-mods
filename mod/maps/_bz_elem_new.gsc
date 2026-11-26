@@ -1120,11 +1120,12 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 	is_pap = bz_elem_new_is_weapon_papped( player, weapon_name );
 	is_dpap = bz_elem_new_is_weapon_double_pap( player, weapon_name );
 	radius = bz_elem_new_get_cryo_cone_radius( is_pap, is_dpap );
-	max_chain = maps\_bz_rules::bz_get_cryo_max_chain( is_pap, is_dpap );
-	chain_radius = maps\_bz_rules::bz_get_cryo_chain_radius_start( is_pap, is_dpap );
-	chain_decay = maps\_bz_rules::bz_get_cryo_chain_radius_decay();
-	splash_radius = maps\_bz_rules::bz_get_cryo_shatter_splash_radius( is_pap, is_dpap );
-	duration = maps\_bz_rules::bz_get_cryo_freeze_duration();
+	cryo_cfg = maps\_bz_rules::bz_get_cryo_chain_config( is_pap, is_dpap );
+	max_chain = cryo_cfg.max_chain;
+	chain_radius = cryo_cfg.chain_radius;
+	chain_decay = cryo_cfg.chain_decay;
+	splash_radius = cryo_cfg.splash_radius;
+	duration = cryo_cfg.duration;
 	round_num = bz_elem_new_get_current_round();
 	zhp = bz_elem_new_get_round_zombie_health( round_num );
 	blast_dmg = maps\_bz_rules::bz_calc_cryo_blast_damage( round_num, zhp, is_pap, is_dpap );

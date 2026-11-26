@@ -527,6 +527,7 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 
 	eye = player GetEye();
 	base_angles = player GetPlayerAngles();
+	is_pap = bz_special_is_weapon_single_pap( player, "bz_multi_crossbow" );
 	is_dpap = bz_state_is_weapon_double_pap( player, "bz_multi_crossbow" );
 	round_num = bz_special_get_current_round();
 	max_range = 1600;
@@ -617,6 +618,7 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 		bolt.bz_arrived = false;
 		bolt.bz_detonated = false;
 		bolt.bz_impact_applied = false;
+		bolt.bz_is_pap = is_pap;
 		bolt.bz_is_double_pap = is_dpap;
 		bolt.bz_stuck_entity = undefined;
 		bolt.bz_stuck_z_offset = 0.0;
@@ -675,7 +677,8 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 	fields[2] = bz_log_kv( "stuck_zombies", stuck_zombies );
 	fields[3] = bz_log_kv( "stuck_world", stuck_world );
 	fields[4] = bz_log_kv( "ads", bz_bool_int( is_ads ) );
-	fields[5] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
+	fields[5] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
+	fields[6] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
 	bz_log_emit( "SPECIAL_CROSSBOW_FIRE", bz_log_join( fields ) );
 
 	res = SpawnStruct();
@@ -683,6 +686,7 @@ bz_special_fire_multi_crossbow( player, weapon_name )
 	res.stuck_zombies = stuck_zombies;
 	res.stuck_world = stuck_world;
 	res.ads = is_ads;
+	res.pap = is_pap;
 	res.double_pap = is_dpap;
 	return res;
 }
@@ -772,9 +776,10 @@ bz_special_crossbow_bolt_fly_and_stick( bolt )
 			{
 				r = Int( bolt.bz_round_num );
 			}
+			is_pap = IsDefined( bolt.bz_is_pap ) && bolt.bz_is_pap;
 			dpap = IsDefined( bolt.bz_is_double_pap ) && bolt.bz_is_double_pap;
 			zhp = bz_special_get_round_zombie_health( r );
-			raw_impact = maps\_bz_rules::bz_calc_crossbow_impact_damage( r, zhp, dpap );
+			raw_impact = maps\_bz_rules::bz_calc_crossbow_impact_damage( r, zhp, dpap, is_pap );
 			final_impact = bz_elem_new_apply_status_damage_mult( stuck_z, raw_impact, "MOD_PROJECTILE", "bz_multi_crossbow", bolt.bz_owner, hit_pos );
 
 			stuck_z.bz_in_damage_dispatch = true;
@@ -838,7 +843,29 @@ bz_special_crossbow_bolt_fuse( bolt, is_double_pap, round_num )
 	{
 		remaining_fuse = 0.25;
 	}
-	wait( remaining_fuse );
+	half_fuse = remaining_fuse * 0.5;
+	wait( half_fuse );
+
+	// Subtle audio + spark fuse tick cue on stuck bolt before detonation (0 added FX slots).
+	if ( IsDefined( bolt ) && ( !IsDefined( bolt.bz_detonated ) || !bolt.bz_detonated ) )
+	{
+		tick_pos = bolt.origin;
+		if ( IsDefined( bolt.bz_stuck_entity ) && IsAlive( bolt.bz_stuck_entity ) && IsDefined( bolt.bz_stuck_entity.origin ) )
+		{
+			z_off = 40.0;
+			if ( IsDefined( bolt.bz_stuck_z_offset ) && bolt.bz_stuck_z_offset > 0.0 )
+			{
+				z_off = bolt.bz_stuck_z_offset;
+			}
+			tick_pos = ( bolt.bz_stuck_entity.origin[0], bolt.bz_stuck_entity.origin[1], bolt.bz_stuck_entity.origin[2] + z_off );
+		}
+		if ( IsDefined( tick_pos ) )
+		{
+			bz_special_play_stock_fx( "crossbow_trail", tick_pos );
+			PlaySoundAtPosition( "bullet_small_glass", tick_pos );
+		}
+		wait( remaining_fuse - half_fuse );
+	}
 
 	if ( IsDefined( bolt ) && ( !IsDefined( bolt.bz_detonated ) || !bolt.bz_detonated ) )
 	{
@@ -886,6 +913,15 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	{
 		r = bz_special_get_current_round();
 	}
+	is_pap = false;
+	if ( IsDefined( bolt.bz_is_pap ) && bolt.bz_is_pap )
+	{
+		is_pap = true;
+	}
+	else if ( IsDefined( player ) && bz_special_is_weapon_single_pap( player, "bz_multi_crossbow" ) )
+	{
+		is_pap = true;
+	}
 	dpap = false;
 	if ( IsDefined( is_double_pap ) && is_double_pap )
 	{
@@ -893,8 +929,8 @@ bz_special_detonate_crossbow_bolt( player, bolt, is_double_pap, round_num )
 	}
 
 	zombie_hp = bz_special_get_round_zombie_health( r );
-	bolt_dmg = maps\_bz_rules::bz_calc_crossbow_bolt_damage( r, zombie_hp, dpap );
-	radius = 112;
+	bolt_dmg = maps\_bz_rules::bz_calc_crossbow_bolt_damage( r, zombie_hp, dpap, is_pap );
+	radius = maps\_bz_rules::bz_get_crossbow_blast_radius( is_pap, dpap );
 
 	hits = 0;
 	enemies = GetAiSpeciesArray( "axis", "all" );
@@ -1166,9 +1202,18 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	model_name = bz_special_get_boomerang_model();
 	round_num = bz_special_get_current_round();
 	zombie_hp = bz_special_get_round_zombie_health( round_num );
+	is_pap = bz_special_is_weapon_single_pap( player, "bz_blade_boomerang" );
 	is_dpap = bz_state_is_weapon_double_pap( player, "bz_blade_boomerang" );
-	dmg = maps\_bz_rules::bz_calc_boomerang_damage( round_num, zombie_hp, is_dpap );
-	max_pierce = maps\_bz_rules::bz_get_boomerang_max_pierce();
+	dmg = maps\_bz_rules::bz_calc_boomerang_damage( round_num, zombie_hp, is_dpap, is_pap );
+	max_pierce = maps\_bz_rules::bz_get_boomerang_max_pierce( is_pap, is_dpap );
+
+	// Track active in-flight boomerang for guaranteed infinite single-item return & failsafe recovery.
+	player.bz_boomerang_in_flight = true;
+	player.bz_boomerang_throw_time = GetTime();
+	if ( player HasWeapon( "bz_blade_boomerang" ) )
+	{
+		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+	}
 
 	// YZ-plane 3-wing boomerang (axis along +X) tilted -20 deg relative to throw pitch and spun via RotateRoll
 	// around its own spin axis so the 3-wing star stays face-on (~0.94 facing) across level & angled throws (O18/F19/A18/O21/F24).
@@ -1182,6 +1227,8 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	blade NotSolid();
 	blade.bz_special_kind = "blade_boomerang";
 	blade.bz_owner = player;
+	blade.bz_is_pap = is_pap;
+	blade.bz_is_double_pap = is_dpap;
 	bz_special_track_entity( blade );
 
 	PlaySoundAtPosition( "attack_whoosh", start_pos );
@@ -1193,7 +1240,8 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	fields[2] = bz_log_kv( "range", actual_range );
 	fields[3] = bz_log_kv( "max_pierce", max_pierce );
 	fields[4] = bz_log_kv( "damage", dmg );
-	fields[5] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
+	fields[5] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
+	fields[6] = bz_log_kv( "double_pap", bz_bool_int( is_dpap ) );
 	bz_log_emit( "SPECIAL_BOOMERANG_THROW", bz_log_join( fields ) );
 
 	player thread bz_special_boomerang_flight_thread( blade, start_pos, apex, dmg, max_pierce );
@@ -1205,6 +1253,7 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	res.apex = apex;
 	res.damage = dmg;
 	res.max_pierce = max_pierce;
+	res.pap = is_pap;
 	res.double_pap = is_dpap;
 	return res;
 }
@@ -1231,6 +1280,14 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	}
 
 	steps = 11;
+	if ( IsDefined( blade.bz_is_double_pap ) && blade.bz_is_double_pap )
+	{
+		steps = 8;
+	}
+	else if ( IsDefined( blade.bz_is_pap ) && blade.bz_is_pap )
+	{
+		steps = 9;
+	}
 	step_dt = 0.05;
 	// 135 deg per 0.05s tick = 2700 deg/s (7.5 rev/s), visibly spinning in WaW's 20Hz snapshot
 	// stream instead of aliasing to a stationary pose like 720 deg/tick.
@@ -1375,28 +1432,37 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 			direct_pos[1] + ( right[1] * curve ),
 			direct_pos[2] + ret_lift
 		);
-		step_tr = BulletTrace( prev_pos, pos, false, player );
-		if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
+		// On the final 2 return steps, allow direct hand-homing even if the player ducked around
+		// a pillar/corner so the infinite single-item boomerang is never stranded out of reach.
+		if ( s < ( steps - 1 ) )
 		{
-			// Slide along the unobstructed direct path toward player instead of clipping through a side wall.
-			direct_tr = BulletTrace( prev_pos, direct_pos, false, player );
-			if ( IsDefined( direct_tr ) && IsDefined( direct_tr["fraction"] ) && direct_tr["fraction"] < 1.0 )
+			step_tr = BulletTrace( prev_pos, pos, false, player );
+			if ( IsDefined( step_tr ) && IsDefined( step_tr["fraction"] ) && step_tr["fraction"] < 1.0 )
 			{
-				safe_f = direct_tr["fraction"] - 0.05;
-				if ( safe_f < 0.0 )
+				// Slide along the unobstructed direct path toward player instead of clipping through a side wall.
+				direct_tr = BulletTrace( prev_pos, direct_pos, false, player );
+				if ( IsDefined( direct_tr ) && IsDefined( direct_tr["fraction"] ) && direct_tr["fraction"] < 1.0 )
 				{
-					safe_f = 0.0;
+					safe_f = direct_tr["fraction"] - 0.05;
+					if ( safe_f < 0.0 )
+					{
+						safe_f = 0.0;
+					}
+					pos = (
+						prev_pos[0] + ( ( direct_pos[0] - prev_pos[0] ) * safe_f ),
+						prev_pos[1] + ( ( direct_pos[1] - prev_pos[1] ) * safe_f ),
+						prev_pos[2] + ( ( direct_pos[2] - prev_pos[2] ) * safe_f )
+					);
 				}
-				pos = (
-					prev_pos[0] + ( ( direct_pos[0] - prev_pos[0] ) * safe_f ),
-					prev_pos[1] + ( ( direct_pos[1] - prev_pos[1] ) * safe_f ),
-					prev_pos[2] + ( ( direct_pos[2] - prev_pos[2] ) * safe_f )
-				);
+				else
+				{
+					pos = direct_pos;
+				}
 			}
-			else
-			{
-				pos = direct_pos;
-			}
+		}
+		else
+		{
+			pos = direct_pos;
 		}
 		blade MoveTo( pos, step_dt );
 		blade RotateRoll( spin_deg, step_dt );
@@ -1420,15 +1486,19 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	}
 	still_live = IsDefined( blade ) && ( !IsDefined( blade.bz_special_deleted ) || !blade.bz_special_deleted );
 
-	// True boomerang catch: execute catch foley, clip refill, and return telemetry BEFORE deleting
-	// blade so blade Delete() firing notify("death") inside bz_special_boomerang_flight_thread()
-	// cannot abort refill or telemetry emission in WaW 1.7. Unified predicate for gameplay, log, & return (A9/O13).
-	reached_hand = Distance( prev_pos, last_catch_pos ) <= 96.0;
-	caught_ok = still_live && reached_hand && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" );
+	// True infinite single-item boomerang catch: always clear in-flight flag and refill clip (0 -> 1,
+	// stock strictly 0) BEFORE deleting blade so blade Delete() firing notify("death") cannot abort
+	// catch recovery or telemetry emission in WaW 1.7.
+	if ( IsDefined( player ) )
+	{
+		player.bz_boomerang_in_flight = false;
+	}
+	caught_ok = still_live && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" );
 	refilled_clip = false;
 	if ( caught_ok )
 	{
 		player PlayLocalSound( "knife_pull_plr" );
+		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
 		if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) == 0 )
 		{
 			player SetWeaponAmmoClip( "bz_blade_boomerang", 1 );
@@ -2096,6 +2166,7 @@ bz_special_ensure_player_watchers( player )
 
 	player thread bz_special_watch_portal_command();
 	player thread bz_special_watch_portal_notify();
+	player thread bz_special_watch_boomerang_recovery();
 	player thread bz_special_watch_player_disconnect();
 
 	if ( !IsDefined( player.bz_special_max_ammo_watch_started ) || !player.bz_special_max_ammo_watch_started )
@@ -2144,6 +2215,59 @@ bz_special_watch_portal_notify()
 		if ( bz_elements_enabled() )
 		{
 			bz_special_try_activate_portal( self );
+		}
+	}
+}
+
+bz_special_ensure_boomerang_recovered( player, force_restore )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_special_player_is_downed( player ) )
+	{
+		return false;
+	}
+	if ( !player HasWeapon( "bz_blade_boomerang" ) )
+	{
+		player.bz_boomerang_in_flight = false;
+		return false;
+	}
+
+	if ( player GetWeaponAmmoStock( "bz_blade_boomerang" ) > 0 )
+	{
+		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+	}
+	if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) >= 1 )
+	{
+		return false;
+	}
+
+	in_flight = IsDefined( player.bz_boomerang_in_flight ) && player.bz_boomerang_in_flight;
+	elapsed_ms = 99999;
+	if ( IsDefined( player.bz_boomerang_throw_time ) )
+	{
+		elapsed_ms = GetTime() - Int( player.bz_boomerang_throw_time );
+	}
+
+	if ( ( IsDefined( force_restore ) && force_restore ) || !in_flight || elapsed_ms >= 1350 )
+	{
+		player.bz_boomerang_in_flight = false;
+		player SetWeaponAmmoClip( "bz_blade_boomerang", 1 );
+		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+		return true;
+	}
+	return false;
+}
+
+bz_special_watch_boomerang_recovery()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.25 );
+		if ( bz_elements_enabled() && IsDefined( self ) && IsAlive( self ) )
+		{
+			bz_special_ensure_boomerang_recovered( self, false );
 		}
 	}
 }
@@ -2199,6 +2323,7 @@ bz_special_on_player_connect( player )
 	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_special_sync_melee_slot_perk( player );
+	bz_special_ensure_boomerang_recovered( player, true );
 	bz_special_ensure_player_watchers( player );
 	bz_special_update_hud( player );
 }
@@ -2223,6 +2348,7 @@ bz_special_on_player_spawned( player )
 	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_special_sync_melee_slot_perk( player );
+	bz_special_ensure_boomerang_recovered( player, true );
 	bz_special_ensure_player_watchers( player );
 	bz_special_update_hud( player );
 }
@@ -2486,6 +2612,15 @@ bz_recompute_zombie_move_rate( zombie )
 bz_save_zombie_base_move_rate( zombie )
 {
 	return maps\_bz_hooks::bz_save_zombie_base_move_rate( zombie );
+}
+
+bz_special_is_weapon_single_pap( player, weapon_name )
+{
+	if ( !IsDefined( player ) )
+	{
+		return false;
+	}
+	return maps\_bz_pap::bz_pap_is_weapon_papped( player, weapon_name );
 }
 
 bz_state_is_weapon_double_pap( player, weapon_name )

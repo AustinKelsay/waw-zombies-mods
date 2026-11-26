@@ -1159,8 +1159,18 @@ bz_stations_player_has_bowie( player )
 	return false;
 }
 
+bz_stations_is_infinite_item( weap_name )
+{
+	rules = bz_stations_get_rules_api();
+	return [[ rules.bz_is_infinite_single_item_weapon ]]( weap_name );
+}
+
 bz_stations_get_element_target_stock( player, weap_name )
 {
+	if ( bz_stations_is_infinite_item( weap_name ) )
+	{
+		return 0;
+	}
 	rules = bz_stations_get_rules_api();
 	has_double_ammo = bz_state_has_apex( player, "double_ammo" );
 	is_dpap = bz_state_has_pap_upgrade( player, "double_pap", weap_name );
@@ -1180,6 +1190,10 @@ bz_stations_get_element_target_stock( player, weap_name )
 
 bz_stations_get_element_effective_max_stock( player, weap_name )
 {
+	if ( bz_stations_is_infinite_item( weap_name ) )
+	{
+		return 0;
+	}
 	target_stock = bz_stations_get_element_target_stock( player, weap_name );
 	base_max = WeaponMaxAmmo( weap_name );
 	if ( IsDefined( base_max ) && Int( base_max ) > 0 && Int( base_max ) < target_stock )
@@ -1191,6 +1205,10 @@ bz_stations_get_element_effective_max_stock( player, weap_name )
 
 bz_stations_is_element_ammo_full( player, weap_name )
 {
+	if ( bz_stations_is_infinite_item( weap_name ) )
+	{
+		return true;
+	}
 	if ( player GetWeaponAmmoStock( weap_name ) < bz_stations_get_element_effective_max_stock( player, weap_name ) )
 	{
 		return false;
@@ -1433,7 +1451,11 @@ bz_stations_sync_player_ui( player, feedback )
 		}
 		else if ( IsDefined( e_weap ) && player HasWeapon( e_weap ) )
 		{
-			if ( bz_stations_is_element_ammo_full( player, e_weap ) )
+			if ( bz_stations_is_infinite_item( e_weap ) )
+			{
+				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "OWNED" );
+			}
+			else if ( bz_stations_is_element_ammo_full( player, e_weap ) )
 			{
 				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "FULL" );
 			}
@@ -1774,6 +1796,12 @@ bz_stations_normalize_box_element_ammo( player, weap_name )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsDefined( weap_name ) )
 	{
+		return;
+	}
+	if ( bz_stations_is_infinite_item( weap_name ) )
+	{
+		player SetWeaponAmmoClip( weap_name, 1 );
+		player SetWeaponAmmoStock( weap_name, 0 );
 		return;
 	}
 	rules = bz_stations_get_rules_api();

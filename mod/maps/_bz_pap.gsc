@@ -189,6 +189,16 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 	{
 		return 0;
 	}
+	if ( maps\_bz_rules::bz_is_infinite_single_item_weapon( weap ) )
+	{
+		player SetWeaponAmmoStock( weap, 0 );
+		if ( !IsDefined( player.bz_boomerang_in_flight ) || !player.bz_boomerang_in_flight )
+		{
+			player SetWeaponAmmoClip( weap, 1 );
+		}
+		player.bz_pap_target_stock[weap] = 0;
+		return 0;
+	}
 
 	has_double_ammo = maps\_bz_state::bz_state_has_apex( player, "double_ammo" );
 	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, weap );

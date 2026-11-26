@@ -536,8 +536,8 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                     "bz_blade",
                     "Blade Boomerang",
                     "1",
-                    "60",
-                    "20",
+                    "0",
+                    "0",
                     "viewmodel_bz_blade_boomerang",
                     "world_bz_blade_boomerang",
                     "1.15",
@@ -915,10 +915,12 @@ class TestPhase2RulesAndStatusMath(unittest.TestCase):
         self.gsc = GscRuntime(MOD_ROOT)
 
     def test_element_ammo_cost_is_half_the_weapon_price_and_zero_for_invalid_ids(self) -> None:
-        for item_id in ("acid_sprayer", "cryo_cannon", "multi_crossbow", "blade_boomerang"):
+        for item_id in ("acid_sprayer", "cryo_cannon", "multi_crossbow"):
             with self.subTest(item_id=item_id):
                 weapon_cost = self.gsc.call(RULES_MOD, "bz_get_element_weapon_price", item_id)
                 self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_element_ammo_cost", item_id.upper()), weapon_cost // 2)
+
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_element_ammo_cost", "blade_boomerang"), 0)
 
         for item_id in ("", "ray_gun", "portal_grenade", "bz_acid_sprayer", UNDEFINED):
             with self.subTest(item_id=item_id):
@@ -1259,7 +1261,6 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
             ("acid_sprayer", "Acid Sprayer", 120),
             ("cryo_cannon", "Cryo Cannon", 96),
             ("multi_crossbow", "Multi-Crossbow", 36),
-            ("blade_boomerang", "Blade Boomerang", 20),
         ):
             with self.subTest(item_id=item_id):
                 weapon = "bz_" + item_id
@@ -1288,6 +1289,17 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
                     f"item={item_id};status=ok;cost=2500;score={score - 2500}",
                     self.gsc.emitted_events,
                 )
+
+        # Blade Boomerang is a single infinite-use throwable (1/0): displays OWNED and never charges ammo refills.
+        self.gsc.call(STATIONS_MOD, "bz_stations_sync_player_ui", self.p1)
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_blade_boomerang"], "BUY 5000")
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, "buy_element:blade_boomerang"))
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_blade_boomerang"], "OWNED")
+        self.assertEqual(self.p1.weapon_stocks["bz_blade_boomerang"], 0)
+        score_before_boom = self.p1.get_field("score")
+        self.assertTrue(self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, menu, "buy_element:blade_boomerang"))
+        self.assertEqual(self.p1.get_field("score"), score_before_boom)
+        self.assertEqual(self.p1.client_dvars["ui_bz_elem_blade_boomerang"], "OWNED")
 
     def test_elemental_ammo_purchase_rejects_full_and_insufficient_points(self) -> None:
         self.dvars.set("bz_enabled", "1")
