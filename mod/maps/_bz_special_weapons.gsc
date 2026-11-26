@@ -2960,6 +2960,7 @@ bz_special_weapons_get_selftest_api()
 	api.bz_special_fire_multi_crossbow = ::bz_special_fire_multi_crossbow;
 	api.bz_special_portal_tick = ::bz_special_portal_tick;
 	api.bz_special_push_zombie_safely = ::bz_special_push_zombie_safely;
+	api.bz_special_trigger_war_club_swing = ::bz_special_trigger_war_club_swing;
 	api.bz_special_try_activate_portal = ::bz_special_try_activate_portal;
 	api.bz_special_war_club_smash = ::bz_special_war_club_smash;
 	return api;

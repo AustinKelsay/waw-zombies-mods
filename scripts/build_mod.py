@@ -21,7 +21,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 import generate_bz_weapon_models as bz_models
 
 MOD_NAME = "waw_gauntlet"
-BZ_BUILD_VERSION = "0.7.0"
+BZ_BUILD_VERSION = "0.9.0"
 BZ_BUILD_COMMIT_RE = re.compile(r"[0-9a-zA-Z_-]+")
 STOCK_MAPS = (
     "nazi_zombie_prototype",

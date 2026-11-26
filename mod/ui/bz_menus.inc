@@ -89,7 +89,7 @@
 		name			bz_lobby_build_text \
 		type			ITEM_TYPE_TEXT \
 		rect			(px + 8) (py + ph + 34) (pw - 16) 14 halign valign \
-		text			"BUILD: 0.7.0-dev" \
+		text			"BUILD: 0.9.0-dev" \
 		textfont		UI_FONT_NORMAL \
 		textscale		0.22 \
 		textstyle		ITEM_TEXTSTYLE_SHADOWED \
