@@ -2376,11 +2376,33 @@ def build_stock_3x_ammo_weapon_file(
 def stage_bz_stock_3x_ammo_weapons(
     tools_root: Path,
     stage_dir: Path,
+    steam_game: Path | None = None,
 ) -> list[str]:
-    """Stage 3x maxAmmo overrides for present stock zombie primary weapons under stage_dir/weapons/sp/."""
+    """Stage 3x maxAmmo overrides for present stock zombie primary weapons under stage_dir/weapons/sp/.
+
+    When `steam_game` is provided, reads matching base weapon files from retail `main/iw_*.iwd`
+    first (falling back to Mod Tools `raw/weapons/sp/`) so retail base-game weapon definitions
+    are preserved byte-for-byte apart from the 3x `maxAmmo` ceiling.
+    """
     raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
     if not raw_weapons_dir.is_dir():
         return []
+
+    retail_iwd_texts: dict[str, str] = {}
+    if steam_game is not None:
+        main_dir = steam_game / "main"
+        if main_dir.is_dir():
+            for iwd_path in sorted(main_dir.glob("iw_*.iwd")):
+                try:
+                    with ZipFile(iwd_path, "r") as archive:
+                        for name in archive.namelist():
+                            norm = name.replace("\\", "/")
+                            if norm.startswith("weapons/sp/") and not norm.endswith("/"):
+                                wname = norm[len("weapons/sp/") :]
+                                if wname in STOCK_3X_AMMO_WEAPONS:
+                                    retail_iwd_texts[wname] = archive.read(name).decode("latin1")
+                except Exception:
+                    continue
 
     raw_xanim_dir = tools_root / "raw" / "xanim"
     xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
@@ -2390,10 +2412,12 @@ def stage_bz_stock_3x_ammo_weapons(
 
     staged: list[str] = []
     for weap_name, base_max in sorted(STOCK_3X_AMMO_WEAPONS.items()):
-        src = raw_weapons_dir / weap_name
-        if not src.is_file():
-            continue
-        stock_text = src.read_text(encoding="latin1")
+        stock_text = retail_iwd_texts.get(weap_name)
+        if stock_text is None:
+            src = raw_weapons_dir / weap_name
+            if not src.is_file():
+                continue
+            stock_text = src.read_text(encoding="latin1")
         if not stock_text.startswith("WEAPONFILE"):
             continue
         out_text = build_stock_3x_ammo_weapon_file(
@@ -3325,7 +3349,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Stage 3x maxAmmo stock weapon overrides into stage_dir/weapons/sp/ for waw_gauntlet.iwd ONLY
     # (NOT mod.csv): under fs_game, WaW 1.7 BG_LoadWeaponDef reads weapons/sp/* from .iwd without
     # duplicating stock weapon FxEffectDef assets inside mod.ff (keeping Der Riese strictly at 329/400 FX).
-    stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir)
+    stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir, steam_game=steam_game)
 
     # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, cloned bz_* weapons,
     # and Der Riese PTRS-41/Flamethrower compat xmodels (when raw xmodels exist).

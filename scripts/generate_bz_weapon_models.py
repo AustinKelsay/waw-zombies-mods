@@ -652,66 +652,66 @@ def build_cryo_cannon(name: str, is_world: bool = False) -> MeshBuilder:
     glow = "mtl_bz_cryo_glow"
 
     # Sculpted tapered rear stock, recoil buttpad & ergonomic pistol grip (slimmed for Tesla reload clearance!)
-    m.add_tapered_prism(dark, (-7.6, 0.0, -0.02), (-6.8, 0.0, 0.12), 0.96, 0.92, sides=12, bone_idx=b_gun, scale_y=0.80, scale_z=0.92)
-    m.add_tapered_prism(dark, (-7.0, 0.0, 0.10), (-1.5, 0.0, 0.65), 0.90, 1.25, sides=12, bone_idx=b_gun, scale_y=0.84, scale_z=0.74)
-    m.add_tapered_prism(hull, (-1.8, 0.0, 0.65), (3.8, 0.0, 1.20), 1.25, 1.66, sides=12, bone_idx=b_gun, scale_y=0.86, scale_z=0.78)
+    m.add_tapered_prism(dark, (-7.6, 0.0, -0.02), (-6.8, 0.0, 0.12), 0.96, 0.92, sides=10, bone_idx=b_gun, scale_y=0.80, scale_z=0.92)
+    m.add_tapered_prism(dark, (-7.0, 0.0, 0.10), (-1.5, 0.0, 0.65), 0.90, 1.25, sides=10, bone_idx=b_gun, scale_y=0.84, scale_z=0.74)
+    m.add_tapered_prism(hull, (-1.8, 0.0, 0.65), (3.8, 0.0, 1.20), 1.25, 1.66, sides=10, bone_idx=b_gun, scale_y=0.86, scale_z=0.78)
     m.add_box(dark, (-0.5, 0.0, -2.8), (2.0, 1.32, 3.6), bone_idx=b_gun, rot_xyz=(0.0, 14.0, 0.0))
     # Rear cryogenic pressure dial embedded cleanly into left rear cheek (below sightline!)
-    m.add_tapered_prism(dark, (1.4, 1.28, 1.80), (1.4, 1.66, 1.80), 0.56, 0.52, sides=12, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (1.4, 1.60, 1.80), (1.4, 1.72, 1.80), 0.36, 0.34, sides=12, bone_idx=b_gun)
+    m.add_tapered_prism(dark, (1.4, 1.28, 1.80), (1.4, 1.66, 1.80), 0.56, 0.52, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (1.4, 1.60, 1.80), (1.4, 1.72, 1.80), 0.36, 0.34, sides=10, bone_idx=b_gun)
 
-    # Main sculpted 12-sided arctic-titanium cryo projector chassis + layered bevel shroud plates (Z <= 3.35!)
-    m.add_tapered_prism(hull, (3.6, 0.0, 1.40), (22.5, 0.0, 1.70), 1.74, 1.56, sides=12, bone_idx=b_gun, cap_start=False, scale_y=0.90)
+    # Main sculpted 10-sided arctic-titanium cryo projector chassis + layered bevel shroud plates (Z <= 3.35!)
+    m.add_tapered_prism(hull, (3.6, 0.0, 1.40), (22.5, 0.0, 1.70), 1.74, 1.56, sides=10, bone_idx=b_gun, cap_start=False, scale_y=0.90)
     # Recessed dark-cobalt thermal side vents & contoured cheek armor along chassis flanks
     for side in (-1.0, +1.0):
         m.add_box(dark, (14.2, side * 1.44, 1.55), (14.5, 0.24, 0.72), bone_idx=b_gun)
         m.add_box(hull, (14.2, side * 1.54, 2.02), (13.6, 0.18, 0.34), bone_idx=b_gun, rot_xyz=(side * 16.0, 0.0, 0.0))
         m.add_box(hull, (14.2, side * 1.54, 1.08), (13.6, 0.18, 0.34), bone_idx=b_gun, rot_xyz=(-side * 16.0, 0.0, 0.0))
-        m.add_tapered_prism(glow, (8.0, side * 1.56, 1.55), (20.4, side * 1.48, 1.62), 0.12, 0.10, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(glow, (8.0, side * 1.56, 1.55), (20.4, side * 1.48, 1.62), 0.12, 0.10, sides=6, bone_idx=b_gun)
     # Dark cobalt-steel under-receiver & sculpted ribbed foregrip rail
-    m.add_tapered_prism(dark, (2.5, 0.0, -0.20), (21.5, 0.0, 0.18), 1.12, 0.88, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(dark, (2.5, 0.0, -0.20), (21.5, 0.0, 0.18), 1.12, 0.88, sides=8, bone_idx=b_gun)
     for gx in (13.0, 14.4, 15.8, 17.2, 18.6):
         m.add_box(hull, (gx, 0.0, -0.58), (0.45, 1.38, 0.26), bone_idx=b_gun)
     # Recessed glowing glacial-blue dorsal cryo-plasma conduit spine (below Z=3.20 -> unobstructed sightline!)
-    m.add_tapered_prism(glow, (4.2, 0.0, 2.95), (29.5, 0.0, 2.95), 0.34, 0.24, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (4.2, 0.0, 2.95), (29.5, 0.0, 2.95), 0.34, 0.24, sides=8, bone_idx=b_gun)
     # Sleek low-profile dark-titanium saddle clamps straddling the dorsal cryo conduit (Z <= 3.32)
     for rx in (6.0, 10.0, 14.0, 18.0, 22.0, 26.0):
-        m.add_tapered_prism(dark, (rx - 0.36, 0.0, 2.10), (rx + 0.36, 0.0, 2.10), 1.28, 1.28, sides=10, bone_idx=b_gun)
+        m.add_tapered_prism(dark, (rx - 0.36, 0.0, 2.10), (rx + 0.36, 0.0, 2.10), 1.28, 1.28, sides=8, bone_idx=b_gun)
         m.add_box(hull, (rx, 0.0, 3.24), (0.62, 1.62, 0.22), bone_idx=b_gun)
 
     # 3 animated octagonal glowing liquid-nitrogen cryo cartridges on left flank (j_bulb_1/2/3!) with protective cages
     bulb_xs = (7.89, 9.64, 11.39)
     for b_idx, bx in zip(b_bulbs, bulb_xs):
-        m.add_tapered_prism(glow, (bx, 2.95, 0.18), (bx, 2.95, 2.58), 0.50, 0.50, sides=10, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, -0.22), (bx, 2.95, 0.28), 0.68, 0.68, sides=10, bone_idx=b_idx)
-        m.add_tapered_prism(hull, (bx, 2.95, 0.88), (bx, 2.95, 1.06), 0.60, 0.60, sides=10, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, 1.56), (bx, 2.95, 1.76), 0.62, 0.62, sides=10, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, 2.46), (bx, 2.95, 3.00), 0.68, 0.50, sides=10, bone_idx=b_idx)
+        m.add_tapered_prism(glow, (bx, 2.95, 0.18), (bx, 2.95, 2.58), 0.50, 0.50, sides=8, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, -0.22), (bx, 2.95, 0.28), 0.68, 0.68, sides=8, bone_idx=b_idx)
+        m.add_tapered_prism(hull, (bx, 2.95, 0.88), (bx, 2.95, 1.06), 0.60, 0.60, sides=8, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, 1.56), (bx, 2.95, 1.76), 0.62, 0.62, sides=8, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, 2.46), (bx, 2.95, 3.00), 0.68, 0.50, sides=8, bone_idx=b_idx)
         # Outer twin protective roll-cage struts per nitrogen cell
-        m.add_tapered_prism(hull, (bx - 0.38, 3.42, 0.12), (bx - 0.38, 3.42, 2.66), 0.08, 0.08, sides=6, bone_idx=b_idx)
-        m.add_tapered_prism(hull, (bx + 0.38, 3.42, 0.12), (bx + 0.38, 3.42, 2.66), 0.08, 0.08, sides=6, bone_idx=b_idx)
-    m.add_tapered_prism(dark, (6.6, 2.38, 0.02), (12.7, 2.38, 0.02), 0.58, 0.58, sides=10, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (6.8, 2.38, 2.78), (12.5, 2.38, 2.78), 0.42, 0.42, sides=10, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (12.4, 2.38, 2.78), (15.4, 1.35, 2.40), 0.16, 0.14, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(hull, (bx - 0.38, 3.42, 0.12), (bx - 0.38, 3.42, 2.66), 0.08, 0.08, sides=5, bone_idx=b_idx)
+        m.add_tapered_prism(hull, (bx + 0.38, 3.42, 0.12), (bx + 0.38, 3.42, 2.66), 0.08, 0.08, sides=5, bone_idx=b_idx)
+    m.add_tapered_prism(dark, (6.6, 2.38, 0.02), (12.7, 2.38, 0.02), 0.58, 0.58, sides=8, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (6.8, 2.38, 2.78), (12.5, 2.38, 2.78), 0.42, 0.42, sides=8, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (12.4, 2.38, 2.78), (15.4, 1.35, 2.40), 0.16, 0.14, sides=6, bone_idx=b_gun)
 
     # Right-side pressurized liquid-nitrogen condenser drum with ringed cooling bands + dual frosted feed pipes
-    m.add_tapered_prism(dark, (5.2, -2.38, 1.15), (15.0, -2.38, 1.15), 0.90, 0.88, sides=14, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (4.7, -2.38, 1.15), (5.3, -2.38, 1.15), 0.60, 0.90, sides=14, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (14.9, -2.38, 1.15), (15.6, -2.38, 1.15), 0.88, 0.56, sides=14, bone_idx=b_gun)
+    m.add_tapered_prism(dark, (5.2, -2.38, 1.15), (15.0, -2.38, 1.15), 0.90, 0.88, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (4.7, -2.38, 1.15), (5.3, -2.38, 1.15), 0.60, 0.90, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (14.9, -2.38, 1.15), (15.6, -2.38, 1.15), 0.88, 0.56, sides=10, bone_idx=b_gun)
     for cx in (6.8, 8.6, 10.4, 12.2, 14.0):
-        m.add_tapered_prism(hull, (cx - 0.18, -2.38, 1.15), (cx + 0.18, -2.38, 1.15), 0.98, 0.98, sides=14, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (6.2, -2.72, 1.15), (14.2, -2.72, 1.15), 0.36, 0.36, sides=10, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (15.4, -2.38, 1.15), (18.0, -1.25, 1.65), 0.34, 0.28, sides=8, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (15.2, -2.10, 1.55), (17.8, -1.15, 1.92), 0.14, 0.12, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(hull, (cx - 0.18, -2.38, 1.15), (cx + 0.18, -2.38, 1.15), 0.98, 0.98, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (6.2, -2.72, 1.15), (14.2, -2.72, 1.15), 0.36, 0.36, sides=8, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (15.4, -2.38, 1.15), (18.0, -1.25, 1.65), 0.34, 0.28, sides=6, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (15.2, -2.10, 1.55), (17.8, -1.15, 1.92), 0.14, 0.12, sides=6, bone_idx=b_gun)
 
     # Animated cryo-vent bolt shroud (skinned to j_bolt)
-    m.add_tapered_prism(dark, (15.8, 1.15, 1.55), (19.4, 1.15, 1.55), 0.58, 0.46, sides=10, bone_idx=b_bolt)
-    m.add_tapered_prism(hull, (16.2, 1.15, 1.55), (17.0, 1.15, 1.55), 0.64, 0.62, sides=10, bone_idx=b_bolt)
-    m.add_tapered_prism(glow, (16.5, 1.58, 1.55), (18.9, 1.58, 1.55), 0.18, 0.16, sides=8, bone_idx=b_bolt)
+    m.add_tapered_prism(dark, (15.8, 1.15, 1.55), (19.4, 1.15, 1.55), 0.58, 0.46, sides=8, bone_idx=b_bolt)
+    m.add_tapered_prism(hull, (16.2, 1.15, 1.55), (17.0, 1.15, 1.55), 0.64, 0.62, sides=8, bone_idx=b_bolt)
+    m.add_tapered_prism(glow, (16.5, 1.58, 1.55), (18.9, 1.58, 1.55), 0.18, 0.16, sides=6, bone_idx=b_bolt)
 
     # Inner armored cryo barrel + luminous liquid-nitrogen plasma core + 6 graduated swept cryogenic radiator fins
-    m.add_tapered_prism(dark, (22.0, 0.0, 1.80), (35.5, 0.0, 1.95), 1.06, 0.92, sides=14, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (22.0, 0.0, 1.80), (36.4, 0.0, 1.96), 0.54, 0.46, sides=12, bone_idx=b_gun)
+    m.add_tapered_prism(dark, (22.0, 0.0, 1.80), (35.5, 0.0, 1.95), 1.06, 0.92, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (22.0, 0.0, 1.80), (36.4, 0.0, 1.96), 0.54, 0.46, sides=8, bone_idx=b_gun)
     for fi, fx in enumerate((21.2, 23.4, 25.6, 27.8, 30.0, 32.2)):
         span = 3.7 - fi * 0.20
         m.add_box(hull, (fx, +span * 0.54, 1.85), (0.52, span, 0.28), bone_idx=b_gun, rot_xyz=(18.0, 0.0, -20.0))
@@ -1233,60 +1233,68 @@ def build_station_kiosk(name: str, kind: str) -> MeshBuilder:
     }
     glow = glow_by_kind[kind]
 
+    def add_aabb(mat: str, x0: float, y0: float, z0: float, x1: float, y1: float, z1: float) -> None:
+        m.add_box(
+            mat,
+            ((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5),
+            (abs(x1 - x0), abs(y1 - y0), abs(z1 - z0)),
+            bone_idx=0,
+        )
+
     # Heavy beveled steel floor plinth (flush at z=0 so floor-snap seats it cleanly)
-    m.add_box(frame, (-15.0, -21.0, 0.0), (15.0, 21.0, 6.0), bone_idx=0)
-    m.add_box(brass, (-13.5, -19.5, 6.0), (13.5, 19.5, 8.5), bone_idx=0)
+    add_aabb(frame, -11.5, -16.0, 0.0, 11.5, 16.0, 5.0)
+    add_aabb(brass, -10.5, -15.0, 5.0, 10.5, 15.0, 7.2)
 
     if kind == "perks":
-        # Emerald/Amber Perk Vending Terminal: tall cabinet + 3 glowing vertical elixir tubes + canopy marquee
-        m.add_box(frame, (-12.0, -17.0, 8.5), (10.0, 17.0, 62.0), bone_idx=0)
-        m.add_box(brass, (-13.0, -18.5, 62.0), (13.5, 18.5, 66.0), bone_idx=0)
-        m.add_box(glow, (-10.0, -15.5, 66.0), (12.0, 15.5, 76.0), bone_idx=0)
-        m.add_box(frame, (-11.5, -17.5, 76.0), (12.5, 17.5, 80.0), bone_idx=0)
-        for ty in (-10.0, 0.0, 10.0):
-            m.add_tapered_prism(glow, (10.8, ty, 18.0), (10.8, ty, 56.0), 2.8, 2.8, sides=10, bone_idx=0)
-            m.add_tapered_prism(brass, (10.8, ty, 14.0), (10.8, ty, 18.5), 3.4, 3.2, sides=10, bone_idx=0)
-            m.add_tapered_prism(brass, (10.8, ty, 55.5), (10.8, ty, 60.0), 3.2, 3.4, sides=10, bone_idx=0)
-        m.add_box(glow, (9.8, -14.0, 11.0), (12.2, 14.0, 14.0), bone_idx=0)
+        # Emerald Perk Vending Terminal: sleek steel cabinet + 3 recessed emerald elixir vials + lit marquee
+        add_aabb(frame, -9.5, -13.5, 7.2, 8.5, 13.5, 56.0)
+        add_aabb(brass, -10.2, -14.5, 56.0, 10.2, 14.5, 59.0)
+        add_aabb(frame, -9.2, -13.5, 59.0, 7.5, 13.5, 68.0)
+        add_aabb(glow, 7.5, -11.5, 60.5, 9.4, 11.5, 66.5)
+        add_aabb(frame, -10.0, -14.2, 68.0, 10.0, 14.2, 71.0)
+        for ty in (-8.0, 0.0, 8.0):
+            m.add_tapered_prism(glow, (9.0, ty, 19.0), (9.0, ty, 50.0), 2.1, 2.1, sides=10, bone_idx=0)
+            m.add_tapered_prism(brass, (9.0, ty, 15.5), (9.0, ty, 19.2), 2.7, 2.5, sides=10, bone_idx=0)
+            m.add_tapered_prism(brass, (9.0, ty, 49.8), (9.0, ty, 53.2), 2.5, 2.7, sides=10, bone_idx=0)
+        add_aabb(brass, 8.0, -11.5, 11.0, 10.0, 11.5, 13.5)
+        add_aabb(glow, 8.2, -9.5, 13.5, 9.6, 9.5, 15.2)
     elif kind == "class":
-        # Cobalt/Gold Class Altar Console: octagonal dais + angled lectern + twin gold crest pylons + floating crystal
-        m.add_tapered_prism(frame, (0.0, 0.0, 8.5), (0.0, 0.0, 42.0), 13.5, 9.5, sides=8, bone_idx=0)
-        m.add_box(brass, (-9.0, -14.0, 42.0), (12.0, 14.0, 47.0), bone_idx=0)
-        m.add_box(glow, (-7.0, -12.0, 47.0), (11.0, 12.0, 50.5), bone_idx=0)
-        for sy in (-16.5, 16.5):
-            m.add_tapered_prism(frame, (-2.0, sy, 8.5), (-2.0, sy, 66.0), 3.4, 2.4, sides=8, bone_idx=0)
-            m.add_tapered_prism(brass, (-2.0, sy, 66.0), (-2.0, sy, 74.0), 2.8, 0.6, sides=8, bone_idx=0)
-            m.add_box(glow, (1.0, sy - 1.2, 22.0), (3.0, sy + 1.2, 60.0), bone_idx=0)
-        _add_octa_sphere_core(m, glow, (0.0, 0.0, 66.0), 6.2, bone_idx=0)
-        _add_gyro_ring(m, brass, (0.0, 0.0, 66.0), 9.2, 0.75, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), segs=14, bone_idx=0)
+        # Cobalt/Gold Class Altar Console: octagonal dais + brass lectern + twin crest pylons + floating crystal
+        m.add_tapered_prism(frame, (0.0, 0.0, 7.2), (0.0, 0.0, 39.0), 10.5, 7.5, sides=8, bone_idx=0)
+        add_aabb(brass, -7.5, -11.5, 39.0, 9.5, 11.5, 43.0)
+        add_aabb(glow, -5.5, -9.5, 43.0, 8.0, 9.5, 45.2)
+        for sy in (-12.8, 12.8):
+            m.add_tapered_prism(frame, (-1.5, sy, 7.2), (-1.5, sy, 60.0), 2.6, 1.9, sides=8, bone_idx=0)
+            m.add_tapered_prism(brass, (-1.5, sy, 60.0), (-1.5, sy, 67.0), 2.3, 0.5, sides=8, bone_idx=0)
+            add_aabb(glow, 0.8, sy - 0.9, 20.0, 2.2, sy + 0.9, 54.0)
+        _add_octa_sphere_core(m, glow, (0.0, 0.0, 58.0), 5.0, bone_idx=0)
+        _add_gyro_ring(m, brass, (0.0, 0.0, 58.0), 7.6, 0.62, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), segs=14, bone_idx=0)
     elif kind == "arsenal":
-        # Cyan/Gunmetal Arsenal Weapon Locker & Workbench: armored rack + twin light masts + cyan display board
-        m.add_box(frame, (-12.0, -20.0, 8.5), (12.0, 20.0, 34.0), bone_idx=0)
-        m.add_box(brass, (-13.0, -21.0, 34.0), (14.0, 21.0, 37.5), bone_idx=0)
-        m.add_box(frame, (-11.0, -18.5, 37.5), (-2.0, 18.5, 68.0), bone_idx=0)
-        m.add_box(glow, (-2.0, -15.5, 42.0), (1.0, 15.5, 64.0), bone_idx=0)
-        # Rack crossbars across glowing weapon display
-        for rz in (46.0, 53.0, 60.0):
-            m.add_box(brass, (0.8, -14.0, rz), (3.2, 14.0, rz + 1.8), bone_idx=0)
-        for sy in (-19.5, 19.5):
-            m.add_tapered_prism(frame, (8.0, sy, 37.5), (8.0, sy, 72.0), 2.0, 1.6, sides=8, bone_idx=0)
-            m.add_box(glow, (5.5, sy - 2.0, 72.0), (11.5, sy + 2.0, 76.5), bone_idx=0)
-        m.add_box(frame, (-12.5, -20.5, 68.0), (11.0, 20.5, 72.0), bone_idx=0)
-        m.add_box(glow, (9.5, -17.0, 68.8), (11.8, 17.0, 71.2), bone_idx=0)
+        # Amber/Gunmetal Arsenal Weapon Locker & Workbench: armored bench + slotted display rack + canopy
+        add_aabb(frame, -10.0, -15.5, 7.2, 9.5, 15.5, 31.0)
+        add_aabb(brass, -10.6, -16.2, 31.0, 10.8, 16.2, 33.8)
+        add_aabb(frame, -9.5, -14.8, 33.8, -1.5, 14.8, 63.0)
+        add_aabb(glow, -1.5, -12.2, 38.0, 0.6, 12.2, 58.5)
+        for rz in (42.0, 48.5, 55.0):
+            add_aabb(brass, 0.4, -11.5, rz, 2.4, 11.5, rz + 1.5)
+        for sy in (-14.5, 14.5):
+            m.add_tapered_prism(frame, (6.5, sy, 33.8), (6.5, sy, 63.0), 1.6, 1.4, sides=8, bone_idx=0)
+        add_aabb(frame, -10.2, -16.0, 63.0, 9.5, 16.0, 67.5)
+        add_aabb(glow, 8.8, -13.0, 64.0, 10.2, 13.0, 66.5)
     else:
-        # Violet/Crimson Pack-a-Punch Forge Console: vaulted chassis + intake bay + twin plasma coils + beacon spire
-        m.add_box(frame, (-13.0, -19.0, 8.5), (11.0, 19.0, 44.0), bone_idx=0)
-        m.add_box(glow, (8.5, -12.0, 24.0), (12.5, 12.0, 38.0), bone_idx=0)
-        m.add_box(brass, (9.0, -14.0, 21.0), (13.5, 14.0, 24.0), bone_idx=0)
-        m.add_box(brass, (9.0, -14.0, 38.0), (13.5, 14.0, 41.0), bone_idx=0)
-        m.add_box(frame, (-11.0, -15.0, 44.0), (9.0, 15.0, 66.0), bone_idx=0)
-        m.add_box(glow, (7.0, -11.5, 48.0), (10.5, 11.5, 62.0), bone_idx=0)
-        for sy in (-18.5, 18.5):
-            m.add_tapered_prism(glow, (0.0, sy, 14.0), (0.0, sy, 66.0), 3.0, 2.4, sides=10, bone_idx=0)
-            for cz in (24.0, 38.0, 52.0):
-                m.add_tapered_prism(brass, (0.0, sy, cz - 1.5), (0.0, sy, cz + 1.5), 3.9, 3.9, sides=10, bone_idx=0)
-        m.add_tapered_prism(brass, (0.0, 0.0, 66.0), (0.0, 0.0, 74.0), 10.0, 4.5, sides=8, bone_idx=0)
-        m.add_tapered_prism(glow, (0.0, 0.0, 74.0), (0.0, 0.0, 82.0), 4.2, 0.6, sides=8, bone_idx=0)
+        # Violet Pack-a-Punch Forge Console: vaulted chassis + glowing intake bay + twin plasma coils + spire
+        add_aabb(frame, -10.5, -14.5, 7.2, 9.0, 14.5, 40.0)
+        add_aabb(glow, 7.2, -9.5, 22.0, 9.8, 9.5, 33.5)
+        add_aabb(brass, 7.5, -11.0, 19.5, 10.6, 11.0, 22.0)
+        add_aabb(brass, 7.5, -11.0, 33.5, 10.6, 11.0, 36.0)
+        add_aabb(frame, -9.0, -12.0, 40.0, 7.5, 12.0, 60.0)
+        add_aabb(glow, 6.2, -9.0, 44.0, 8.4, 9.0, 56.0)
+        for sy in (-14.2, 14.2):
+            m.add_tapered_prism(glow, (0.0, sy, 13.0), (0.0, sy, 60.0), 2.3, 1.9, sides=10, bone_idx=0)
+            for cz in (22.0, 35.0, 48.0):
+                m.add_tapered_prism(brass, (0.0, sy, cz - 1.3), (0.0, sy, cz + 1.3), 3.1, 3.1, sides=10, bone_idx=0)
+        m.add_tapered_prism(brass, (0.0, 0.0, 60.0), (0.0, 0.0, 67.0), 8.2, 3.8, sides=8, bone_idx=0)
+        m.add_tapered_prism(glow, (0.0, 0.0, 67.0), (0.0, 0.0, 74.0), 3.4, 0.5, sides=8, bone_idx=0)
     return m
 
 
@@ -1386,13 +1394,13 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_club_wood", "model phong", "wood", "wood_grain", (84, 48, 26), (44, 24, 12), (22, 18, 14), 78),
     MaterialSpec("mtl_bz_club_iron", "model phong", "metal", "corroded_metal", (54, 58, 64), (92, 98, 108), (58, 62, 68), 180),
     MaterialSpec("mtl_bz_club_glow", "model unlit", "glass", "amber_glow", (245, 118, 22), (255, 214, 110)),
-    # In-World Station Kiosks (Perks, Class Altar, Arsenal, Pack-a-Punch)
-    MaterialSpec("mtl_bz_kiosk_frame", "model phong", "metal", "panel_metal", (46, 52, 60), (78, 86, 98), (52, 56, 62), 180),
+    # In-World Station Kiosks (Perks emerald, Class cobalt, Arsenal amber, Pack-a-Punch violet)
+    MaterialSpec("mtl_bz_kiosk_frame", "model phong", "metal", "panel_metal", (42, 48, 56), (72, 80, 92), (52, 56, 62), 180),
     MaterialSpec("mtl_bz_kiosk_brass", "model phong", "metal", "brushed_metal", (198, 152, 62), (132, 94, 30), (64, 52, 24), 200),
-    MaterialSpec("mtl_bz_kiosk_perks_glow", "model unlit", "glass", "acid_glow", (36, 232, 138), (190, 255, 224)),
-    MaterialSpec("mtl_bz_kiosk_class_glow", "model unlit", "glass", "cryo_glow", (46, 152, 255), (196, 232, 255)),
-    MaterialSpec("mtl_bz_kiosk_arsenal_glow", "model unlit", "glass", "edge_glow", (44, 214, 240), (212, 248, 255)),
-    MaterialSpec("mtl_bz_kiosk_pap_glow", "model unlit", "glass", "portal_glow", (188, 48, 248), (255, 168, 236)),
+    MaterialSpec("mtl_bz_kiosk_perks_glow", "model unlit", "glass", "kiosk_panel", (18, 168, 86), (118, 242, 168)),
+    MaterialSpec("mtl_bz_kiosk_class_glow", "model unlit", "glass", "kiosk_panel", (24, 108, 226), (124, 202, 255)),
+    MaterialSpec("mtl_bz_kiosk_arsenal_glow", "model unlit", "glass", "kiosk_panel", (222, 118, 22), (255, 204, 98)),
+    MaterialSpec("mtl_bz_kiosk_pap_glow", "model unlit", "glass", "kiosk_panel", (142, 34, 218), (228, 134, 255)),
 )
 
 
@@ -1525,6 +1533,14 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
                 swirl = math.sin((u * 4.0 + math.sin(v * math.tau * 2.0) * 0.45) * math.tau) * 0.5 + 0.5
                 arc = max(0.0, math.cos((u * 7.0 - v * 5.0) * math.tau))
                 mix = clamp01(0.24 + swirl * 0.46 + arc * 0.34)
+            elif spec.style == "kiosk_panel":
+                # Frosted illuminated station glass panel with subtle bezel vignette & warm vertical glow
+                du = abs(u - 0.5) * 2.0
+                dv = abs(v - 0.5) * 2.0
+                bezel = 1.0 if (du > 0.90 or dv > 0.90) else 0.0
+                radial = clamp01(1.0 - math.sqrt(du * du * 0.65 + dv * dv * 0.65))
+                rib = 0.06 * math.sin(v * math.tau * 12.0)
+                mix = 0.05 if bezel > 0.5 else clamp01(0.18 + radial * 0.68 + rib)
             elif spec.style in ("acid_stream", "acid_billow", "acid_drips", "acid_mist"):
                 # Alpha-feathered 2D chemical stream/cloud/droplet sprites for FLAMETABLEFILE
                 du = (u - 0.5) * 2.0
