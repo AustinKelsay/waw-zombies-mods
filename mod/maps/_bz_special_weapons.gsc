@@ -337,9 +337,13 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 		return false;
 	}
 
-	dx = zombie.origin[0] - attacker_org[0];
-	dy = zombie.origin[1] - attacker_org[1];
-	horiz_dist = Distance( ( attacker_org[0], attacker_org[1], 0 ), ( zombie.origin[0], zombie.origin[1], 0 ) );
+	z0_x = zombie.origin[0];
+	z0_y = zombie.origin[1];
+	z0_z = zombie.origin[2];
+
+	dx = z0_x - attacker_org[0];
+	dy = z0_y - attacker_org[1];
+	horiz_dist = Distance( ( attacker_org[0], attacker_org[1], 0 ), ( z0_x, z0_y, 0 ) );
 	nx = fallback_fwd[0];
 	ny = fallback_fwd[1];
 	if ( horiz_dist > 1.0 )
@@ -348,10 +352,12 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 		ny = dy / horiz_dist;
 	}
 
-	raw_push = ( zombie.origin[0] + ( nx * push_dist ), zombie.origin[1] + ( ny * push_dist ), zombie.origin[2] );
-	trace_start = ( zombie.origin[0], zombie.origin[1], zombie.origin[2] + 24 );
-	trace_end = ( raw_push[0], raw_push[1], raw_push[2] + 24 );
-	push_org = raw_push;
+	raw_x = z0_x + ( nx * push_dist );
+	raw_y = z0_y + ( ny * push_dist );
+	trace_start = ( z0_x, z0_y, z0_z + 24 );
+	trace_end = ( raw_x, raw_y, z0_z + 24 );
+	push_x = raw_x;
+	push_y = raw_y;
 
 	tr = BulletTrace( trace_start, trace_end, false, zombie );
 	if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
@@ -361,13 +367,26 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 		{
 			safe_frac = 0.0;
 		}
-		push_org = (
-			zombie.origin[0] + ( nx * push_dist * safe_frac ),
-			zombie.origin[1] + ( ny * push_dist * safe_frac ),
-			zombie.origin[2]
-		);
+		push_x = z0_x + ( nx * push_dist * safe_frac );
+		push_y = z0_y + ( ny * push_dist * safe_frac );
 	}
 
+	// Floor-snap trace (+24u down to -128u) so zombies pushed off stairs/slopes/catwalks
+	// land cleanly on terrain below without floating or clipping through steps.
+	push_z = z0_z;
+	floor_start = ( push_x, push_y, z0_z + 24.0 );
+	floor_end = ( push_x, push_y, z0_z - 128.0 );
+	ftr = BulletTrace( floor_start, floor_end, false, zombie );
+	if ( IsDefined( ftr ) && IsDefined( ftr["fraction"] ) && ftr["fraction"] > 0.02 && ftr["fraction"] < 1.0 && IsDefined( ftr["position"] ) )
+	{
+		snapped_z = ftr["position"][2];
+		if ( snapped_z <= z0_z + 36.0 && snapped_z >= z0_z - 128.0 )
+		{
+			push_z = snapped_z;
+		}
+	}
+
+	push_org = ( push_x, push_y, push_z );
 	z_ang = ( 0, 0, 0 );
 	if ( IsDefined( zombie.angles ) )
 	{
@@ -404,14 +423,24 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	}
 	fallback_fwd = ( fx, fy, 0 );
 
-	push_dist = 112;
+	// Both Base and PaP War Club deliver immediate wall-safe floor-snapped crowd knockback & stagger;
+	// PaP War Club expands to a wide sweeping arc with heavier pushback, longer stagger, and higher cleave damage.
+	push_dist = 104;
 	stagger_sec = 1.5;
 	min_dot = 0.25;
 	cleave_dmg = Int( smash_damage * 0.75 );
+	eq_scale = 0.22;
+	eq_dur = 0.22;
+	eq_rad = 112;
 	if ( has_pap_wc )
 	{
-		min_dot = 0.0;
+		push_dist = 152;
+		stagger_sec = 2.2;
+		min_dot = -0.35;
 		cleave_dmg = Int( smash_damage * 0.85 );
+		eq_scale = 0.38;
+		eq_dur = 0.32;
+		eq_rad = 160;
 	}
 	if ( cleave_dmg < 300 )
 	{
@@ -421,6 +450,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	cleave_hits = 0;
 	knockbacks = 0;
 	now = GetTime();
+	attacker.bz_war_club_last_smash_ms = now;
 	stagger_until = now + Int( stagger_sec * 1000 );
 	enemies = GetAiSpeciesArray( "axis", "all" );
 	attacker.bz_war_club_cleaving = true;
@@ -464,9 +494,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 				cleave_hits++;
 			}
 
-			// Radial knockback push & stagger are strictly PaP War Club features;
-			// un-upgraded War Club stays heavy frontal melee cleave damage only.
-			if ( has_pap_wc && IsAlive( z ) )
+			if ( IsAlive( z ) )
 			{
 				if ( bz_special_push_zombie_safely( z, p_org, fallback_fwd, push_dist ) )
 				{
@@ -482,12 +510,9 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 
 	attacker.bz_war_club_cleaving = false;
 
-	if ( has_pap_wc )
-	{
-		bz_special_play_stock_fx( "war_club", smash_pos );
-		PlaySoundAtPosition( "couch_slam", smash_pos );
-		Earthquake( 0.35, 0.3, p_org, 128 );
-	}
+	bz_special_play_stock_fx( "war_club", smash_pos );
+	PlaySoundAtPosition( "couch_slam", smash_pos );
+	Earthquake( eq_scale, eq_dur, p_org, eq_rad );
 
 	fields = [];
 	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( attacker ) );
@@ -505,6 +530,91 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	res.cleave_hits = cleave_hits;
 	res.knockbacks = knockbacks;
 	return res;
+}
+
+bz_special_restore_war_club_viewmodel( prev_weap )
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	wait( 0.38 );
+	if ( !IsDefined( self ) )
+	{
+		return;
+	}
+	if ( self HasWeapon( "bz_war_club" ) )
+	{
+		cur = self GetCurrentWeapon();
+		if ( IsDefined( prev_weap ) && prev_weap != "" && prev_weap != "none" && prev_weap != "bz_war_club" && prev_weap != "bz_portal_grenade" && self HasWeapon( prev_weap ) )
+		{
+			if ( !IsDefined( cur ) || cur == "bz_war_club" )
+			{
+				self SwitchToWeapon( prev_weap );
+			}
+		}
+		else if ( !IsDefined( cur ) || cur == "bz_war_club" )
+		{
+			bz_special_switch_back_to_primary( self );
+		}
+		self TakeWeapon( "bz_war_club" );
+	}
+	self.bz_war_club_swinging = false;
+}
+
+bz_special_trigger_war_club_swing( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_special_player_is_downed( player ) )
+	{
+		return undefined;
+	}
+	if ( maps\_bz_state::bz_state_get_melee_slot( player ) != "war_club" )
+	{
+		return undefined;
+	}
+
+	now = GetTime();
+	if ( IsDefined( player.bz_war_club_last_swing_ms ) && ( now - Int( player.bz_war_club_last_swing_ms ) ) < 750 )
+	{
+		return undefined;
+	}
+	player.bz_war_club_last_swing_ms = now;
+
+	// Briefly swap in the custom 3D War Club viewmodel for the melee swing without consuming primary slots.
+	if ( !IsDefined( player.bz_war_club_swinging ) || !player.bz_war_club_swinging )
+	{
+		prev_weap = player GetCurrentWeapon();
+		player.bz_war_club_swinging = true;
+		if ( !player HasWeapon( "bz_war_club" ) )
+		{
+			player GiveWeapon( "bz_war_club" );
+		}
+		player SetWeaponAmmoClip( "bz_war_club", 1 );
+		player SetWeaponAmmoStock( "bz_war_club", 0 );
+		player SwitchToWeapon( "bz_war_club" );
+		player thread bz_special_restore_war_club_viewmodel( prev_weap );
+	}
+
+	// Execute crowd knockback smash even on air swings (deduplicated against bz_special_on_actor_damage).
+	if ( IsDefined( player.bz_war_club_last_smash_ms ) && ( now - Int( player.bz_war_club_last_smash_ms ) ) < 250 )
+	{
+		return undefined;
+	}
+
+	has_pap_wc = maps\_bz_state::bz_state_has_pap_war_club( player );
+	zhp = 150;
+	if ( IsDefined( level.zombie_health ) && Int( level.zombie_health ) > 0 )
+	{
+		zhp = Int( level.zombie_health );
+	}
+	target_dmg = maps\_bz_rules::bz_calc_war_club_damage( 150, zhp, has_pap_wc );
+	angles = player GetPlayerAngles();
+	fwd = AnglesToForward( angles );
+	smash_pos = (
+		player.origin[0] + ( fwd[0] * 56.0 ),
+		player.origin[1] + ( fwd[1] * 56.0 ),
+		player.origin[2] + 36.0
+	);
+	return bz_special_war_club_smash( player, undefined, smash_pos, has_pap_wc, target_dmg );
 }
 
 // ---------------------------------------------------------------------------
@@ -2315,6 +2425,7 @@ bz_special_ensure_player_watchers( player )
 	player thread bz_special_watch_portal_command();
 	player thread bz_special_watch_portal_notify();
 	player thread bz_special_watch_boomerang_recovery();
+	player thread bz_special_watch_war_club_melee();
 	player thread bz_special_watch_player_disconnect();
 
 	if ( !IsDefined( player.bz_special_max_ammo_watch_started ) || !player.bz_special_max_ammo_watch_started )
@@ -2422,6 +2533,31 @@ bz_special_watch_boomerang_recovery()
 	}
 }
 
+bz_special_watch_war_club_melee()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		if ( bz_elements_enabled() &&
+			IsDefined( self ) &&
+			IsAlive( self ) &&
+			!bz_special_player_is_downed( self ) &&
+			( !IsDefined( self.bz_station_open ) || !self.bz_station_open ) &&
+			maps\_bz_state::bz_state_get_melee_slot( self ) == "war_club" &&
+			self MeleeButtonPressed() )
+		{
+			bz_special_trigger_war_club_swing( self );
+			while ( IsDefined( self ) && IsAlive( self ) && self MeleeButtonPressed() )
+			{
+				wait( 0.05 );
+			}
+		}
+		wait( 0.05 );
+	}
+}
+
 bz_special_watch_player_disconnect()
 {
 	level endon( "end_game" );
@@ -2453,6 +2589,7 @@ bz_special_on_pre_init()
 		return;
 	}
 	PrecacheItem( "bz_portal_grenade" );
+	PrecacheItem( "bz_war_club" );
 	PrecacheModel( "bz_crossbow_bolt" );
 	PrecacheModel( bz_special_get_boomerang_model() );
 	PrecacheModel( "bz_portal_orb_air" );
@@ -2621,6 +2758,11 @@ bz_special_on_weapon_fired( player, weapon_name )
 		bz_special_switch_back_to_primary( player );
 		return;
 	}
+	if ( weap == "bz_war_club" )
+	{
+		bz_special_switch_back_to_primary( player );
+		return;
+	}
 }
 
 bz_special_on_actor_damage( zombie, ctx )
@@ -2698,7 +2840,11 @@ bz_special_on_actor_damage( zombie, ctx )
 	{
 		hit_origin = zombie.origin;
 	}
-	bz_special_war_club_smash( attacker, zombie, hit_origin, has_pap_wc, target_dmg );
+	now_wc = GetTime();
+	if ( !IsDefined( attacker.bz_war_club_last_smash_ms ) || ( now_wc - Int( attacker.bz_war_club_last_smash_ms ) ) >= 250 )
+	{
+		bz_special_war_club_smash( attacker, zombie, hit_origin, has_pap_wc, target_dmg );
+	}
 }
 
 bz_special_on_end_game()

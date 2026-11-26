@@ -859,6 +859,7 @@ class TestMysteryBoxAndElementHookSeams(unittest.TestCase):
                 "bz_multi_crossbow",
                 "bz_blade_boomerang",
                 "bz_portal_grenade",
+                "bz_war_club",
             ],
         )
 
@@ -1023,8 +1024,8 @@ class TestPhase2RulesAndStatusMath(unittest.TestCase):
         self.assertEqual(self.gsc.call(RULES_MOD, "bz_calc_war_club_damage", 150, 2000, False), 1000)
         self.assertEqual(self.gsc.call(RULES_MOD, "bz_calc_war_club_damage", 150, 150, True), 1500)
         self.assertEqual(self.gsc.call(RULES_MOD, "bz_calc_war_club_damage", 150, 4000, True), 4000)
-        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_war_club_aoe_radius", False), 96)
-        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_war_club_aoe_radius", True), 160)
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_war_club_aoe_radius", False), 112)
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_war_club_aoe_radius", True), 168)
 
         # Multi-Crossbow: 3-bolt spread, round-scaled sticky explosive damage, +75% Double PaP
         self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_crossbow_bolt_count"), 3)

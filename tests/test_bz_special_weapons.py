@@ -486,7 +486,8 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         gsc.trace_handler = wall_trace
 
         # Base War Club hit: max(150*4=600, 2500*0.5=1250) = 1250
-        # Base War Club is heavy frontal cleave damage ONLY: NO knockback, NO stagger, NO shockwave FX, NO Earthquake!
+        # Base War Club delivers immediate frontal-cone knockback (~104u), stagger, stock FX, couch_slam & Earthquake!
+        gsc.sim_time_ms = 2000
         base_wc_dmg = gsc.call(
             BZ_HOOKS_MOD,
             "bz_actor_damage_dispatch",
@@ -503,18 +504,22 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
             0,
         )
         self.assertEqual(base_wc_dmg, 1250)
-        self.assertEqual(gsc.played_sounds_at_pos, [])
-        self.assertEqual(len(gsc.earthquakes), 0)
-        self.assertEqual(len(gsc.played_fx), 0)
-        self.assertEqual(z_cone.get_pos(), (90.0, 30.0, 0.0))  # NOT knocked back by base War Club
-        self.assertNotEqual(z_cone.get_field("bz_stunned"), True)
-        self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 96)
+        self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "couch_slam", "pos": (48.0, 0.0, 0.0)}])
+        self.assertEqual(len(gsc.earthquakes), 1)
+        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.22)
+        self.assertGreater(len(gsc.played_fx), 0)
+        self.assertGreater(z_cone.get_pos()[0], 175.0)  # Knocked back cleanly (~104u away from player)
+        self.assertTrue(z_cone.get_field("bz_stunned"))
+        self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 112)
         self.assertTrue(
             all(fx in ("misc/fx_zombie_powerup_on", "misc/fx_exp_raygun_impact", "env/electrical/fx_elec_short_oneshot", "bio/player/fx_footstep_water", "misc/fx_zombie_bloodsplat", "misc/fx_trail_raygun_geotrail", "weapon/grenade/fx_trail_rifle_grenade") for fx in gsc.load_fx_calls),
             f"Unexpected LoadFX calls: {gsc.load_fx_calls}",
         )
 
-        # Reset positions & upgrade to PaP War Club -> radius expands to 160, heavy damage = 2500, AOE knockback smash + FX + Earthquake
+        # Reset positions & upgrade to PaP War Club -> radius expands to 168, heavy damage = 2500, wider arc & stronger knockback (152u)
+        gsc.played_sounds_at_pos.clear()
+        gsc.earthquakes.clear()
+        gsc.played_fx.clear()
         z_primary.set_pos(48.0, 0.0, 0.0)
         z_primary.set_field("health", 2500)
         z_cone.set_pos(90.0, 30.0, 0.0)
@@ -551,32 +556,66 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertEqual(pap_wc_dmg, 2500)
         self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "couch_slam", "pos": (48.0, 0.0, 0.0)}])
         self.assertEqual(len(gsc.earthquakes), 1)
-        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.35)
-        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.3)
-        self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 128.0)
+        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.38)
+        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.32)
+        self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 160.0)
         self.assertGreater(len(gsc.played_fx), 0)
 
-        # z_cone pushed far back cleanly (~112 units away from player) and staggered
-        self.assertGreater(z_cone.get_pos()[0], 180.0)
+        # z_cone pushed far back cleanly (~152 units away from player) and staggered
+        self.assertGreater(z_cone.get_pos()[0], 220.0)
         self.assertTrue(z_cone.get_field("bz_stunned"))
         self.assertGreater(len(z_cone.damage_events), 0)
 
-        # z_walled stopped safely before wall (safe_frac = 0.35 - 0.15 = 0.20 -> ~22 units, NOT 112!)
+        # z_walled stopped safely before wall (safe_frac = 0.35 - 0.15 = 0.20 -> ~30 units, NOT 152!)
         self.assertGreater(z_walled.get_pos()[0], 110.0)
-        self.assertLess(z_walled.get_pos()[0], 140.0)
+        self.assertLess(z_walled.get_pos()[0], 150.0)
 
-        # z_behind was behind player -> NOT hit or pushed
+        # z_behind was behind player (dot=-1.0 < -0.35) -> NOT hit or pushed
         self.assertEqual(z_behind.get_pos(), (-120.0, 0.0, 0.0))
         self.assertEqual(z_behind.damage_events, [])
 
         # Emits SPECIAL_WAR_CLUB_SMASH telemetry
         self.assertTrue(
             any(
-                e.startswith("BZ_EVENT|SPECIAL_WAR_CLUB_SMASH|") and "pap=1" in e and "radius=160" in e
+                e.startswith("BZ_EVENT|SPECIAL_WAR_CLUB_SMASH|") and "pap=1" in e and "radius=168" in e
                 for e in gsc.emitted_events
             ),
             f"Missing SPECIAL_WAR_CLUB_SMASH telemetry: {gsc.emitted_events}",
         )
+
+        # Floor-snap physics on stairs: pushing a zombie off an elevated catwalk (z=128) snaps Z to stair below (z=96)!
+        z_stair = SpecialFakeEntity("ZStair", ent_num=24, is_player=False)
+        z_stair.set_field("health", 2500)
+        z_stair.set_pos(80.0, 0.0, 128.0)
+
+        def stair_trace(start: GscArray, end: GscArray, _hit_chars: bool, _ig: Any) -> dict[str, Any]:
+            if float(end[2]) < float(start[2]) - 50.0:
+                return {"fraction": 0.37, "position": GscArray([float(start[0]), float(start[1]), 96.0])}
+            return {"fraction": 1.0, "position": end}
+
+        gsc.trace_handler = stair_trace
+        pushed_stair = gsc.call(
+            BZ_SPECIAL_MOD,
+            "bz_special_push_zombie_safely",
+            z_stair,
+            GscArray([0.0, 0.0, 128.0]),
+            GscArray([1.0, 0.0, 0.0]),
+            104,
+        )
+        gsc.trace_handler = None
+        self.assertTrue(pushed_stair)
+        self.assertAlmostEqual(z_stair.get_pos()[2], 96.0)
+
+        # Air-swing War Club trigger swaps in bz_war_club viewmodel, smashes crowd, and restores previous primary cleanly
+        gsc.sim_time_ms = 9000
+        p1.current_weapon = "thompson"
+        swing_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_trigger_war_club_swing", p1)
+        self.assertIsNot(swing_res, UNDEFINED)
+        self.assertEqual(p1.current_weapon, "bz_war_club")
+        self.assertIn("bz_war_club", p1.weapons)
+        gsc.call_on(p1, BZ_SPECIAL_MOD, "bz_special_restore_war_club_viewmodel", "thompson")
+        self.assertEqual(p1.current_weapon, "thompson")
+        self.assertNotIn("bz_war_club", p1.weapons)
 
         # Free swap back to Bowie restores specialty_altmelee for p1; War Club hook stops firing for p1
         self.assertTrue(
@@ -1629,6 +1668,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
             "bz_special_watch_portal_command",
             "bz_special_watch_portal_notify",
             "bz_special_watch_boomerang_recovery",
+            "bz_special_watch_war_club_melee",
             "bz_special_watch_player_disconnect",
             "bz_special_watch_max_ammo",
         ):
