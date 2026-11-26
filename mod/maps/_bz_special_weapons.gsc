@@ -1756,6 +1756,109 @@ bz_special_resolve_spawn_destination( player, slot_index )
 	return res;
 }
 
+bz_special_sync_portal_actionslot( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( !maps\_bz_state::bz_state_owns_portal_grenade( player ) )
+	{
+		return false;
+	}
+
+	if ( !player HasWeapon( "bz_portal_grenade" ) )
+	{
+		player GiveWeapon( "bz_portal_grenade" );
+	}
+	player SetActionSlot( 2, "weapon", "bz_portal_grenade" );
+
+	charges = maps\_bz_state::bz_state_get_portal_charges( player );
+	if ( charges < 0 )
+	{
+		charges = 0;
+	}
+	player SetWeaponAmmoClip( "bz_portal_grenade", charges );
+	player SetWeaponAmmoStock( "bz_portal_grenade", 0 );
+	return true;
+}
+
+bz_special_switch_back_to_primary( player )
+{
+	if ( !IsDefined( player ) || !IsAlive( player ) )
+	{
+		return;
+	}
+	primaries = player GetWeaponsListPrimaries();
+	if ( !IsDefined( primaries ) || primaries.size <= 0 )
+	{
+		return;
+	}
+	for ( i = 0; i < primaries.size; i++ )
+	{
+		w = primaries[i];
+		if ( IsDefined( w ) && w != "" && w != "none" && w != "bz_portal_grenade" && w != "bz_war_club" && player HasWeapon( w ) )
+		{
+			player SwitchToWeapon( w );
+			return;
+		}
+	}
+}
+
+bz_special_portal_orb_arc( start_pos, land_pos )
+{
+	level endon( "end_game" );
+
+	if ( !IsDefined( start_pos ) || !IsDefined( land_pos ) )
+	{
+		return;
+	}
+	dist = Distance( start_pos, land_pos );
+	if ( dist < 24.0 )
+	{
+		return;
+	}
+
+	orb = Spawn( "script_model", start_pos );
+	orb SetModel( "bz_portal_orb_air" );
+	orb SetContents( 0 );
+	orb NotSolid();
+	orb.bz_special_kind = "portal_orb_arc";
+	bz_special_track_entity( orb );
+
+	steps = 6;
+	step_dt = 0.04;
+	arc_lift = dist * 0.22;
+	if ( arc_lift > 64.0 )
+	{
+		arc_lift = 64.0;
+	}
+	if ( arc_lift < 16.0 )
+	{
+		arc_lift = 16.0;
+	}
+
+	for ( s = 1; s <= steps; s++ )
+	{
+		if ( !IsDefined( orb ) || ( IsDefined( orb.bz_special_deleted ) && orb.bz_special_deleted ) )
+		{
+			return;
+		}
+		t = ( s * 1.0 ) / ( steps * 1.0 );
+		lift = 4.0 * t * ( 1.0 - t ) * arc_lift;
+		pt = (
+			start_pos[0] + ( ( land_pos[0] - start_pos[0] ) * t ),
+			start_pos[1] + ( ( land_pos[1] - start_pos[1] ) * t ),
+			start_pos[2] + ( ( land_pos[2] - start_pos[2] ) * t ) + lift
+		);
+		orb MoveTo( pt, step_dt );
+		orb RotateYaw( 120.0, step_dt );
+		wait( step_dt );
+	}
+
+	bz_special_untrack_and_delete_entity( orb );
+}
+
 bz_special_try_activate_portal( player )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_special_player_is_downed( player ) )
@@ -1772,15 +1875,20 @@ bz_special_try_activate_portal( player )
 	now = GetTime();
 	if ( IsDefined( player.bz_portal_next_ready_time ) && now < player.bz_portal_next_ready_time )
 	{
+		bz_special_sync_portal_actionslot( player );
+		bz_special_update_hud( player );
 		return undefined;
 	}
 
 	if ( !maps\_bz_state::bz_state_try_consume_portal_charge( player ) )
 	{
+		bz_special_sync_portal_actionslot( player );
+		bz_special_update_hud( player );
 		return undefined;
 	}
 
 	player.bz_portal_next_ready_time = now + Int( cooldown_sec * 1000 );
+	bz_special_sync_portal_actionslot( player );
 	bz_special_update_hud( player );
 
 	bz_special_ensure_level_tables();
@@ -1812,6 +1920,13 @@ bz_special_try_activate_portal( player )
 	}
 	land_pos = bz_special_snap_to_floor( land_pos, player );
 
+	// Safe point-blank arming guard: if thrown right at a wall/feet (< 88u), delay thrower warp
+	// briefly so a panic wall throw doesn't accidentally instant-warp the thrower.
+	if ( IsDefined( player.origin ) && Distance( player.origin, land_pos ) < 88.0 )
+	{
+		player.bz_portal_warp_lock_until = now + 750;
+	}
+
 	duration = maps\_bz_rules::bz_get_portal_duration();
 	fx_name = bz_special_resolve_portal_fx_name();
 
@@ -1826,6 +1941,18 @@ bz_special_try_activate_portal( player )
 
 	bz_special_track_entity( portal );
 	level.bz_special_portals[level.bz_special_portals.size] = portal;
+
+	// Distinct glowing 3D violet-blue Portal Orb anchor hovering above the portal center
+	// so portals look unmistakable across all 4 Stock Maps (never confused with Acid Puddles or Power-Ups).
+	anchor_pos = ( land_pos[0], land_pos[1], land_pos[2] + 44.0 );
+	anchor_orb = Spawn( "script_model", anchor_pos );
+	anchor_orb SetModel( "bz_portal_orb_air" );
+	anchor_orb SetContents( 0 );
+	anchor_orb NotSolid();
+	anchor_orb.bz_special_kind = "portal_anchor";
+	anchor_orb.bz_owner = player;
+	bz_special_track_entity( anchor_orb );
+	portal.bz_anchor_model = anchor_orb;
 
 	// Use deletable SpawnFx + TriggerFx for looping portal FX so closing or end_game stops it cleanly.
 	portal_fx = bz_special_resolve_stock_fx( "portal" );
@@ -1843,6 +1970,8 @@ bz_special_try_activate_portal( player )
 	}
 	portal.bz_fx_ent = fx_ent;
 	PlaySoundAtPosition( "spawn_powerup", land_pos );
+
+	level thread bz_special_portal_orb_arc( eye, anchor_pos );
 
 	charges_left = maps\_bz_state::bz_state_get_portal_charges( player );
 	fields = [];
@@ -1938,6 +2067,12 @@ bz_special_close_portal( portal )
 		return false;
 	}
 	portal.bz_active = false;
+	if ( IsDefined( portal.bz_anchor_model ) )
+	{
+		anchor_orb = portal.bz_anchor_model;
+		portal.bz_anchor_model = undefined;
+		bz_special_untrack_and_delete_entity( anchor_orb );
+	}
 	if ( IsDefined( portal.bz_fx_ent ) )
 	{
 		fx_ent = portal.bz_fx_ent;
@@ -1979,6 +2114,10 @@ bz_special_portal_think( portal, owner )
 	while ( elapsed < duration && IsDefined( portal ) && IsDefined( portal.bz_active ) && portal.bz_active )
 	{
 		bz_special_portal_tick( portal, owner );
+		if ( IsDefined( portal.bz_anchor_model ) && ( !IsDefined( portal.bz_anchor_model.bz_special_deleted ) || !portal.bz_anchor_model.bz_special_deleted ) )
+		{
+			portal.bz_anchor_model RotateYaw( 24.0, 0.1 );
+		}
 		wait( 0.1 );
 		elapsed = elapsed + 0.1;
 	}
@@ -2014,7 +2153,16 @@ bz_special_format_hud_text( player )
 	if ( maps\_bz_state::bz_state_owns_portal_grenade( player ) )
 	{
 		charges = maps\_bz_state::bz_state_get_portal_charges( player );
-		parts[parts.size] = "PORTAL: " + charges;
+		portal_lbl = "PORTAL: " + charges;
+		if ( IsDefined( player.bz_portal_next_ready_time ) && GetTime() < Int( player.bz_portal_next_ready_time ) )
+		{
+			cd_rem = Int( ( Int( player.bz_portal_next_ready_time ) - GetTime() + 999 ) / 1000 );
+			if ( cd_rem > 0 )
+			{
+				portal_lbl = portal_lbl + " (CD " + cd_rem + "s)";
+			}
+		}
+		parts[parts.size] = portal_lbl;
 	}
 
 	if ( parts.size == 0 )
@@ -2176,9 +2324,8 @@ bz_special_ensure_player_watchers( player )
 	}
 }
 
-// Coop-safe tactical trigger (WaW 1.7 Coop rejects NotifyOnCommand()):
-// pressing USE + MELEE together activates Portal Grenade for any player without
-// colliding with Frag Grenades, Monkey Bombs, Bouncing Betties, or weapon slots.
+// Live Portal cooldown HUD refresh thread (replaces legacy USE+MELEE chord polling;
+// Portal Grenade is now deployed via Co-op-safe ActionSlot 2 weapon bz_portal_grenade - ADR-0006).
 bz_special_watch_portal_command()
 {
 	self endon( "disconnect" );
@@ -2186,21 +2333,24 @@ bz_special_watch_portal_command()
 
 	for ( ;; )
 	{
-		if ( bz_elements_enabled() &&
-			IsAlive( self ) &&
-			!bz_special_player_is_downed( self ) &&
-			( !IsDefined( self.bz_station_open ) || !self.bz_station_open ) &&
-			maps\_bz_state::bz_state_owns_portal_grenade( self ) &&
-			self UseButtonPressed() &&
-			self MeleeButtonPressed() )
+		wait( 0.5 );
+		if ( !bz_elements_enabled() || !IsDefined( self ) || !IsAlive( self ) )
 		{
-			bz_special_try_activate_portal( self );
-			while ( IsAlive( self ) && self UseButtonPressed() && self MeleeButtonPressed() )
+			continue;
+		}
+		if ( !maps\_bz_state::bz_state_owns_portal_grenade( self ) )
+		{
+			continue;
+		}
+		if ( IsDefined( self.bz_portal_next_ready_time ) && Int( self.bz_portal_next_ready_time ) > 0 )
+		{
+			bz_special_update_hud( self );
+			if ( GetTime() >= Int( self.bz_portal_next_ready_time ) )
 			{
-				wait( 0.05 );
+				self.bz_portal_next_ready_time = 0;
+				bz_special_update_hud( self );
 			}
 		}
-		wait( 0.05 );
 	}
 }
 
@@ -2302,8 +2452,10 @@ bz_special_on_pre_init()
 	{
 		return;
 	}
+	PrecacheItem( "bz_portal_grenade" );
 	PrecacheModel( "bz_crossbow_bolt" );
 	PrecacheModel( bz_special_get_boomerang_model() );
+	PrecacheModel( "bz_portal_orb_air" );
 }
 
 bz_special_on_init()
@@ -2323,6 +2475,7 @@ bz_special_on_player_connect( player )
 	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_special_sync_melee_slot_perk( player );
+	bz_special_sync_portal_actionslot( player );
 	bz_special_ensure_boomerang_recovered( player, true );
 	bz_special_ensure_player_watchers( player );
 	bz_special_update_hud( player );
@@ -2348,6 +2501,7 @@ bz_special_on_player_spawned( player )
 	}
 	maps\_bz_state::bz_state_ensure_init( player );
 	bz_special_sync_melee_slot_perk( player );
+	bz_special_sync_portal_actionslot( player );
 	bz_special_ensure_boomerang_recovered( player, true );
 	bz_special_ensure_player_watchers( player );
 	bz_special_update_hud( player );
@@ -2388,6 +2542,7 @@ bz_special_on_round_start( round_num )
 				if ( maps\_bz_state::bz_state_owns_portal_grenade( p ) )
 				{
 					maps\_bz_state::bz_state_on_round_start( p );
+					bz_special_sync_portal_actionslot( p );
 					bz_special_update_hud( p );
 				}
 			}
@@ -2411,6 +2566,7 @@ bz_special_on_max_ammo( player )
 
 	charges = maps\_bz_rules::bz_get_portal_max_charges();
 	player.bz_portal_charges = charges;
+	bz_special_sync_portal_actionslot( player );
 	bz_special_update_hud( player );
 
 	fields = [];
@@ -2432,6 +2588,7 @@ bz_special_on_item_purchased( ctx )
 	if ( cat == "special_gear" )
 	{
 		bz_special_sync_melee_slot_perk( ctx.player );
+		bz_special_sync_portal_actionslot( ctx.player );
 		bz_special_update_hud( ctx.player );
 	}
 }
@@ -2452,6 +2609,16 @@ bz_special_on_weapon_fired( player, weapon_name )
 	if ( weap == "bz_blade_boomerang" )
 	{
 		bz_special_fire_blade_boomerang( player, weap );
+		return;
+	}
+	if ( weap == "bz_portal_grenade" )
+	{
+		portal = bz_special_try_activate_portal( player );
+		if ( !IsDefined( portal ) )
+		{
+			player PlayLocalSound( "no_purchase" );
+		}
+		bz_special_switch_back_to_primary( player );
 		return;
 	}
 }

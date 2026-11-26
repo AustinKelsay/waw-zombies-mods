@@ -858,6 +858,7 @@ class TestMysteryBoxAndElementHookSeams(unittest.TestCase):
                 "bz_cryo_cannon",
                 "bz_multi_crossbow",
                 "bz_blade_boomerang",
+                "bz_portal_grenade",
             ],
         )
 

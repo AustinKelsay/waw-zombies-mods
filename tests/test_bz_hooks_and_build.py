@@ -610,14 +610,20 @@ class BzGscRuntime(GscRuntime):
             return False
         if method == "getweaponslistprimaries":
             if isinstance(receiver, FakeEntity):
+                item_only = {"bz_portal_grenade", "bz_war_club", "mine_bouncing_betty", "zombie_bowie_flourish"}
                 primaries = receiver.__dict__.get("primary_weapons")
                 if isinstance(primaries, (list, tuple, set)):
-                    return GscArray(list(primaries))
+                    return GscArray([w for w in primaries if str(w).lower() not in item_only])
                 if receiver.weapons:
-                    return GscArray(sorted(receiver.weapons))
-                if receiver.current_weapon and receiver.current_weapon != "none":
+                    return GscArray(sorted(w for w in receiver.weapons if str(w).lower() not in item_only))
+                if receiver.current_weapon and receiver.current_weapon != "none" and receiver.current_weapon.lower() not in item_only:
                     return GscArray([receiver.current_weapon])
             return GscArray([])
+        if method == "setactionslot":
+            if isinstance(receiver, FakeEntity) and len(args) >= 3:
+                slots = receiver.__dict__.setdefault("action_slots", {})
+                slots[int(args[0])] = (_waw_to_str(args[1]), _waw_to_str(args[2]))
+            return UNDEFINED
         if method == "getweaponslist":
             if isinstance(receiver, FakeEntity):
                 if receiver.weapons:

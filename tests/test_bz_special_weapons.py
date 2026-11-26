@@ -1152,7 +1152,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         gsc.sim_time_ms = 5000
         self.assertIsNot(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", player), UNDEFINED)
         self.assertEqual(player.bz_portal_charges, 1)
-        self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 1")
+        self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 1 (CD 25s)")
 
         gsc.call(BZ_HOOKS_MOD, "bz_notify_all_players_max_ammo")
         self.assertIn((player, "zmb_max_ammo"), gsc.notifies)
@@ -1181,6 +1181,10 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
 
         self.assertEqual(endon_guards, [(player, "disconnect"), (gsc.level, "end_game")])
         self.assertEqual(player.bz_portal_charges, 2)
+        self.assertEqual(player.weapon_clips["bz_portal_grenade"], 2)
+        self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 2 (CD 25s)")
+        gsc.sim_time_ms = 31000
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_update_hud", player)
         self.assertEqual(player.bz_special_hud.current_text, "PORTAL: 2")
         self.assertEqual(
             gsc.emitted_events.count("BZ_EVENT|SPECIAL_PORTAL_REFILL|player=PlayerOne;reason=max_ammo;charges=2"),
@@ -1276,22 +1280,42 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertIs(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1), UNDEFINED)
         self.assertEqual(gsc.played_sounds_at_pos, [])
 
-        # Buy Portal Grenade (6000 pts) -> does NOT consume primary weapon slot or change offhand
+        # Buy Portal Grenade (6000 pts) -> binds ActionSlot 2 item weapon without consuming primary weapon slot
         primaries_before = set(p1.weapons)
         self.assertTrue(
             gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:portal_grenade")
         )
-        self.assertEqual(p1.weapons, primaries_before)
+        self.assertIn("bz_portal_grenade", p1.weapons)
+        self.assertEqual(p1.action_slots.get(2), ("weapon", "bz_portal_grenade"))
+        self.assertEqual(p1.weapon_clips.get("bz_portal_grenade"), 2)
+        self.assertEqual(p1.weapon_stocks.get("bz_portal_grenade"), 0)
+        primaries_arr = gsc._exec_method(p1, "getweaponslistprimaries", [], 0)
+        primaries_after = {primaries_arr[i] for i in range(primaries_arr.size)}
+        self.assertEqual(primaries_after, primaries_before)
         self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_owns_portal_grenade", p1))
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 2)
 
-        # Activate Portal Grenade at t=5000ms -> consumes 1 charge (1 left), spawns 8s portal at ~(720, 500, 0)
+        # Activate Portal Grenade via ActionSlot 2 weapon_fired at t=5000ms -> consumes 1 charge (1 left),
+        # spawns 8s portal + hovering 3D bz_portal_orb_air anchor + arc thread, and switches back to primary
         gsc.sim_time_ms = 5000
-        portal = gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1)
+        p1.current_weapon = "bz_portal_grenade"
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", p1, "bz_portal_grenade")
+        portals = gsc.level.get_field("bz_special_portals")
+        self.assertEqual(portals.size, 1)
+        portal = portals[0]
         self.assertIsNot(portal, UNDEFINED)
+        self.assertNotEqual(p1.current_weapon, "bz_portal_grenade")
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
+        self.assertEqual(p1.weapon_clips.get("bz_portal_grenade"), 1)
         self.assertAlmostEqual(float(portal.get_field("bz_duration")), 8.0)
         self.assertEqual(portal.get_field("bz_fx_name"), "transporter_ambient")
+        # Hovering 3D Portal Orb anchor model is spawned non-solid and tracked for cleanup
+        portal_anchor = portal.get_field("bz_anchor_model")
+        self.assertIsNot(portal_anchor, UNDEFINED)
+        self.assertEqual(portal_anchor.get_field("model"), "bz_portal_orb_air")
+        self.assertEqual(portal_anchor.contents, 0)
+        self.assertTrue(portal_anchor.not_solid)
+        self.assertTrue(any(t[1] == "bz_special_portal_orb_arc" for t in gsc._threads))
         # Portal looping FX MUST use tracked SpawnFx + TriggerFx (never unmanaged PlayFX!)
         portal_fx_ent = portal.get_field("bz_fx_ent")
         self.assertIsNot(portal_fx_ent, UNDEFINED)
@@ -1312,10 +1336,15 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
             f"Missing SPECIAL_PORTAL_OPEN event: {gsc.emitted_events}",
         )
 
-        # Cooldown enforced (25s): trying again at t=15000ms (10s later) fails without spending 2nd charge
+        # Cooldown enforced (25s): firing ActionSlot 2 weapon again at t=15000ms (10s later) plays no_purchase
+        # without spending 2nd charge and switches back to primary
         gsc.sim_time_ms = 15000
-        self.assertIs(gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1), UNDEFINED)
+        p1.current_weapon = "bz_portal_grenade"
+        gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", p1, "bz_portal_grenade")
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
+        self.assertEqual(p1.weapon_clips.get("bz_portal_grenade"), 1)
+        self.assertIn((p1, "no_purchase"), gsc.played_local_sounds)
+        self.assertNotEqual(p1.current_weapon, "bz_portal_grenade")
 
         # Place thrower p1, teammate p2, AND two zombies directly inside the portal radius (<= 96 units)
         portal_pos = portal.get_pos()
@@ -1348,7 +1377,7 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         self.assertEqual(p2.transported_calls, [1.5])
         self.assertEqual(
             gsc.played_local_sounds,
-            [(p1, "cha_ching"), (p1, "powerup_grabbed"), (p2, "powerup_grabbed")],
+            [(p1, "cha_ching"), (p1, "no_purchase"), (p1, "powerup_grabbed"), (p2, "powerup_grabbed")],
         )
 
         # STRICT ZOMBIE EXCLUSION: neither zombie moved at all!
@@ -1390,27 +1419,39 @@ class TestPortalGrenadeSpecialWeapon(unittest.TestCase):
         # Round start recharges portal back to 2 charges, and cooldown expiry allows 2nd throw
         gsc.call(BZ_HOOKS_MOD, "bz_on_round_start", 2)
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 2)
+        # Point-blank throw against a wall (< 88u) arms a 750ms thrower warp lock so thrower isn't instant-warped
         gsc.sim_time_ms = 31000  # 26s after first throw (>= 25s)
+        p1.set_pos(500.0, 500.0, 0.0)
+        gsc.trace_handler = lambda s, e, _hc, _ig: {"fraction": 0.15, "position": GscArray([530.0, 500.0, 0.0]), "entity": UNDEFINED}
         portal2 = gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1)
+        gsc.trace_handler = None
         self.assertIsNot(portal2, UNDEFINED)
+        self.assertEqual(int(p1.get_field("bz_portal_warp_lock_until")), 31750)
         portal2_fx_ent = portal2.get_field("bz_fx_ent")
+        portal2_anchor = portal2.get_field("bz_anchor_model")
         self.assertIsNot(portal2_fx_ent, UNDEFINED)
+        self.assertIsNot(portal2_anchor, UNDEFINED)
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_portal_charges", p1), 1)
 
-        # Close portal1 explicitly (deletes both portal AND portal.bz_fx_ent cleanly),
-        # then end_game cleans up portal2 + portal2.bz_fx_ent with zero double-deletes
+        # Close portal1 explicitly (deletes portal, bz_fx_ent, AND bz_anchor_model cleanly),
+        # then end_game cleans up portal2 + portal2_fx_ent + portal2_anchor with zero double-deletes
         gsc.call(BZ_SPECIAL_MOD, "bz_special_close_portal", portal)
         self.assertTrue(portal.deleted)
         self.assertTrue(portal_fx_ent.deleted)
+        self.assertTrue(portal_anchor.deleted)
         self.assertFalse(portal2.deleted)
         self.assertFalse(portal2_fx_ent.deleted)
+        self.assertFalse(portal2_anchor.deleted)
         gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(portal2.deleted)
         self.assertTrue(portal2_fx_ent.deleted)
+        self.assertTrue(portal2_anchor.deleted)
         self.assertEqual(portal.delete_count, 1)
         self.assertEqual(portal_fx_ent.delete_count, 1)
+        self.assertEqual(portal_anchor.delete_count, 1)
         self.assertEqual(portal2.delete_count, 1)
         self.assertEqual(portal2_fx_ent.delete_count, 1)
+        self.assertEqual(portal2_anchor.delete_count, 1)
 
 
 class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
@@ -1452,11 +1493,15 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         gsc.call(BZ_SPECIAL_MOD, "bz_special_update_hud", p1)
         self.assertEqual(len(hud1.text_history), writes_before)
 
-        # Activating Portal decrements HUD count to PORTAL: 1; round_start recharges to PORTAL: 2
+        # Activating Portal decrements HUD count with live cooldown timer; round_start recharges to 2;
+        # once cooldown expires, HUD clears (CD Ns) back to PORTAL: 2
         gsc.sim_time_ms = 5000
         gsc.call(BZ_SPECIAL_MOD, "bz_special_try_activate_portal", p1)
-        self.assertEqual(hud1.current_text, "MELEE: WAR CLUB+ | PORTAL: 1")
+        self.assertEqual(hud1.current_text, "MELEE: WAR CLUB+ | PORTAL: 1 (CD 25s)")
         gsc.call(BZ_HOOKS_MOD, "bz_on_round_start", 2)
+        self.assertEqual(hud1.current_text, "MELEE: WAR CLUB+ | PORTAL: 2 (CD 25s)")
+        gsc.sim_time_ms = 31000
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_update_hud", p1)
         self.assertEqual(hud1.current_text, "MELEE: WAR CLUB+ | PORTAL: 2")
 
         # Swapping back to Bowie drops War Club badge while preserving PORTAL: 2

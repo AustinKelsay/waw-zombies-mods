@@ -74,6 +74,10 @@ bz_pap_ensure_player_tables( player )
 bz_pap_get_weapon_safe( player, weapon_name )
 {
 	norm = bz_normalize_id( weapon_name );
+	if ( norm == "bz_portal_grenade" || norm == "bz_war_club" )
+	{
+		return "";
+	}
 	if ( norm != "" && norm != "none" )
 	{
 		return norm;
@@ -81,7 +85,7 @@ bz_pap_get_weapon_safe( player, weapon_name )
 	if ( IsDefined( player ) )
 	{
 		cur = bz_normalize_id( player GetCurrentWeapon() );
-		if ( cur != "" && cur != "none" )
+		if ( cur != "" && cur != "none" && cur != "bz_portal_grenade" && cur != "bz_war_club" )
 		{
 			return cur;
 		}

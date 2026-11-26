@@ -131,6 +131,13 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             self.assertEqual(specs[weap_name][1]["gunModel"], viewmodel)
             self.assertEqual(specs[weap_name][1]["worldModel"], bz_models.CUSTOM_WEAPON_WORLDMODELS[weap_name])
 
+        item_specs = {name: (cands, overrides) for name, cands, overrides in build_mod.BZ_SPECIAL_ITEM_WEAPON_SPECS}
+        for weap_name, viewmodel in bz_models.CUSTOM_SPECIAL_WEAPON_VIEWMODELS.items():
+            self.assertIn(weap_name, item_specs)
+            self.assertEqual(item_specs[weap_name][1]["inventoryType"], "item")
+            self.assertEqual(item_specs[weap_name][1]["gunModel"], viewmodel)
+            self.assertEqual(item_specs[weap_name][1]["worldModel"], bz_models.CUSTOM_SPECIAL_WEAPON_WORLDMODELS[weap_name])
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             stage = root / "stage"
