@@ -774,8 +774,8 @@ class TestCryoCannonWeapon(unittest.TestCase):
 
         z_cone = ElemNewFakeEntity("ZCone", ent_num=10, is_player=False, origin=(390.0, 60.0, 0.0))
         z_beam = ElemNewFakeEntity("ZBeam", ent_num=11, is_player=False, origin=(180.0, 20.0, 0.0))
-        z_behind = ElemNewFakeEntity("ZBehind", ent_num=12, is_player=False, origin=(-120.0, 0.0, 0.0))
-        z_far = ElemNewFakeEntity("ZFar", ent_num=13, is_player=False, origin=(360.0, 140.0, 0.0))
+        z_behind = ElemNewFakeEntity("ZBehind", ent_num=12, is_player=False, origin=(-180.0, 0.0, 0.0))
+        z_far = ElemNewFakeEntity("ZFar", ent_num=13, is_player=False, origin=(360.0, 420.0, 0.0))
         for z in (z_cone, z_beam, z_behind, z_far):
             z.set_field("health", 800)
             z.set_field("moveplaybackrate", 1.0)
@@ -982,12 +982,13 @@ class TestCryoCannonWeapon(unittest.TestCase):
         gsc.sim_time_ms = 5000
         gsc.bullet_trace_fn = lambda s, e: {"fraction": 0.25, "position": GscArray([250.0, 0.0, 60.0])}
 
-        # Target inside cone, plus adjacent zombie just outside the 110u cone but within 96u of target
+        # Target inside cone, plus adjacent zombie outside chain range? No, test shatter splash separately:
+        # Place z_main in cone and z_splash 70u away AFTER shot 1 so shot 1 freezes z_main and shot 2 shatters + splashes!
         z_main = ElemNewFakeEntity("ZMain", ent_num=31, is_player=False, origin=(340.0, 0.0, 0.0))
         z_main.set_field("health", 4000)
         z_splash = ElemNewFakeEntity("ZSplash", ent_num=32, is_player=False, origin=(410.0, 0.0, 0.0))
         z_splash.set_field("health", 4000)
-        gsc.ai_enemies.extend([z_main, z_splash])
+        gsc.ai_enemies.append(z_main)
 
         # Shot 1: deals 45% of 2000 = 900 real Cryo Blast damage and freezes z_main (tag FX + glass audio)
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
@@ -998,17 +999,71 @@ class TestCryoCannonWeapon(unittest.TestCase):
         self.assertTrue(any(alias == "bullet_small_glass" for alias, _pos in gsc.played_sounds_at_pos))
         self.assertFalse(bool(z_splash.get_field("bz_is_frozen")))
 
-        # Shot 2 (next frame / 500ms later): shatters already-frozen z_main for 2.5x (2250 dmg),
-        # plays impact_hard_glass, and splashes/chills adjacent z_splash (65% of 900 = 585 dmg + freeze)!
+        # Shot 2 (next frame / 500ms later): z_splash walks within 70u right before shatter ->
+        # shot 2 shatters already-frozen z_main for 2.5x (2250 dmg), plays impact_hard_glass,
+        # splashes adjacent z_splash (65% of 900 = 585 dmg + freeze), AND chains frost bolt across!
+        gsc.ai_enemies.append(z_splash)
         gsc.sim_time_ms = 5500
         gsc.call(BZ_HOOKS_MOD, "bz_on_weapon_fired", player, "bz_cryo_cannon")
         self.assertEqual(len(z_main.damage_events), 2)
         self.assertEqual(z_main.damage_events[1]["damage"], 2250)
         self.assertFalse(bool(z_main.get_field("bz_is_frozen")))
-        self.assertEqual(len(z_splash.damage_events), 1)
+        self.assertGreaterEqual(len(z_splash.damage_events), 1)
         self.assertEqual(z_splash.damage_events[0]["damage"], 585)
         self.assertTrue(z_splash.get_field("bz_is_frozen"))
         self.assertTrue(any(alias == "impact_hard_glass" for alias, _pos in gsc.played_sounds_at_pos))
+
+    def test_cryo_cannon_wunderwaffe_chaining_scales_across_base_pap_and_double_pap(self) -> None:
+        _, gsc, player = _setup_elem_new_env(map_name="nazi_zombie_prototype", pap_enabled=True)
+        gsc.level.set_field("round_number", 12)
+        gsc.level.set_field("zombie_health", 1500)
+        gsc.sim_time_ms = 4000
+
+        # Line of 16 zombies spaced 120u apart starting at x=200 (seed hit directly by trace)
+        line_zombies: list[ElemNewFakeEntity] = []
+        for idx in range(16):
+            z = ElemNewFakeEntity(f"ZChain{idx}", ent_num=70 + idx, is_player=False, origin=(200.0 + idx * 120.0, 0.0, 0.0))
+            z.set_field("health", 5000)
+            z.set_field("moveplaybackrate", 1.0)
+            line_zombies.append(z)
+        gsc.ai_enemies.extend(line_zombies)
+        gsc.bullet_trace_fn = lambda s, e: {
+            "fraction": 0.20,
+            "position": GscArray([200.0, 0.0, 36.0]),
+            "entity": line_zombies[0],
+        }
+
+        # 1. Base Cryo Cannon chains to 7 zombies (freezing all 7, leaving #7..#15 untouched)
+        chained_base = int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_fire_cryo_cannon", player, "bz_cryo_cannon"))
+        self.assertEqual(chained_base, 7)
+        for idx in range(7):
+            self.assertTrue(line_zombies[idx].get_field("bz_is_frozen"), f"Base hop {idx} should be frozen")
+            self.assertAlmostEqual(float(line_zombies[idx].get_field("moveplaybackrate")), 0.01)
+        for idx in range(7, 16):
+            self.assertFalse(bool(line_zombies[idx].get_field("bz_is_frozen")), f"Zombie {idx} beyond base cap 7")
+
+        # 2. Tier 1 PaP Cryo Cannon chains up to 10 zombies (thaw first to test clean freeze count)
+        for z in line_zombies:
+            gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_thaw_zombie", z)
+        gsc.sim_time_ms = 9000
+        gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_cryo_cannon")
+        chained_pap = int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_fire_cryo_cannon", player, "bz_cryo_cannon"))
+        self.assertEqual(chained_pap, 10)
+        self.assertTrue(line_zombies[9].get_field("bz_is_frozen"))
+        self.assertFalse(bool(line_zombies[10].get_field("bz_is_frozen")))
+
+        # 3. Double PaP Cryo Cannon chains up to 14 zombies
+        for z in line_zombies:
+            gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_thaw_zombie", z)
+        gsc.sim_time_ms = 14000
+        gsc.call(BZ_PAP_MOD, "bz_pap_apply_double_pap", player, "bz_cryo_cannon")
+        chained_dpap = int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_fire_cryo_cannon", player, "bz_cryo_cannon"))
+        self.assertEqual(chained_dpap, 14)
+        self.assertTrue(line_zombies[13].get_field("bz_is_frozen"))
+        self.assertFalse(bool(line_zombies[14].get_field("bz_is_frozen")))
+        cryo_events = [e for e in gsc.emitted_events if e.startswith("BZ_EVENT|ELEM_CRYO_FREEZE|")]
+        self.assertIn("chains=14", cryo_events[-1])
+        self.assertIn("max_chain=14", cryo_events[-1])
 
 
 class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
@@ -1195,6 +1250,7 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
         mod = gsc.load_module(BZ_ELEM_NEW_MOD)
         allowed_threaded_funcs = {
             "bz_elem_new_acid_puddle_think",
+            "bz_elem_new_cryo_chain_visuals",
             "bz_elem_new_watch_acid_slow_expiry",
             "bz_elem_new_watch_acid_stream",
             "bz_elem_new_watch_cryo_thaw",

@@ -515,12 +515,12 @@ class TestZeroFxWeaponClonerAndBuildStaging(unittest.TestCase):
                 "bz_cryo_cannon": (
                     "bz_cryo",
                     "Cryo Cannon",
-                    "16",
+                    "8",
                     "288",
                     "96",
                     "viewmodel_bz_cryo_cannon",
                     "world_bz_cryo_cannon",
-                    "0.50",
+                    "0.55",
                 ),
                 "bz_multi_crossbow": (
                     "bz_xbow",

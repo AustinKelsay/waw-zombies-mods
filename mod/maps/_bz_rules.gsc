@@ -1174,6 +1174,50 @@ bz_get_cryo_shatter_mult()
 	return 2.50;
 }
 
+bz_get_cryo_max_chain( is_pap, is_dpap )
+{
+	if ( bz_is_true( is_dpap ) )
+	{
+		return 14;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		return 10;
+	}
+	return 7;
+}
+
+bz_get_cryo_chain_radius_start( is_pap, is_dpap )
+{
+	if ( bz_is_true( is_dpap ) )
+	{
+		return 340;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		return 300;
+	}
+	return 260;
+}
+
+bz_get_cryo_chain_radius_decay()
+{
+	return 16;
+}
+
+bz_get_cryo_shatter_splash_radius( is_pap, is_dpap )
+{
+	if ( bz_is_true( is_dpap ) )
+	{
+		return 160;
+	}
+	if ( bz_is_true( is_pap ) )
+	{
+		return 128;
+	}
+	return 96;
+}
+
 bz_calc_acid_direct_damage( round_num, zombie_health, is_pap, is_dpap )
 {
 	zhp = bz_resolve_zombie_health( round_num, zombie_health );

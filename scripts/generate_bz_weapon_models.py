@@ -612,77 +612,106 @@ def build_cryo_cannon(name: str, is_world: bool = False) -> MeshBuilder:
     dark = "mtl_bz_cryo_dark"
     glow = "mtl_bz_cryo_glow"
 
-    # Sculpted tapered rear stock & pistol grip (slimmed width & recessed top profile so Tesla reload hand/thumb clear cleanly, F13/O16!)
+    # Sculpted tapered rear stock, recoil buttpad & ergonomic pistol grip (slimmed for Tesla reload clearance!)
+    m.add_tapered_prism(dark, (-7.6, 0.0, -0.02), (-6.8, 0.0, 0.12), 0.96, 0.92, sides=12, bone_idx=b_gun, scale_y=0.80, scale_z=0.92)
     m.add_tapered_prism(dark, (-7.0, 0.0, 0.10), (-1.5, 0.0, 0.65), 0.90, 1.25, sides=12, bone_idx=b_gun, scale_y=0.84, scale_z=0.74)
     m.add_tapered_prism(hull, (-1.8, 0.0, 0.65), (3.8, 0.0, 1.20), 1.25, 1.66, sides=12, bone_idx=b_gun, scale_y=0.86, scale_z=0.78)
     m.add_box(dark, (-0.5, 0.0, -2.8), (2.0, 1.32, 3.6), bone_idx=b_gun, rot_xyz=(0.0, 14.0, 0.0))
+    # Rear cryogenic pressure dial embedded cleanly into left rear cheek (below sightline!)
+    m.add_tapered_prism(dark, (1.4, 1.28, 1.80), (1.4, 1.66, 1.80), 0.56, 0.52, sides=12, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (1.4, 1.60, 1.80), (1.4, 1.72, 1.80), 0.36, 0.34, sides=12, bone_idx=b_gun)
 
-    # Main sleek 12-sided arctic-titanium cryo projector chassis (kept below Z=3.35 for clear ADS sightline!)
-    m.add_tapered_prism(hull, (3.6, 0.0, 1.40), (22.5, 0.0, 1.70), 1.72, 1.54, sides=12, bone_idx=b_gun, cap_start=False, scale_y=0.90)
-    # Dark cobalt-steel under-receiver & contoured foregrip rail
-    m.add_tapered_prism(dark, (2.5, 0.0, -0.20), (21.0, 0.0, 0.15), 1.10, 0.88, sides=10, bone_idx=b_gun)
+    # Main sculpted 12-sided arctic-titanium cryo projector chassis + layered bevel shroud plates (Z <= 3.35!)
+    m.add_tapered_prism(hull, (3.6, 0.0, 1.40), (22.5, 0.0, 1.70), 1.74, 1.56, sides=12, bone_idx=b_gun, cap_start=False, scale_y=0.90)
+    # Recessed dark-cobalt thermal side vents & contoured cheek armor along chassis flanks
+    for side in (-1.0, +1.0):
+        m.add_box(dark, (14.2, side * 1.44, 1.55), (14.5, 0.24, 0.72), bone_idx=b_gun)
+        m.add_box(hull, (14.2, side * 1.54, 2.02), (13.6, 0.18, 0.34), bone_idx=b_gun, rot_xyz=(side * 16.0, 0.0, 0.0))
+        m.add_box(hull, (14.2, side * 1.54, 1.08), (13.6, 0.18, 0.34), bone_idx=b_gun, rot_xyz=(-side * 16.0, 0.0, 0.0))
+        m.add_tapered_prism(glow, (8.0, side * 1.56, 1.55), (20.4, side * 1.48, 1.62), 0.12, 0.10, sides=8, bone_idx=b_gun)
+    # Dark cobalt-steel under-receiver & sculpted ribbed foregrip rail
+    m.add_tapered_prism(dark, (2.5, 0.0, -0.20), (21.5, 0.0, 0.18), 1.12, 0.88, sides=10, bone_idx=b_gun)
+    for gx in (13.0, 14.4, 15.8, 17.2, 18.6):
+        m.add_box(hull, (gx, 0.0, -0.58), (0.45, 1.38, 0.26), bone_idx=b_gun)
     # Recessed glowing glacial-blue dorsal cryo-plasma conduit spine (below Z=3.20 -> unobstructed sightline!)
-    m.add_tapered_prism(glow, (4.2, 0.0, 2.95), (28.5, 0.0, 2.95), 0.32, 0.24, sides=10, bone_idx=b_gun)
-    # Sleek low-profile dark-titanium saddle clamps straddling the dorsal cryo conduit (Z <= 3.30)
+    m.add_tapered_prism(glow, (4.2, 0.0, 2.95), (29.5, 0.0, 2.95), 0.34, 0.24, sides=10, bone_idx=b_gun)
+    # Sleek low-profile dark-titanium saddle clamps straddling the dorsal cryo conduit (Z <= 3.32)
     for rx in (6.0, 10.0, 14.0, 18.0, 22.0, 26.0):
-        m.add_tapered_prism(dark, (rx - 0.34, 0.0, 2.10), (rx + 0.34, 0.0, 2.10), 1.25, 1.25, sides=10, bone_idx=b_gun)
-        m.add_box(hull, (rx, 0.0, 3.25), (0.60, 1.55, 0.22), bone_idx=b_gun)
+        m.add_tapered_prism(dark, (rx - 0.36, 0.0, 2.10), (rx + 0.36, 0.0, 2.10), 1.28, 1.28, sides=10, bone_idx=b_gun)
+        m.add_box(hull, (rx, 0.0, 3.24), (0.62, 1.62, 0.22), bone_idx=b_gun)
 
-    # 3 animated hexagonal glowing liquid-nitrogen cryo cartridges on left flank (j_bulb_1/2/3!)
+    # 3 animated octagonal glowing liquid-nitrogen cryo cartridges on left flank (j_bulb_1/2/3!) with protective cages
     bulb_xs = (7.89, 9.64, 11.39)
     for b_idx, bx in zip(b_bulbs, bulb_xs):
-        m.add_tapered_prism(glow, (bx, 2.95, 0.22), (bx, 2.95, 2.55), 0.48, 0.48, sides=8, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, -0.18), (bx, 2.95, 0.30), 0.64, 0.64, sides=8, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, 1.25), (bx, 2.95, 1.52), 0.58, 0.58, sides=8, bone_idx=b_idx)
-        m.add_tapered_prism(dark, (bx, 2.95, 2.45), (bx, 2.95, 2.95), 0.64, 0.50, sides=8, bone_idx=b_idx)
-    m.add_tapered_prism(dark, (6.8, 2.35, 0.05), (12.5, 2.35, 0.05), 0.55, 0.55, sides=8, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (7.0, 2.35, 2.75), (12.3, 2.35, 2.75), 0.38, 0.38, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(glow, (bx, 2.95, 0.18), (bx, 2.95, 2.58), 0.50, 0.50, sides=10, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, -0.22), (bx, 2.95, 0.28), 0.68, 0.68, sides=10, bone_idx=b_idx)
+        m.add_tapered_prism(hull, (bx, 2.95, 0.88), (bx, 2.95, 1.06), 0.60, 0.60, sides=10, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, 1.56), (bx, 2.95, 1.76), 0.62, 0.62, sides=10, bone_idx=b_idx)
+        m.add_tapered_prism(dark, (bx, 2.95, 2.46), (bx, 2.95, 3.00), 0.68, 0.50, sides=10, bone_idx=b_idx)
+        # Outer twin protective roll-cage struts per nitrogen cell
+        m.add_tapered_prism(hull, (bx - 0.38, 3.42, 0.12), (bx - 0.38, 3.42, 2.66), 0.08, 0.08, sides=6, bone_idx=b_idx)
+        m.add_tapered_prism(hull, (bx + 0.38, 3.42, 0.12), (bx + 0.38, 3.42, 2.66), 0.08, 0.08, sides=6, bone_idx=b_idx)
+    m.add_tapered_prism(dark, (6.6, 2.38, 0.02), (12.7, 2.38, 0.02), 0.58, 0.58, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (6.8, 2.38, 2.78), (12.5, 2.38, 2.78), 0.42, 0.42, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (12.4, 2.38, 2.78), (15.4, 1.35, 2.40), 0.16, 0.14, sides=8, bone_idx=b_gun)
 
-    # Right-side auxiliary liquid-nitrogen condenser tube + frosted feed pipe
-    m.add_tapered_prism(dark, (5.5, -2.35, 1.15), (14.8, -2.35, 1.15), 0.85, 0.85, sides=12, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (6.5, -2.65, 1.15), (13.8, -2.65, 1.15), 0.34, 0.34, sides=8, bone_idx=b_gun)
-    m.add_tapered_prism(hull, (14.6, -2.35, 1.15), (17.2, -1.35, 1.65), 0.34, 0.28, sides=8, bone_idx=b_gun)
+    # Right-side pressurized liquid-nitrogen condenser drum with ringed cooling bands + dual frosted feed pipes
+    m.add_tapered_prism(dark, (5.2, -2.38, 1.15), (15.0, -2.38, 1.15), 0.90, 0.88, sides=14, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (4.7, -2.38, 1.15), (5.3, -2.38, 1.15), 0.60, 0.90, sides=14, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (14.9, -2.38, 1.15), (15.6, -2.38, 1.15), 0.88, 0.56, sides=14, bone_idx=b_gun)
+    for cx in (6.8, 8.6, 10.4, 12.2, 14.0):
+        m.add_tapered_prism(hull, (cx - 0.18, -2.38, 1.15), (cx + 0.18, -2.38, 1.15), 0.98, 0.98, sides=14, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (6.2, -2.72, 1.15), (14.2, -2.72, 1.15), 0.36, 0.36, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (15.4, -2.38, 1.15), (18.0, -1.25, 1.65), 0.34, 0.28, sides=8, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (15.2, -2.10, 1.55), (17.8, -1.15, 1.92), 0.14, 0.12, sides=8, bone_idx=b_gun)
 
     # Animated cryo-vent bolt shroud (skinned to j_bolt)
-    m.add_tapered_prism(dark, (16.0, 1.15, 1.55), (19.2, 1.15, 1.55), 0.55, 0.45, sides=8, bone_idx=b_bolt)
-    m.add_tapered_prism(glow, (16.5, 1.55, 1.55), (18.7, 1.55, 1.55), 0.16, 0.16, sides=6, bone_idx=b_bolt)
+    m.add_tapered_prism(dark, (15.8, 1.15, 1.55), (19.4, 1.15, 1.55), 0.58, 0.46, sides=10, bone_idx=b_bolt)
+    m.add_tapered_prism(hull, (16.2, 1.15, 1.55), (17.0, 1.15, 1.55), 0.64, 0.62, sides=10, bone_idx=b_bolt)
+    m.add_tapered_prism(glow, (16.5, 1.58, 1.55), (18.9, 1.58, 1.55), 0.18, 0.16, sides=8, bone_idx=b_bolt)
 
-    # Inner cryo barrel + 5 pairs of sleek angular cryogenic radiator fins flaring left & right
-    m.add_tapered_prism(dark, (22.0, 0.0, 1.80), (35.5, 0.0, 1.95), 1.05, 0.90, sides=12, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (22.0, 0.0, 1.80), (36.0, 0.0, 1.95), 0.48, 0.42, sides=10, bone_idx=b_gun)
-    for fi, fx in enumerate((21.5, 24.0, 26.5, 29.0, 31.5)):
-        span = 3.5 - fi * 0.20
-        m.add_box(hull, (fx, +span * 0.55, 1.85), (0.55, span, 0.30), bone_idx=b_gun, rot_xyz=(18.0, 0.0, -18.0))
-        m.add_box(hull, (fx, -span * 0.55, 1.85), (0.55, span, 0.30), bone_idx=b_gun, rot_xyz=(-18.0, 0.0, 18.0))
-        m.add_box(glow, (fx, +span * 0.94, 2.05), (0.40, 0.20, 0.20), bone_idx=b_gun)
-        m.add_box(glow, (fx, -span * 0.94, 2.05), (0.40, 0.20, 0.20), bone_idx=b_gun)
+    # Inner armored cryo barrel + luminous liquid-nitrogen plasma core + 6 graduated swept cryogenic radiator fins
+    m.add_tapered_prism(dark, (22.0, 0.0, 1.80), (35.5, 0.0, 1.95), 1.06, 0.92, sides=14, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (22.0, 0.0, 1.80), (36.4, 0.0, 1.96), 0.54, 0.46, sides=12, bone_idx=b_gun)
+    for fi, fx in enumerate((21.2, 23.4, 25.6, 27.8, 30.0, 32.2)):
+        span = 3.7 - fi * 0.20
+        m.add_box(hull, (fx, +span * 0.54, 1.85), (0.52, span, 0.28), bone_idx=b_gun, rot_xyz=(18.0, 0.0, -20.0))
+        m.add_box(hull, (fx, -span * 0.54, 1.85), (0.52, span, 0.28), bone_idx=b_gun, rot_xyz=(-18.0, 0.0, 20.0))
+        m.add_box(dark, (fx + 0.18, +span * 0.48, 1.56), (0.36, span * 0.72, 0.16), bone_idx=b_gun, rot_xyz=(18.0, 0.0, -20.0))
+        m.add_box(dark, (fx + 0.18, -span * 0.48, 1.56), (0.36, span * 0.72, 0.16), bone_idx=b_gun, rot_xyz=(-18.0, 0.0, 20.0))
+        m.add_box(glow, (fx, +span * 0.94, 2.06), (0.42, 0.22, 0.22), bone_idx=b_gun)
+        m.add_box(glow, (fx, -span * 0.94, 2.06), (0.42, 0.22, 0.22), bone_idx=b_gun)
 
-    # Wide hexagonal Cryo-Diffuser Emitter Crown + 3 forward-swept Cryo-Focus Prongs (top prong lowered below sightline!)
-    m.add_tapered_prism(hull, (33.5, 0.0, 1.95), (35.8, 0.0, 1.98), 1.65, 1.85, sides=6, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (35.5, 0.0, 1.98), (36.3, 0.0, 1.98), 1.25, 1.15, sides=6, bone_idx=b_gun)
+    # Wide hexagonal Cryo-Diffuser Emitter Crown + armored shroud collar + 3 twin-rail Cryo-Focus Prongs
+    m.add_tapered_prism(dark, (32.8, 0.0, 1.94), (34.0, 0.0, 1.95), 1.48, 1.72, sides=6, bone_idx=b_gun)
+    m.add_tapered_prism(hull, (33.8, 0.0, 1.95), (36.0, 0.0, 1.98), 1.72, 1.92, sides=6, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (35.6, 0.0, 1.98), (36.6, 0.0, 1.98), 1.32, 1.18, sides=6, bone_idx=b_gun)
     for prong_deg in (30.0, 150.0, 270.0):
         rad = math.radians(prong_deg)
-        py = math.cos(rad) * 1.65
-        pz = 1.98 + math.sin(rad) * 1.65
-        tip_y = math.cos(rad) * 0.95
-        tip_z = 1.98 + math.sin(rad) * 0.95
-        m.add_tapered_prism(dark, (34.8, py, pz), (39.2, tip_y, tip_z), 0.32, 0.16, sides=8, bone_idx=b_gun)
-        m.add_tapered_prism(glow, (39.0, tip_y, tip_z), (40.8, tip_y * 0.85, tip_z), 0.20, 0.06, sides=8, bone_idx=b_gun)
+        py = math.cos(rad) * 1.72
+        pz = 1.98 + math.sin(rad) * 1.72
+        tip_y = math.cos(rad) * 0.92
+        tip_z = 1.98 + math.sin(rad) * 0.92
+        m.add_tapered_prism(dark, (34.8, py, pz), (39.2, tip_y, tip_z), 0.34, 0.18, sides=8, bone_idx=b_gun)
+        m.add_tapered_prism(hull, (35.4, py * 1.08, pz + math.sin(rad) * 0.14), (38.6, tip_y * 1.06, tip_z + math.sin(rad) * 0.10), 0.16, 0.10, sides=6, bone_idx=b_gun)
+        m.add_tapered_prism(glow, (38.9, tip_y, tip_z), (40.9, tip_y * 0.80, tip_z), 0.22, 0.06, sides=8, bone_idx=b_gun)
 
-    # Elevated circular Cryo-Holo aperture ring at Z=5.10 -> cyan ticks aligned to live ADS viewport center (S3!)
+    # Elevated circular Cryo-Holo aperture ring at Z=5.10 -> crisp cyan reticle aligned to live ADS center (S3!)
     ring_c = (3.8, 0.0, 5.10)
-    ring_segs = 12
-    ring_r = 0.85
-    m.add_box(dark, (3.8, -0.66, 3.88), (0.46, 0.22, 1.15), bone_idx=b_gun)
-    m.add_box(dark, (3.8, +0.66, 3.88), (0.46, 0.22, 1.15), bone_idx=b_gun)
+    ring_segs = 16
+    ring_r = 0.86
+    m.add_box(dark, (3.8, -0.68, 3.88), (0.48, 0.22, 1.18), bone_idx=b_gun)
+    m.add_box(dark, (3.8, +0.68, 3.88), (0.48, 0.22, 1.18), bone_idx=b_gun)
+    m.add_box(hull, (3.8, 0.0, 3.40), (0.72, 1.62, 0.26), bone_idx=b_gun)
     for s in range(ring_segs):
         a0 = math.radians(360.0 * s / ring_segs)
         a1 = math.radians(360.0 * (s + 1) / ring_segs)
         p0 = (ring_c[0], ring_c[1] + math.cos(a0) * ring_r, ring_c[2] + math.sin(a0) * ring_r)
         p1 = (ring_c[0], ring_c[1] + math.cos(a1) * ring_r, ring_c[2] + math.sin(a1) * ring_r)
-        m.add_tapered_prism(dark, p0, p1, 0.10, 0.10, sides=6, bone_idx=b_gun, cap_start=False, cap_end=False)
-    m.add_tapered_prism(glow, (3.8, -0.78, 5.10), (3.8, -0.40, 5.10), 0.06, 0.04, sides=6, bone_idx=b_gun)
-    m.add_tapered_prism(glow, (3.8, +0.78, 5.10), (3.8, +0.40, 5.10), 0.06, 0.04, sides=6, bone_idx=b_gun)
+        m.add_tapered_prism(dark, p0, p1, 0.09, 0.09, sides=6, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(glow, (3.8, -0.80, 5.10), (3.8, -0.40, 5.10), 0.055, 0.038, sides=6, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (3.8, +0.80, 5.10), (3.8, +0.40, 5.10), 0.055, 0.038, sides=6, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (3.8, 0.0, 4.30), (3.8, 0.0, 4.66), 0.055, 0.035, sides=6, bone_idx=b_gun)
 
     return m
 
@@ -1037,9 +1066,9 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     # Calibrated WaW specular levels (30-72 for metals, 16-24 wood/leather) so Der Riese's cool sky
     # cubemap never washes weapon palettes blue or turns brass olive (F2/O9).
     # Cryo Cannon
-    MaterialSpec("mtl_bz_cryo_hull", "model phong", "metal", "panel_metal", (212, 224, 236), (138, 162, 184), (58, 66, 74), 195),
-    MaterialSpec("mtl_bz_cryo_dark", "model phong", "metal", "brushed_metal", (38, 50, 66), (68, 88, 110), (46, 54, 64), 175),
-    MaterialSpec("mtl_bz_cryo_glow", "model unlit", "glass", "cryo_glow", (18, 145, 232), (138, 234, 255)),
+    MaterialSpec("mtl_bz_cryo_hull", "model phong", "metal", "cryo_armor", (218, 232, 244), (118, 152, 182), (62, 68, 72), 205),
+    MaterialSpec("mtl_bz_cryo_dark", "model phong", "metal", "brushed_metal", (34, 48, 66), (72, 96, 122), (48, 56, 66), 185),
+    MaterialSpec("mtl_bz_cryo_glow", "model unlit", "glass", "cryo_glow", (16, 165, 246), (178, 246, 255)),
     # Multi-Crossbow
     MaterialSpec("mtl_bz_xbow_wood", "model phong", "wood", "wood_grain", (102, 58, 30), (58, 30, 14), (24, 18, 14), 85),
     MaterialSpec("mtl_bz_xbow_metal", "model phong", "metal", "panel_metal", (52, 54, 58), (80, 84, 90), (48, 50, 54), 165),
@@ -1084,7 +1113,32 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
             h = 0.5 + n_fine * 0.06
             spec_mult = 1.0
 
-            if spec.style == "panel_metal":
+            if spec.style == "cryo_armor":
+                # Frosted arctic-titanium armor plates with crisp beveled seams & subtle ice rime
+                grain = math.sin(u * math.tau * 20.0 + n_coarse * 1.8) * 0.04
+                frost = max(0.0, math.sin((u * 5.0 + v * 3.0) * math.tau) * math.cos((u * 3.0 - v * 6.0) * math.tau))
+                seam_x = (x % 128) < 2
+                seam_y = (y % 128) < 2
+                bevel_x = 2 <= (x % 128) < 6
+                bevel_y = 2 <= (y % 128) < 6
+                rivet = ((x % 128) in (12, 116)) and ((y % 128) in (12, 116))
+                mix = clamp01(0.10 + grain + frost * 0.16 + n_coarse * 0.06)
+                if seam_x or seam_y:
+                    mix = 0.80
+                    h = 0.18
+                    spec_mult = 0.40
+                elif rivet:
+                    mix = 0.62
+                    h = 0.88
+                    spec_mult = 1.12
+                elif bevel_x or bevel_y:
+                    mix = clamp01(mix + 0.14)
+                    h = 0.68
+                    spec_mult = 1.08
+                else:
+                    h = 0.54 + grain * 0.35 + frost * 0.12
+                    spec_mult = 0.96 + frost * 0.12
+            elif spec.style == "panel_metal":
                 # Machined armor plates (128px pitch so surfaces never look like a wireframe grid!)
                 grain = math.sin(u * math.tau * 24.0 + n_coarse * 2.0) * 0.04
                 seam_x = (x % 128) < 2
@@ -1143,10 +1197,11 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
                 h = (0.58 if stripe else 0.46) + n_fine * 0.08
                 spec_mult = 1.05 if stripe else 0.65
             elif spec.style == "cryo_glow":
-                # Luminous icy-cyan plasma veins + frosty crystal highlights
+                # Luminous icy-cyan liquid-nitrogen plasma veins + crystalline frost core highlights
                 vein = abs(math.sin((u * 5.0 + math.sin(v * math.tau * 3.0) * 0.35) * math.tau))
+                crystal = max(0.0, math.cos((u * 8.0 - v * 6.0) * math.tau)) * 0.22
                 core = math.sin(v * math.pi) * 0.45
-                mix = clamp01(core + (1.0 - vein) * 0.55)
+                mix = clamp01(core + (1.0 - vein) * 0.50 + crystal)
             elif spec.style == "amber_glow":
                 # Incandescent orange-gold warhead core
                 pulse = (math.sin(u * math.tau * 4.0) * 0.25 + 0.5) * 0.5 + math.sin(v * math.pi) * 0.55

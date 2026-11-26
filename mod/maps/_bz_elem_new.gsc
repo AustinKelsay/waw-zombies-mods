@@ -912,14 +912,18 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 	return bz_elem_new_is_shatter_mod( ctx.mod );
 }
 
-bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo_fx, now )
+bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo_fx, now, splash_radius )
 {
 	if ( !IsDefined( player ) || !IsDefined( center ) || Int( splash_dmg ) <= 0 )
 	{
 		return 0;
 	}
 
-	splash_radius = 96.0;
+	rad = splash_radius;
+	if ( !IsDefined( rad ) || rad <= 0.0 )
+	{
+		rad = 96.0;
+	}
 	splash_hits = 0;
 	zombies = GetAiSpeciesArray( "axis", "all" );
 	if ( !IsDefined( zombies ) )
@@ -938,7 +942,7 @@ bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo
 		{
 			continue;
 		}
-		if ( Distance( z.origin, center ) > splash_radius )
+		if ( Distance( z.origin, center ) > rad )
 		{
 			continue;
 		}
@@ -960,6 +964,148 @@ bz_elem_new_cryo_shatter_splash( player, source_zombie, center, splash_dmg, cryo
 	return splash_hits;
 }
 
+bz_elem_new_array_contains( arr, item )
+{
+	if ( !IsDefined( arr ) || !IsDefined( item ) )
+	{
+		return false;
+	}
+	for ( i = 0; i < arr.size; i++ )
+	{
+		if ( arr[i] == item )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bz_elem_new_find_cryo_seed_target( zombies, trace_info, cone_radius )
+{
+	if ( !IsDefined( zombies ) || zombies.size <= 0 )
+	{
+		return undefined;
+	}
+
+	if ( IsDefined( trace_info.hit_ent ) )
+	{
+		for ( i = 0; i < zombies.size; i++ )
+		{
+			z = zombies[i];
+			if ( IsDefined( z ) && z == trace_info.hit_ent && IsAlive( z ) && IsDefined( z.origin ) && !bz_elem_new_is_hidden_spawning_dog( z ) )
+			{
+				return z;
+			}
+		}
+	}
+
+	best = undefined;
+	best_dist = 999999.0;
+	for ( i = 0; i < zombies.size; i++ )
+	{
+		z = zombies[i];
+		if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
+		{
+			continue;
+		}
+		if ( !bz_elem_new_is_point_in_cryo_beam_or_cone( z.origin, trace_info.start, trace_info.fwd, trace_info.impact, cone_radius ) )
+		{
+			continue;
+		}
+		d = Distance( z.origin, trace_info.impact );
+		if ( d < best_dist )
+		{
+			best_dist = d;
+			best = z;
+		}
+	}
+	return best;
+}
+
+bz_elem_new_build_cryo_chain( zombies, seed, max_chain, start_radius, radius_decay )
+{
+	chain = [];
+	if ( !IsDefined( seed ) || !IsAlive( seed ) || !IsDefined( seed.origin ) )
+	{
+		return chain;
+	}
+
+	chain[0] = seed;
+	cur = seed;
+	cur_radius = start_radius;
+	decay = radius_decay;
+	if ( !IsDefined( decay ) || decay < 0 )
+	{
+		decay = 20;
+	}
+
+	while ( chain.size < max_chain )
+	{
+		best = undefined;
+		best_dist = cur_radius + 0.001;
+		for ( i = 0; i < zombies.size; i++ )
+		{
+			cand = zombies[i];
+			if ( !IsDefined( cand ) || !IsAlive( cand ) || !IsDefined( cand.origin ) || bz_elem_new_is_hidden_spawning_dog( cand ) )
+			{
+				continue;
+			}
+			if ( bz_elem_new_array_contains( chain, cand ) )
+			{
+				continue;
+			}
+			d = Distance( cur.origin, cand.origin );
+			if ( d <= cur_radius && d < best_dist )
+			{
+				best_dist = d;
+				best = cand;
+			}
+		}
+
+		if ( !IsDefined( best ) )
+		{
+			break;
+		}
+
+		chain[chain.size] = best;
+		cur = best;
+		cur_radius = cur_radius - decay;
+		if ( cur_radius < 120 )
+		{
+			cur_radius = 120;
+		}
+	}
+
+	return chain;
+}
+
+bz_elem_new_play_cryo_arc_segment( p_from, p_to, cryo_fx )
+{
+	if ( !IsDefined( p_from ) || !IsDefined( p_to ) || !IsDefined( cryo_fx ) )
+	{
+		return;
+	}
+	mid1 = (
+		p_from[0] + ( ( p_to[0] - p_from[0] ) * 0.35 ),
+		p_from[1] + ( ( p_to[1] - p_from[1] ) * 0.35 ),
+		p_from[2] + ( ( p_to[2] - p_from[2] ) * 0.35 )
+	);
+	mid2 = (
+		p_from[0] + ( ( p_to[0] - p_from[0] ) * 0.70 ),
+		p_from[1] + ( ( p_to[1] - p_from[1] ) * 0.70 ),
+		p_from[2] + ( ( p_to[2] - p_from[2] ) * 0.70 )
+	);
+	if ( IsDefined( cryo_fx.spray_fx ) )
+	{
+		PlayFX( cryo_fx.spray_fx, mid1 );
+		PlayFX( cryo_fx.spray_fx, mid2 );
+	}
+	if ( IsDefined( cryo_fx.freeze_fx ) )
+	{
+		PlayFX( cryo_fx.freeze_fx, mid2 );
+	}
+}
+
 bz_elem_new_fire_cryo_cannon( player, weapon_name )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) )
@@ -974,29 +1120,27 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 	is_pap = bz_elem_new_is_weapon_papped( player, weapon_name );
 	is_dpap = bz_elem_new_is_weapon_double_pap( player, weapon_name );
 	radius = bz_elem_new_get_cryo_cone_radius( is_pap, is_dpap );
+	max_chain = maps\_bz_rules::bz_get_cryo_max_chain( is_pap, is_dpap );
+	chain_radius = maps\_bz_rules::bz_get_cryo_chain_radius_start( is_pap, is_dpap );
+	chain_decay = maps\_bz_rules::bz_get_cryo_chain_radius_decay();
+	splash_radius = maps\_bz_rules::bz_get_cryo_shatter_splash_radius( is_pap, is_dpap );
 	duration = maps\_bz_rules::bz_get_cryo_freeze_duration();
 	round_num = bz_elem_new_get_current_round();
 	zhp = bz_elem_new_get_round_zombie_health( round_num );
 	blast_dmg = maps\_bz_rules::bz_calc_cryo_blast_damage( round_num, zhp, is_pap, is_dpap );
 	cryo_fx = bz_elem_new_resolve_cryo_fx();
 
+	if ( IsDefined( player.origin ) )
+	{
+		PlaySoundAtPosition( "bullet_small_glass", ( player.origin[0], player.origin[1], player.origin[2] + 52 ) );
+	}
+
 	if ( IsDefined( trace_info.impact ) )
 	{
 		beam_len = Distance( trace_info.start, trace_info.impact );
 		if ( beam_len >= 120.0 && IsDefined( cryo_fx.spray_fx ) )
 		{
-			mid1 = (
-				trace_info.start[0] + ( trace_info.fwd[0] * beam_len * 0.35 ),
-				trace_info.start[1] + ( trace_info.fwd[1] * beam_len * 0.35 ),
-				trace_info.start[2] + ( trace_info.fwd[2] * beam_len * 0.35 )
-			);
-			mid2 = (
-				trace_info.start[0] + ( trace_info.fwd[0] * beam_len * 0.70 ),
-				trace_info.start[1] + ( trace_info.fwd[1] * beam_len * 0.70 ),
-				trace_info.start[2] + ( trace_info.fwd[2] * beam_len * 0.70 )
-			);
-			PlayFX( cryo_fx.spray_fx, mid1 );
-			PlayFX( cryo_fx.spray_fx, mid2 );
+			bz_elem_new_play_cryo_arc_segment( trace_info.start, trace_info.impact, cryo_fx );
 		}
 		if ( IsDefined( cryo_fx.freeze_fx ) )
 		{
@@ -1011,22 +1155,30 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 
 	frozen_count = 0;
 	shattered_count = 0;
+	chain_points = [];
 	zombies = GetAiSpeciesArray( "axis", "all" );
-	if ( IsDefined( zombies ) )
+	if ( IsDefined( zombies ) && zombies.size > 0 )
 	{
-		for ( i = 0; i < zombies.size; i++ )
+		seed = bz_elem_new_find_cryo_seed_target( zombies, trace_info, radius );
+		chain = bz_elem_new_build_cryo_chain( zombies, seed, max_chain, chain_radius, chain_decay );
+
+		for ( i = 0; i < chain.size; i++ )
 		{
-			z = zombies[i];
-			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) || bz_elem_new_is_hidden_spawning_dog( z ) )
-			{
-				continue;
-			}
-			if ( !bz_elem_new_is_point_in_cryo_beam_or_cone( z.origin, trace_info.start, trace_info.fwd, trace_info.impact, radius ) )
+			z = chain[i];
+			if ( !IsDefined( z ) || !IsAlive( z ) || !IsDefined( z.origin ) )
 			{
 				continue;
 			}
 
 			z_mid = ( z.origin[0], z.origin[1], z.origin[2] + 36.0 );
+			chain_points[chain_points.size] = z_mid;
+
+			if ( i > 0 )
+			{
+				prev_pt = chain_points[chain_points.size - 2];
+				bz_elem_new_play_cryo_arc_segment( prev_pt, z_mid, cryo_fx );
+			}
+
 			brittle_mult = 1.0;
 			if ( bz_elem_new_is_acid_brittle_active( z ) )
 			{
@@ -1042,7 +1194,7 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 				z.bz_in_damage_dispatch = true;
 				z.bz_damage_dispatch_time = now;
 				z DoDamage( shatter_dmg, z_mid, player );
-				bz_elem_new_cryo_shatter_splash( player, z, z_mid, Int( blast_dmg * 0.65 ), cryo_fx, now );
+				bz_elem_new_cryo_shatter_splash( player, z, z_mid, Int( blast_dmg * 0.65 ), cryo_fx, now, splash_radius );
 				shattered_count = shattered_count + 1;
 			}
 			else
@@ -1075,19 +1227,28 @@ bz_elem_new_fire_cryo_cannon( player, weapon_name )
 		}
 	}
 
+	if ( chain_points.size >= 2 )
+	{
+		level thread bz_elem_new_cryo_chain_visuals( chain_points, cryo_fx );
+	}
+
+	total_chained = frozen_count + shattered_count;
 	fields = [];
 	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "radius", radius );
-	fields[2] = bz_log_kv( "duration", duration );
-	fields[3] = bz_log_kv( "damage", blast_dmg );
-	fields[4] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
-	fields[5] = bz_log_kv( "dpap", bz_bool_int( is_dpap ) );
-	fields[6] = bz_log_kv( "frozen", frozen_count );
-	fields[7] = bz_log_kv( "shattered", shattered_count );
-	fields[8] = bz_log_kv( "fx", cryo_fx.freeze_fx_path );
+	fields[2] = bz_log_kv( "chain_radius", chain_radius );
+	fields[3] = bz_log_kv( "chains", total_chained );
+	fields[4] = bz_log_kv( "max_chain", max_chain );
+	fields[5] = bz_log_kv( "duration", duration );
+	fields[6] = bz_log_kv( "damage", blast_dmg );
+	fields[7] = bz_log_kv( "pap", bz_bool_int( is_pap ) );
+	fields[8] = bz_log_kv( "dpap", bz_bool_int( is_dpap ) );
+	fields[9] = bz_log_kv( "frozen", frozen_count );
+	fields[10] = bz_log_kv( "shattered", shattered_count );
+	fields[11] = bz_log_kv( "fx", cryo_fx.freeze_fx_path );
 	bz_log_emit( "ELEM_CRYO_FREEZE", bz_log_join( fields ) );
 
-	return frozen_count + shattered_count;
+	return total_chained;
 }
 
 // ---------------------------------------------------------------------------
@@ -1142,14 +1303,54 @@ bz_elem_new_watch_acid_slow_expiry()
 	}
 }
 
+bz_elem_new_cryo_chain_visuals( chain_points, cryo_fx )
+{
+	level endon( "end_game" );
+
+	if ( !IsDefined( chain_points ) || chain_points.size < 2 || !IsDefined( cryo_fx ) )
+	{
+		return;
+	}
+
+	for ( i = 1; i < chain_points.size; i++ )
+	{
+		wait( 0.06 );
+		p_prev = chain_points[i - 1];
+		p_cur = chain_points[i];
+		if ( !IsDefined( p_prev ) || !IsDefined( p_cur ) )
+		{
+			continue;
+		}
+		bz_elem_new_play_cryo_arc_segment( p_prev, p_cur, cryo_fx );
+		if ( IsDefined( cryo_fx.freeze_fx ) )
+		{
+			PlayFX( cryo_fx.freeze_fx, p_cur );
+		}
+		PlaySoundAtPosition( "bullet_small_glass", p_cur );
+	}
+}
+
 bz_elem_new_watch_cryo_thaw()
 {
 	self endon( "death" );
 	level endon( "end_game" );
 
+	shimmer_ticks = 0;
+	cryo_fx = bz_elem_new_resolve_cryo_fx();
+	torso_tag = bz_elem_new_get_zombie_torso_tag( self );
+
 	while ( IsDefined( self ) && IsAlive( self ) && bz_elem_new_is_cryo_frozen( self ) )
 	{
 		wait( 0.2 );
+		shimmer_ticks = shimmer_ticks + 1;
+		if ( shimmer_ticks >= 4 && IsDefined( self ) && IsAlive( self ) && bz_elem_new_is_cryo_frozen( self ) )
+		{
+			shimmer_ticks = 0;
+			if ( IsDefined( cryo_fx ) && IsDefined( cryo_fx.spray_fx ) )
+			{
+				PlayFXOnTag( cryo_fx.spray_fx, self, torso_tag );
+			}
+		}
 	}
 
 	if ( IsDefined( self ) )
