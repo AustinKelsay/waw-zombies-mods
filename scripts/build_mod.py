@@ -3319,10 +3319,13 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         steam_game=steam_game,
     )
 
-    # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons + 3x maxAmmo stock overrides
+    # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons for mod.csv.
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
     staged_weapons.extend(stage_bz_special_item_weapons(tools_root=tools_root, stage_dir=stage_dir))
-    staged_weapons.extend(stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir))
+    # Stage 3x maxAmmo stock weapon overrides into stage_dir/weapons/sp/ for waw_gauntlet.iwd ONLY
+    # (NOT mod.csv): under fs_game, WaW 1.7 BG_LoadWeaponDef reads weapons/sp/* from .iwd without
+    # duplicating stock weapon FxEffectDef assets inside mod.ff (keeping Der Riese strictly at 329/400 FX).
+    stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir)
 
     # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, cloned bz_* weapons,
     # and Der Riese PTRS-41/Flamethrower compat xmodels (when raw xmodels exist).
