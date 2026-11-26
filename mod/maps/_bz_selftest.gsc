@@ -116,11 +116,16 @@ bz_run_p1_selftest()
 		IsDefined( level.bz_stations["class"] ) &&
 		IsDefined( level.bz_stations["arsenal"] ) &&
 		IsDefined( level.bz_stations["perks"].model ) &&
+		level.bz_stations["perks"].model_name == "bz_station_perks_kiosk" &&
 		IsDefined( level.bz_stations["class"].model ) &&
-		IsDefined( level.bz_stations["arsenal"].model );
+		level.bz_stations["class"].model_name == "bz_station_class_kiosk" &&
+		IsDefined( level.bz_stations["arsenal"].model ) &&
+		level.bz_stations["arsenal"].model_name == "bz_station_arsenal_kiosk";
 	if ( expected_stations == 4 )
 	{
-		stations_ok = stations_ok && IsDefined( level.bz_stations["pap"] ) && IsDefined( level.bz_stations["pap"].model );
+		stations_ok = stations_ok && IsDefined( level.bz_stations["pap"] ) &&
+			IsDefined( level.bz_stations["pap"].model ) &&
+			level.bz_stations["pap"].model_name == "bz_station_pap_kiosk";
 	}
 	else
 	{
@@ -267,9 +272,12 @@ bz_run_p1_selftest()
 	if ( IsDefined( ghost_z ) )
 	{
 		bz_assassin_acquire_ghost_on_zombie( p, ghost_z );
-		was_ghosted = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 1 && IsDefined( ghost_z.bz_orig_contents );
+		was_ghosted = IsDefined( p.bz_assassin_ghosting ) && p.bz_assassin_ghosting &&
+			IsDefined( p.bz_orig_player_contents ) &&
+			!IsDefined( ghost_z.bz_orig_contents );
 		bz_assassin_restore_all_zombies( p );
-		was_restored = IsDefined( ghost_z.bz_ghost_refs ) && ghost_z.bz_ghost_refs == 0 && !IsDefined( ghost_z.bz_orig_contents );
+		was_restored = ( !IsDefined( p.bz_assassin_ghosting ) || !p.bz_assassin_ghosting ) &&
+			!IsDefined( p.bz_orig_player_contents );
 		ghost_ok = was_ghosted && was_restored;
 
 		// Verify live actor damage wrapper deals extra bonus damage safely with re-entrancy guard
@@ -389,9 +397,23 @@ bz_run_p1_selftest()
 	bowie_dummy.maxhealth = 3500;
 	bowie_dummy.isdog = false;
 	bowie_dummy.is_boss = false;
-	bowie_final = maps\_bz_hooks::bz_actor_damage_dispatch( bowie_dummy, p, p, 1000, 0, "MOD_MELEE", "bowie_knife", p.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+	bowie_final = bz_actor_damage_dispatch( bowie_dummy, p, p, 1000, 0, "MOD_MELEE", "bowie_knife", p.origin, ( 0, 0, 0 ), "torso_upper", 0 );
 	bowie_extra = Int( bowie_final ) - 1000;
-	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_bowie", "" ) && p HasPerk( "specialty_altmelee" ) && bowie_extra >= 3500, "pap_bowie" );
+	dog_dummy = SpawnStruct();
+	dog_dummy.health = 5000;
+	dog_dummy.maxhealth = 5000;
+	dog_dummy.isdog = true;
+	dog_dummy.is_boss = false;
+	bowie_dog_final = bz_actor_damage_dispatch( dog_dummy, p, p, 1000, 0, "MOD_MELEE", "bowie_knife", p.origin, ( 0, 0, 0 ), "torso_upper", 0 );
+	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_bowie", "" ) && p HasPerk( "specialty_altmelee" ) && bowie_extra >= 3500 && Int( bowie_dog_final ) == 3000, "pap_bowie" );
+
+	// Verify visible native Double Ammo (2x/3x) on staged stock weapon
+	dpap_stock_live = 0;
+	if ( cur_w != "" && p HasWeapon( cur_w ) )
+	{
+		dpap_stock_live = Int( p GetWeaponAmmoStock( cur_w ) );
+	}
+	bz_selftest_check( st, cur_w != "" && dpap_stock_live > 80, "double_ammo_visible_stock" );
 
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_pap:pap_cluster" );
 	cluster_res = bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );
@@ -600,10 +622,16 @@ bz_run_p2_selftest()
 	bz_selftest_check( st, wc_cleared_bowie && bowie_restored && wc_reequipped && pap_wc_ok, "war_club_bowie_swap_and_pap" );
 
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:portal_grenade" );
-	portal_gear_ok = maps\_bz_state::bz_state_owns_portal_grenade( p ) &&
-		maps\_bz_state::bz_state_get_portal_charges( p ) >= 1 &&
+	portal_gear_ok = bz_state_owns_portal_grenade( p ) &&
+		bz_state_get_portal_charges( p ) >= 1 &&
+		p HasWeapon( "bz_portal_grenade" ) &&
 		IsDefined( p.bz_special_hud );
 	bz_selftest_check( st, portal_gear_ok, "portal_grenade_gear_and_hud" );
+
+	// 3b. Blade Boomerang single-item infinite contract (clip=1, stock=0)
+	boom_single_item_ok = Int( p GetWeaponAmmoClip( "bz_blade_boomerang" ) ) == 1 &&
+		Int( p GetWeaponAmmoStock( "bz_blade_boomerang" ) ) == 0;
+	bz_selftest_check( st, boom_single_item_ok, "boomerang_single_item_zero_reserve" );
 
 	// Wait for a real live Der Riese zombie (up to 12s) for combat & status verification
 	live_z = undefined;
@@ -665,7 +693,8 @@ bz_run_p2_selftest()
 			live_z.moveplaybackrate >= ( base_rate * 0.55 );
 		acid_brittle_ok = bz_elem_new_is_acid_brittle_active( live_z );
 		acid_brittle_dmg = bz_actor_damage_dispatch( live_z, p, p, 100, 0, "MOD_RIFLE_BULLET", "zombie_colt", live_z.origin, ( 0, 0, 0 ), "torso_upper", 0 );
-		bz_selftest_check( st, acid_puddle_ok && acid_slow_ok && acid_brittle_ok && acid_brittle_dmg == 150, "acid_puddle_slow_brittle_150" );
+		acid_isolated = !IsDefined( live_z.bz_flame_dot_active ) || !live_z.bz_flame_dot_active;
+		bz_selftest_check( st, acid_puddle_ok && acid_slow_ok && acid_brittle_ok && acid_brittle_dmg == 150 && acid_isolated, "acid_puddle_slow_brittle_150" );
 
 		// Clean acid puddle & debuff before Cryo Cannon test
 		if ( IsDefined( puddle ) )
@@ -833,12 +862,12 @@ bz_run_p2_selftest()
 		( !IsDefined( boom_res.blade ) || ( IsDefined( boom_res.blade.bz_special_deleted ) && boom_res.blade.bz_special_deleted ) );
 	bz_selftest_check( st, boom_returned, "blade_boomerang_spawn_and_return" );
 
-	// 12. Portal Grenade: Coop-safe USE+MELEE watcher registered, SpawnFx portal spawns, warps player, excludes live zombie
+	// 12. Portal Grenade: ActionSlot 2 weapon, SpawnFx + 3D anchor orb, warps player, excludes live zombie
 	watcher_ok = IsDefined( p.bz_special_watchers_started ) && p.bz_special_watchers_started;
-	portal_charges_before = maps\_bz_state::bz_state_get_portal_charges( p );
+	portal_charges_before = bz_state_get_portal_charges( p );
 	portal = bz_special_try_activate_portal( p );
-	portal_charges_after = maps\_bz_state::bz_state_get_portal_charges( p );
-	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent );
+	portal_charges_after = bz_state_get_portal_charges( p );
+	portal_fx_ok = IsDefined( portal ) && IsDefined( portal.bz_fx_ent ) && IsDefined( portal.bz_anchor_model );
 	if ( portal_fx_ok )
 	{
 		z_portal_before = portal.origin;
@@ -879,7 +908,7 @@ bz_run_p2_selftest()
 			max_drop Delete();
 		}
 	}
-	portal_refilled = stock_powerup_ok && maps\_bz_state::bz_state_get_portal_charges( p ) == max_charges;
+	portal_refilled = stock_powerup_ok && bz_state_get_portal_charges( p ) == max_charges;
 	bz_selftest_check( st, portal_charges_before == max_charges && portal_charges_after == max_charges - 1 &&
 		portal_refilled, "portal_grenade_max_ammo_refill" );
 
@@ -1189,7 +1218,8 @@ bz_run_visual_tour()
 	}
 
 	p endon( "disconnect" );
-	wait( 1.5 );
+	// Let WaW's level intro black fade-in (1.25s starting ~3-5s) and first WineD3D frame settle before capturing.
+	wait( 6.0 );
 	p.maxhealth = 99999;
 	p.health = 99999;
 	p.score = 50000;
@@ -1401,7 +1431,8 @@ bz_run_visual_tour()
 		p SetOrigin( ( -40, -140, 10 ) );
 		p SetPlayerAngles( ( 12, 90, 0 ) );
 		bz_test_pap_war_club_smash( p, ( -40, 0, 10 ) );
-		wait( 0.25 );
+		bz_special_trigger_war_club_swing( p );
+		wait( 0.2 );
 		bz_test_visual_phase( "war_club_active" );
 		wait( 0.6 );
 
@@ -2031,29 +2062,61 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 	return [[ api.bz_special_push_zombie_safely ]]( zombie, attacker_org, fallback_fwd, push_dist );
 }
 
+bz_special_trigger_war_club_swing( player )
+{
+	api = bz_selftest_get_special_weapons_api();
+	return [[ api.bz_special_trigger_war_club_swing ]]( player );
+}
+
+bz_selftest_get_state_api()
+{
+	if ( !IsDefined( level.bz_selftest_state_api ) )
+	{
+		level.bz_selftest_state_api = maps\_bz_state::bz_state_get_stations_api();
+	}
+	return level.bz_selftest_state_api;
+}
+
 bz_state_get_melee_slot( player )
 {
-	return maps\_bz_state::bz_state_get_melee_slot( player );
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_get_melee_slot ]]( player );
 }
 
 bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
 {
-	return maps\_bz_state::bz_state_has_pap_upgrade( player, upgrade_id, weapon_name );
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_has_pap_upgrade ]]( player, upgrade_id, weapon_name );
 }
 
 bz_state_has_pap_war_club( player )
 {
-	return maps\_bz_state::bz_state_has_pap_war_club( player );
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_has_pap_war_club ]]( player );
 }
 
 bz_state_has_perk_t2( player, perk_id )
 {
-	return maps\_bz_state::bz_state_has_perk_t2( player, perk_id );
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_has_perk_t2 ]]( player, perk_id );
 }
 
 bz_state_owns_war_club( player )
 {
-	return maps\_bz_state::bz_state_owns_war_club( player );
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_owns_war_club ]]( player );
+}
+
+bz_state_owns_portal_grenade( player )
+{
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_owns_portal_grenade ]]( player );
+}
+
+bz_state_get_portal_charges( player )
+{
+	api = bz_selftest_get_state_api();
+	return [[ api.bz_state_get_portal_charges ]]( player );
 }
 
 

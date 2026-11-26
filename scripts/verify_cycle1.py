@@ -266,6 +266,7 @@ def run_cycle1_verification(
     env["SteamAppId"] = "10090"
     env["SteamGameId"] = "10090"
     env["PROTON_USE_WINED3D"] = "1"
+    env.setdefault("WINE_D3D_CONFIG", "VideoMemorySize=512")
     env["DISPLAY"] = f":{display_num}"
     env["XDG_SESSION_TYPE"] = "x11"
     env["XDG_CONFIG_HOME"] = xdg_config_home

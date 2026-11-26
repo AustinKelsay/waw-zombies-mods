@@ -1454,6 +1454,7 @@ bz_stations_sync_player_ui( player, feedback )
 	}
 
 	// Phase 2 Elemental & Special Arsenal status dvars
+	pap_on = bz_pap_enabled();
 	elements_on = bz_elements_enabled();
 	elem_ids = [[ rules.bz_get_element_weapon_ids ]]();
 	for ( i = 0; i < elem_ids.size; i++ )
