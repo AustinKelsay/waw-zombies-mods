@@ -27,6 +27,8 @@ bz_elem_new_register()
 
 	bz_register_hook( "pre_init", ::bz_elem_new_on_pre_init, "elements" );
 	bz_register_hook( "init", ::bz_elem_new_on_init, "elements" );
+	bz_register_hook( "player_connect", ::bz_elem_new_on_player_connect, "elements" );
+	bz_register_hook( "player_spawned", ::bz_elem_new_on_player_spawned, "elements" );
 	bz_register_hook( "weapon_fired", ::bz_elem_new_on_weapon_fired, "elements" );
 	bz_register_hook( "actor_damage", ::bz_elem_new_on_actor_damage, "elements" );
 	bz_register_hook( "end_game", ::bz_elem_new_on_end_game, "elements" );
@@ -599,7 +601,41 @@ bz_elem_new_tick_acid_puddle( puddle )
 	return hits;
 }
 
-bz_elem_new_fire_acid_sprayer( player, weapon_name )
+bz_elem_new_get_global_max_acid_puddles()
+{
+	return 16;
+}
+
+bz_elem_new_count_player_puddles( player )
+{
+	bz_elem_new_ensure_level_tables();
+	count = 0;
+	for ( i = 0; i < level.bz_acid_puddles.size; i++ )
+	{
+		p = level.bz_acid_puddles[i];
+		if ( IsDefined( p ) && IsDefined( p.active ) && p.active && IsDefined( p.owner ) && p.owner == player )
+		{
+			count = count + 1;
+		}
+	}
+	return count;
+}
+
+bz_elem_new_find_oldest_player_puddle( player )
+{
+	bz_elem_new_ensure_level_tables();
+	for ( i = 0; i < level.bz_acid_puddles.size; i++ )
+	{
+		p = level.bz_acid_puddles[i];
+		if ( IsDefined( p ) && IsDefined( p.active ) && p.active && IsDefined( p.owner ) && p.owner == player )
+		{
+			return p;
+		}
+	}
+	return undefined;
+}
+
+bz_elem_new_fire_acid_sprayer_at( player, weapon_name, impact_pos, hit_ent )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) )
 	{
@@ -609,16 +645,26 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	bz_elem_new_ensure_level_tables();
 	bz_elem_new_compact_acid_puddles();
 
-	// Enforce puddle cap by evicting oldest active puddle cleanly before spawning a new one.
-	max_puddles = bz_elem_new_get_max_acid_puddles();
-	while ( level.bz_acid_puddles.size >= max_puddles )
+	// Per-player puddle cap (8 per player) so Co-op teammates never evict each other's puddles,
+	// plus a global safety ceiling (16) to bound total FX entities.
+	max_per_player = bz_elem_new_get_max_acid_puddles();
+	while ( bz_elem_new_count_player_puddles( player ) >= max_per_player )
+	{
+		oldest_owned = bz_elem_new_find_oldest_player_puddle( player );
+		if ( !IsDefined( oldest_owned ) )
+		{
+			break;
+		}
+		bz_elem_new_cleanup_puddle( oldest_owned );
+	}
+	max_global = bz_elem_new_get_global_max_acid_puddles();
+	while ( level.bz_acid_puddles.size >= max_global )
 	{
 		oldest = level.bz_acid_puddles[0];
 		bz_elem_new_cleanup_puddle( oldest );
 	}
 
-	trace_info = bz_elem_new_trace_forward_impact( player, 1024 );
-	pos = bz_elem_new_snap_to_floor( trace_info.impact );
+	pos = bz_elem_new_snap_to_floor( impact_pos );
 
 	is_pap = bz_elem_new_is_weapon_papped( player, weapon_name );
 	is_dpap = bz_elem_new_is_weapon_double_pap( player, weapon_name );
@@ -664,7 +710,7 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 
 	level.bz_acid_puddles[level.bz_acid_puddles.size] = puddle;
 
-	direct_hits = bz_elem_new_apply_acid_direct_splash( player, trace_info.impact, trace_info.hit_ent, direct_dmg, acid_fx.impact_fx, puddle );
+	direct_hits = bz_elem_new_apply_acid_direct_splash( player, impact_pos, hit_ent, direct_dmg, acid_fx.impact_fx, puddle );
 	puddle_hits = bz_elem_new_tick_acid_puddle( puddle );
 	initial_hits = puddle_hits;
 	if ( direct_hits > initial_hits )
@@ -687,6 +733,41 @@ bz_elem_new_fire_acid_sprayer( player, weapon_name )
 	bz_log_emit( "ELEM_ACID_PUDDLE", bz_log_join( fields ) );
 
 	return puddle;
+}
+
+bz_elem_new_fire_acid_sprayer( player, weapon_name )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return undefined;
+	}
+
+	trace_info = bz_elem_new_trace_forward_impact( player, 1024 );
+	return bz_elem_new_fire_acid_sprayer_at( player, weapon_name, trace_info.impact, trace_info.hit_ent );
+}
+
+bz_elem_new_maybe_spawn_acid_stream_puddle( player, weapon_name, impact_pos, hit_ent, cooldown_ms )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return undefined;
+	}
+	now = GetTime();
+	cd = cooldown_ms;
+	if ( !IsDefined( cd ) || Int( cd ) <= 0 )
+	{
+		cd = 450;
+	}
+	if ( IsDefined( player.bz_acid_last_puddle_ms ) && ( now - Int( player.bz_acid_last_puddle_ms ) ) < cd )
+	{
+		return undefined;
+	}
+	player.bz_acid_last_puddle_ms = now;
+	if ( IsDefined( impact_pos ) )
+	{
+		return bz_elem_new_fire_acid_sprayer_at( player, weapon_name, impact_pos, hit_ent );
+	}
+	return bz_elem_new_fire_acid_sprayer( player, weapon_name );
 }
 
 // ---------------------------------------------------------------------------
@@ -1117,6 +1198,70 @@ bz_elem_new_on_pre_init()
 	}
 }
 
+bz_elem_new_watch_acid_stream()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	for ( ;; )
+	{
+		wait( 0.15 );
+		if ( !bz_elements_enabled() || !IsDefined( self ) || !IsAlive( self ) )
+		{
+			continue;
+		}
+		if ( IsDefined( self.revivetrigger ) || ( IsDefined( self.is_in_laststand ) && self.is_in_laststand ) )
+		{
+			continue;
+		}
+		cur_weap = bz_normalize_id( self GetCurrentWeapon() );
+		if ( cur_weap != "bz_acid_sprayer" )
+		{
+			continue;
+		}
+		if ( !self AttackButtonPressed() )
+		{
+			continue;
+		}
+		if ( self GetWeaponAmmoClip( "bz_acid_sprayer" ) <= 0 )
+		{
+			continue;
+		}
+		bz_elem_new_maybe_spawn_acid_stream_puddle( self, "bz_acid_sprayer", undefined, undefined, 450 );
+	}
+}
+
+bz_elem_new_ensure_player_watchers( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	if ( !IsDefined( player.bz_elem_acid_watcher_started ) || !player.bz_elem_acid_watcher_started )
+	{
+		player.bz_elem_acid_watcher_started = true;
+		player thread bz_elem_new_watch_acid_stream();
+	}
+}
+
+bz_elem_new_on_player_connect( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+	bz_elem_new_ensure_player_watchers( player );
+}
+
+bz_elem_new_on_player_spawned( player )
+{
+	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+	bz_elem_new_ensure_player_watchers( player );
+}
+
 bz_elem_new_on_init()
 {
 	if ( !bz_elements_enabled() )
@@ -1138,6 +1283,7 @@ bz_elem_new_on_weapon_fired( player, weapon_name )
 	weap = bz_normalize_id( weapon_name );
 	if ( weap == "bz_acid_sprayer" )
 	{
+		player.bz_acid_last_puddle_ms = GetTime();
 		bz_elem_new_fire_acid_sprayer( player, weap );
 		return;
 	}
@@ -1229,6 +1375,46 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 	if ( !bz_elements_enabled() || !IsDefined( zombie ) || !IsDefined( ctx ) )
 	{
 		return;
+	}
+
+	// Continuous Acid Sprayer gas stream contact (MOD_BURNED from bz_acid_sprayer):
+	// applies Acid slow (40%), Acid Brittle (1.50x), throttled round-scaled melt damage,
+	// green splash FX, and coats the ground beneath the zombie with sizzling acid puddles.
+	norm_weap = bz_normalize_id( ctx.weapon );
+	norm_mod = bz_normalize_id( ctx.mod );
+	if ( norm_weap == "bz_acid_sprayer" && norm_mod == "mod_burned" && IsDefined( ctx.attacker ) && IsPlayer( ctx.attacker ) )
+	{
+		now = GetTime();
+		attacker = ctx.attacker;
+		is_pap = bz_elem_new_is_weapon_papped( attacker, "bz_acid_sprayer" );
+		is_dpap = bz_elem_new_is_weapon_double_pap( attacker, "bz_acid_sprayer" );
+
+		bz_elem_new_apply_acid_debuff( zombie, 2500 );
+
+		if ( !IsDefined( zombie.bz_acid_stream_hit_ms ) || ( now - Int( zombie.bz_acid_stream_hit_ms ) ) >= 200 )
+		{
+			zombie.bz_acid_stream_hit_ms = now;
+			stream_dmg = bz_elem_new_calc_acid_direct_damage( is_pap, is_dpap );
+			if ( Int( stream_dmg ) > 0 )
+			{
+				ctx.bonus_damage = ctx.bonus_damage + Int( stream_dmg );
+			}
+		}
+
+		if ( !IsDefined( zombie.bz_acid_stream_fx_ms ) || ( now - Int( zombie.bz_acid_stream_fx_ms ) ) >= 450 )
+		{
+			zombie.bz_acid_stream_fx_ms = now;
+			acid_fx = bz_elem_new_resolve_acid_fx();
+			if ( IsDefined( acid_fx.impact_fx ) && IsAlive( zombie ) )
+			{
+				PlayFXOnTag( acid_fx.impact_fx, zombie, bz_elem_new_get_zombie_torso_tag( zombie ) );
+			}
+		}
+
+		if ( IsDefined( zombie.origin ) )
+		{
+			bz_elem_new_maybe_spawn_acid_stream_puddle( attacker, "bz_acid_sprayer", zombie.origin, zombie, 500 );
+		}
 	}
 
 	// Acid Brittle: ANY subsequent damage while brittle multiplies damage_mult by 1.50x.

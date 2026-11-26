@@ -714,6 +714,54 @@ class TestAcidSprayerWeapon(unittest.TestCase):
         self.assertEqual(len(z_balcony.damage_events), 2)
         self.assertEqual(z_balcony.damage_events[1]["damage"], 160)
 
+    def test_acid_gas_stream_mod_burned_applies_melt_and_coop_puddles_do_not_evict_teammates(self) -> None:
+        _, gsc, p1 = _setup_elem_new_env(map_name="nazi_zombie_factory", pap_enabled=True)
+        gsc.call(r"maps\_bz_elem_stock", "bz_elem_stock_register")
+        gsc.call(r"maps\_bz_elem_stock", "bz_elem_stock_on_init")
+        gsc.sim_time_ms = 6000
+        gsc.bullet_trace_fn = lambda s, e: {"fraction": 0.25, "position": GscArray([180.0, 0.0, 0.0])}
+
+        z_stream = ElemNewFakeEntity("ZStream", ent_num=40, is_player=False, origin=(180.0, 0.0, 0.0))
+        z_stream.set_field("health", 2000)
+        z_stream.set_field("moveplaybackrate", 1.0)
+        gsc.ai_enemies.append(z_stream)
+
+        # Direct gas-stream MOD_BURNED hit from bz_acid_sprayer applies slow, brittle, melt bonus,
+        # spawns a sizzling puddle under the zombie, and MUST NOT ignite Enhanced Flamethrower fire DOT!
+        dmg = gsc.call(
+            BZ_HOOKS_MOD,
+            "bz_actor_damage_dispatch",
+            z_stream,
+            p1,
+            p1,
+            15,
+            0,
+            "MOD_BURNED",
+            "bz_acid_sprayer",
+            GscArray([180.0, 0.0, 0.0]),
+            UNDEFINED,
+            "torso_upper",
+            0,
+        )
+        self.assertGreater(dmg, 100)
+        self.assertAlmostEqual(float(z_stream.get_field("moveplaybackrate")), 0.60)
+        self.assertGreater(int(z_stream.get_field("bz_acid_brittle_until")), 6000)
+        self.assertFalse(bool(z_stream.get_field("bz_flame_dot_active")))
+        self.assertEqual(gsc.level.get_field("bz_acid_puddles").size, 1)
+
+        # Co-op per-player puddle isolation: P2 spraying 4 puddles never evicts P1's 8 puddles!
+        p2 = ElemNewFakeEntity("PlayerTwo", ent_num=1, is_player=True, origin=(50.0, 50.0, 0.0))
+        p2.give_weapon("bz_acid_sprayer", make_current=True)
+        gsc.players.append(p2)
+        max_per = int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_get_max_acid_puddles"))
+        for _ in range(max_per):
+            gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_fire_acid_sprayer", p1, "bz_acid_sprayer")
+        self.assertEqual(int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_count_player_puddles", p1)), max_per)
+        for _ in range(4):
+            gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_fire_acid_sprayer", p2, "bz_acid_sprayer")
+        self.assertEqual(int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_count_player_puddles", p1)), max_per)
+        self.assertEqual(int(gsc.call(BZ_ELEM_NEW_MOD, "bz_elem_new_count_player_puddles", p2)), 4)
+
 
 class TestCryoCannonWeapon(unittest.TestCase):
     """Seam 3: Cryo Cannon beam/cone freeze, 4.0s thaw, 2.50x shatter & PaP cone scaling."""
@@ -1148,6 +1196,7 @@ class TestElemNewCompositionCleanupAndCompliance(unittest.TestCase):
         allowed_threaded_funcs = {
             "bz_elem_new_acid_puddle_think",
             "bz_elem_new_watch_acid_slow_expiry",
+            "bz_elem_new_watch_acid_stream",
             "bz_elem_new_watch_cryo_thaw",
         }
         for fn_name, fn_def in mod.items():
