@@ -333,7 +333,7 @@ bz_get_element_weapon_cost( item_id )
 bz_is_infinite_single_item_weapon( weapon_name )
 {
 	weap = bz_normalize_id( weapon_name );
-	return weap == "bz_blade_boomerang";
+	return weap == "bz_blade_boomerang" || weap == "bz_portal_grenade" || weap == "bz_war_club";
 }
 
 bz_get_element_ammo_cost( item_id )

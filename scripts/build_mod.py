@@ -437,6 +437,61 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
     ),
 )
 
+# Special item-slot weapons (inventoryType = "item", excluded from primary weapon slots & PaP — ADR-0006).
+BZ_SPECIAL_ITEM_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
+    (
+        "bz_portal_grenade",
+        ("zombie_colt", "colt"),
+        {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
+            "displayName": "Portal Grenade",
+            "gunModel": bz_models.CUSTOM_SPECIAL_WEAPON_VIEWMODELS["bz_portal_grenade"],
+            "worldModel": bz_models.CUSTOM_SPECIAL_WEAPON_WORLDMODELS["bz_portal_grenade"],
+            "inventoryType": "item",
+            "weaponType": "bullet",
+            "weaponClass": "rifle",
+            "shotCount": "1",
+            "fireType": "Single Shot",
+            "ammoName": "bz_portal",
+            "clipName": "bz_portal",
+            "clipSize": "2",
+            "maxAmmo": "0",
+            "startAmmo": "0",
+            "dropAmmoMin": "0",
+            "dropAmmoMax": "0",
+            "moveSpeedScale": "1",
+            "fireTime": "0.85",
+            "reloadTime": "0.25",
+            "reloadEmptyTime": "0.25",
+            "cancelAutoHolsterWhenEmpty": "1",
+            "idleAnim": "viewmodel_ray_gun_idle",
+            "fireAnim": "viewmodel_germangrenade_throw",
+            "lastShotAnim": "viewmodel_germangrenade_throw",
+            "emptyIdleAnim": "viewmodel_ray_gun_drop",
+            "raiseAnim": "viewmodel_ray_gun_raise",
+            "firstRaiseAnim": "viewmodel_ray_gun_raise",
+            "dropAnim": "viewmodel_ray_gun_drop",
+            "reloadAnim": "viewmodel_ray_gun_raise",
+            "reloadEmptyAnim": "viewmodel_ray_gun_raise",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "adsUpAnim": "",
+            "adsDownAnim": "",
+            "adsFireAnim": "",
+            "adsLastShotAnim": "",
+            "adsRechamberAnim": "",
+            "fireSound": "foley_throw",
+            "fireSoundPlayer": "foley_throw",
+        },
+    ),
+)
+
 
 def extract_rawfile_from_ff(ff_path: Path, rawfile_name: str) -> bytes:
     """Extract a null-terminated rawfile asset payload from a WaW .ff fastfile."""
@@ -2095,6 +2150,47 @@ def stage_bz_element_weapons(
     return staged_relpaths
 
 
+def stage_bz_special_item_weapons(
+    tools_root: Path,
+    stage_dir: Path,
+    allowed_fx_set: set[str] | frozenset[str] | None = None,
+) -> list[str]:
+    """Generate and stage zero-FX item-slot Special Weapons (Portal Grenade, War Club) under stage_dir/weapons/sp/."""
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
+
+    out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    staged_items: list[str] = []
+    for weap_name, template_candidates, overrides in BZ_SPECIAL_ITEM_WEAPON_SPECS:
+        template_path: Path | None = None
+        for candidate in template_candidates:
+            path = raw_weapons_dir / candidate
+            if path.is_file():
+                template_path = path
+                break
+        if template_path is None:
+            raise FileNotFoundError(
+                f"No stock weapon template found for {weap_name} in {raw_weapons_dir} "
+                f"(tried: {', '.join(template_candidates)})"
+            )
+        stock_text = template_path.read_text(encoding="latin1")
+        cloned_text = clone_zero_fx_weapon_file(
+            stock_text,
+            overrides=overrides,
+            allowed_fx_set=allowed_fx_set,
+            xanim_case_map=xanim_case_map,
+        )
+        (out_dir / weap_name).write_text(cloned_text, encoding="latin1")
+        staged_items.append(f"weapons/sp/{weap_name}")
+    return staged_items
+
+
 # Canonical 1x base reserve stock for all 72 playable stock zombie primary weapons across
 # Nacht, Verruckt, Shi No Numa, and Der Riese (ADR-0005). Staged into mod.ff with maxAmmo = 3x
 # so Double Ammo (2x) and Double PaP (1.5x -> 3x) display true native WaW HUD counts while
@@ -3158,8 +3254,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         steam_game=steam_game,
     )
 
-    # Generate and stage zero-FX cloned Phase 2 primary weapons + 3x maxAmmo stock primary overrides (ADR-0005)
+    # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons + 3x maxAmmo stock overrides
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
+    staged_weapons.extend(stage_bz_special_item_weapons(tools_root=tools_root, stage_dir=stage_dir))
     staged_weapons.extend(stage_bz_stock_3x_ammo_weapons(tools_root=tools_root, stage_dir=stage_dir))
 
     # Auto-register any tracked _bz_*.gsc, staged per-map BZ wrapper scripts, cloned bz_* weapons,

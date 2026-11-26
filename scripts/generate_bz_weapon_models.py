@@ -43,7 +43,16 @@ CUSTOM_WEAPON_WORLDMODELS: dict[str, str] = {
 CUSTOM_PROJECTILE_XMODELS: tuple[str, ...] = (
     "bz_crossbow_bolt",
     "bz_boomerang_blade_air",
+    "bz_portal_orb_air",
 )
+
+CUSTOM_SPECIAL_WEAPON_VIEWMODELS: dict[str, str] = {
+    "bz_portal_grenade": "viewmodel_bz_portal_grenade",
+}
+
+CUSTOM_SPECIAL_WEAPON_WORLDMODELS: dict[str, str] = {
+    "bz_portal_grenade": "world_bz_portal_grenade",
+}
 
 ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "viewmodel_bz_acid_sprayer",
@@ -56,6 +65,9 @@ ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "viewmodel_bz_blade_boomerang",
     "world_bz_blade_boomerang",
     "bz_boomerang_blade_air",
+    "viewmodel_bz_portal_grenade",
+    "world_bz_portal_grenade",
+    "bz_portal_orb_air",
 )
 
 ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
@@ -77,6 +89,9 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_acid_billow",
     "mtl_bz_acid_drips",
     "mtl_bz_acid_mist",
+    "mtl_bz_portal_ring",
+    "mtl_bz_portal_core",
+    "mtl_bz_portal_trim",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -1019,6 +1034,108 @@ def build_acid_sprayer(name: str, is_world: bool = False) -> MeshBuilder:
 
 
 # ---------------------------------------------------------------------------
+# 5. PORTAL GRENADE (Gyroscopic Violet-Blue Rift Orb — Held & Airborne/Anchor)
+# ---------------------------------------------------------------------------
+
+
+def _add_gyro_ring(
+    m: MeshBuilder,
+    mat_name: str,
+    center: Vec3,
+    radius: float,
+    tube_r: float,
+    axis_u: Vec3,
+    axis_v: Vec3,
+    segs: int = 16,
+    bone_idx: int = 0,
+) -> None:
+    for s in range(segs):
+        a0 = math.radians(360.0 * s / segs)
+        a1 = math.radians(360.0 * (s + 1) / segs)
+        p0 = v_add(center, v_add(v_scale(axis_u, math.cos(a0) * radius), v_scale(axis_v, math.sin(a0) * radius)))
+        p1 = v_add(center, v_add(v_scale(axis_u, math.cos(a1) * radius), v_scale(axis_v, math.sin(a1) * radius)))
+        m.add_tapered_prism(mat_name, p0, p1, tube_r, tube_r, sides=6, bone_idx=bone_idx, cap_start=False, cap_end=False)
+
+
+def _add_octa_sphere_core(
+    m: MeshBuilder,
+    mat_name: str,
+    center: Vec3,
+    radius: float,
+    bone_idx: int = 0,
+) -> None:
+    # Layered octagonal crystal orb built cleanly from watertight tapered prisms
+    z_bands = (-1.0, -0.72, -0.30, 0.30, 0.72, 1.0)
+    r_bands = (0.04, 0.68, 0.98, 0.98, 0.68, 0.04)
+    for i in range(len(z_bands) - 1):
+        p0 = (center[0], center[1], center[2] + z_bands[i] * radius)
+        p1 = (center[0], center[1], center[2] + z_bands[i + 1] * radius)
+        m.add_tapered_prism(
+            mat_name,
+            p0,
+            p1,
+            r_bands[i] * radius,
+            r_bands[i + 1] * radius,
+            sides=12,
+            bone_idx=bone_idx,
+            cap_start=(i == 0),
+            cap_end=(i == len(z_bands) - 2),
+        )
+
+
+def build_portal_grenade_held(name: str, is_world: bool = False) -> MeshBuilder:
+    bones = world_weapon_bones((4.0, 0.0, 2.0)) if is_world else BONES_COLT45
+    m = MeshBuilder(name, bones, model_type="animated")
+    b_gun = 0
+
+    ring = "mtl_bz_portal_ring"
+    core = "mtl_bz_portal_core"
+    trim = "mtl_bz_portal_trim"
+
+    scale = 1.65 if is_world else 1.0
+    center: Vec3 = (1.6 * scale, 0.0, 2.1 * scale)
+
+    # Palm cradle emitter stem seated in right hand (j_gun origin)
+    m.add_tapered_prism(ring, (0.0, 0.0, -1.8 * scale), (0.5 * scale, 0.0, 0.4 * scale), 0.42 * scale, 0.56 * scale, sides=10, bone_idx=b_gun)
+    m.add_tapered_prism(trim, (0.4 * scale, 0.0, 0.3 * scale), (center[0] * 0.7, 0.0, center[2] - 1.15 * scale), 0.62 * scale, 0.95 * scale, sides=12, bone_idx=b_gun)
+
+    # Luminous violet-blue crystalline portal orb core
+    _add_octa_sphere_core(m, core, center, 1.38 * scale, bone_idx=b_gun)
+
+    # 3 intersecting gyroscopic silver-violet & gold containment rings
+    _add_gyro_ring(m, ring, center, 1.82 * scale, 0.16 * scale, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), segs=16, bone_idx=b_gun)
+    _add_gyro_ring(m, trim, center, 1.98 * scale, 0.14 * scale, v_norm((0.7, 0.0, 0.7)), (0.0, 1.0, 0.0), segs=16, bone_idx=b_gun)
+    _add_gyro_ring(m, ring, center, 2.12 * scale, 0.13 * scale, v_norm((-0.7, 0.0, 0.7)), (0.0, 1.0, 0.0), segs=16, bone_idx=b_gun)
+
+    # 4 glowing emitter pylons around equator
+    for deg in (0.0, 90.0, 180.0, 270.0):
+        rad = math.radians(deg)
+        dx, dy = math.cos(rad), math.sin(rad)
+        p0 = v_add(center, (dx * 1.48 * scale, dy * 1.48 * scale, 0.0))
+        p1 = v_add(center, (dx * 2.24 * scale, dy * 2.24 * scale, 0.0))
+        m.add_tapered_prism(trim, p0, p1, 0.24 * scale, 0.14 * scale, sides=8, bone_idx=b_gun)
+    return m
+
+
+def build_portal_orb_air() -> MeshBuilder:
+    """Rigid glowing violet-blue rift orb used for thrown orb & rotating deployed portal anchor."""
+    m = MeshBuilder("bz_portal_orb_air", BONES_RIGID, model_type="rigid")
+    ring = "mtl_bz_portal_ring"
+    core = "mtl_bz_portal_core"
+    trim = "mtl_bz_portal_trim"
+
+    center: Vec3 = (0.0, 0.0, 0.0)
+    _add_octa_sphere_core(m, core, center, 6.2, bone_idx=0)
+    _add_gyro_ring(m, ring, center, 8.8, 0.72, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), segs=18, bone_idx=0)
+    _add_gyro_ring(m, trim, center, 10.2, 0.62, v_norm((0.707, 0.0, 0.707)), (0.0, 1.0, 0.0), segs=18, bone_idx=0)
+    _add_gyro_ring(m, ring, center, 11.4, 0.56, v_norm((-0.707, 0.0, 0.707)), (0.0, 1.0, 0.0), segs=18, bone_idx=0)
+    # Vertical glowing rift spire needles at poles
+    m.add_tapered_prism(trim, (0.0, 0.0, 6.0), (0.0, 0.0, 12.5), 1.0, 0.18, sides=8, bone_idx=0)
+    m.add_tapered_prism(trim, (0.0, 0.0, -6.0), (0.0, 0.0, -12.5), 1.0, 0.18, sides=8, bone_idx=0)
+    return m
+
+
+# ---------------------------------------------------------------------------
 # Procedural 32-bit Uncompressed TGA Texture Generator (Diffuse, Normal, Spec)
 # ---------------------------------------------------------------------------
 
@@ -1106,6 +1223,10 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_acid_billow", "effect", "<none>", "acid_billow", (28, 220, 52), (175, 255, 102), blend_func="Add", z_feather=True, fogable=False),
     MaterialSpec("mtl_bz_acid_drips", "effect", "<none>", "acid_drips", (46, 248, 66), (215, 255, 138), blend_func="Add", z_feather=True, fogable=False),
     MaterialSpec("mtl_bz_acid_mist", "effect", "<none>", "acid_mist", (72, 175, 62), (145, 220, 96), blend_func="Blend", z_feather=True, fogable=True),
+    # Portal Grenade (violet-blue rift orb & gyroscopic containment rings)
+    MaterialSpec("mtl_bz_portal_ring", "model phong", "metal", "brushed_metal", (76, 68, 112), (142, 128, 188), (62, 56, 74), 210),
+    MaterialSpec("mtl_bz_portal_core", "model unlit", "glass", "portal_glow", (112, 42, 248), (186, 232, 255)),
+    MaterialSpec("mtl_bz_portal_trim", "model phong", "metal", "brushed_metal", (208, 166, 72), (138, 100, 32), (66, 54, 26), 205),
 )
 
 
@@ -1233,6 +1354,11 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
                 b1 = math.sin(u * math.tau * 6.0) * math.sin(v * math.tau * 6.0)
                 b2 = math.cos((u * 9.0 - v * 7.0) * math.tau)
                 mix = clamp01(0.32 + max(0.0, b1) * 0.55 + max(0.0, b2) * 0.30)
+            elif spec.style == "portal_glow":
+                # Swirling violet-indigo dimensional rift core with electric cyan-white plasma filaments
+                swirl = math.sin((u * 4.0 + math.sin(v * math.tau * 2.0) * 0.45) * math.tau) * 0.5 + 0.5
+                arc = max(0.0, math.cos((u * 7.0 - v * 5.0) * math.tau))
+                mix = clamp01(0.24 + swirl * 0.46 + arc * 0.34)
             elif spec.style in ("acid_stream", "acid_billow", "acid_drips", "acid_mist"):
                 # Alpha-feathered 2D chemical stream/cloud/droplet sprites for FLAMETABLEFILE
                 du = (u - 0.5) * 2.0
@@ -1434,6 +1560,9 @@ def build_all_meshes() -> list[MeshBuilder]:
         build_blade_boomerang_held("viewmodel_bz_blade_boomerang", is_world=False),
         build_blade_boomerang_held("world_bz_blade_boomerang", is_world=True),
         build_blade_boomerang_air(),
+        build_portal_grenade_held("viewmodel_bz_portal_grenade", is_world=False),
+        build_portal_grenade_held("world_bz_portal_grenade", is_world=True),
+        build_portal_orb_air(),
     ]
 
 
