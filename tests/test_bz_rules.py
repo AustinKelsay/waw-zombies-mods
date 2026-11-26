@@ -512,8 +512,9 @@ class TestBzRulesMath(unittest.TestCase):
         self.assertAlmostEqual(
             self.gsc.call(RULES_MOD, "bz_get_post_revive_invuln_duration", True, False), 0.0, places=6
         )
-        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_extra_solo_revives", True, True), 1)
-        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_extra_solo_revives", True, False), 0)
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_extra_solo_revives", True, True), 2)
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_extra_solo_revives", True, False), 1)
+        self.assertEqual(self.gsc.call(RULES_MOD, "bz_get_extra_solo_revives", False, False), 0)
 
         # Self-damage immunity (Blast Shield = all 4; Daredevil = fall & slam only)
         for dmg_type in ("explosive", "splash", "fire", "fall"):

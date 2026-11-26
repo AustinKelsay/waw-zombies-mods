@@ -169,7 +169,11 @@ bz_elem_stock_on_end_game()
 
 bz_tesla_is_self_shock_immune( player )
 {
-	if ( !bz_elements_enabled() || !IsDefined( player ) )
+	if ( GetDvarInt( "bz_enabled" ) != 1 || !IsDefined( player ) )
+	{
+		return false;
+	}
+	if ( GetDvarInt( "bz_perks_enabled" ) != 1 && GetDvarInt( "bz_elements_enabled" ) != 1 )
 	{
 		return false;
 	}

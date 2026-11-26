@@ -918,9 +918,34 @@ bz_pap_apply_cluster_upgrade( player )
 	return true;
 }
 
+bz_pap_resolve_cluster_fx()
+{
+	if ( IsDefined( level._effect ) )
+	{
+		if ( IsDefined( level._effect["betty_explode"] ) )
+		{
+			return level._effect["betty_explode"];
+		}
+		if ( IsDefined( level._effect["molotov_exp"] ) )
+		{
+			return level._effect["molotov_exp"];
+		}
+		if ( IsDefined( level._effect["powerup_grabbed_wave"] ) )
+		{
+			return level._effect["powerup_grabbed_wave"];
+		}
+	}
+	if ( IsDefined( level.bz_elem_new_fx ) && IsDefined( level.bz_elem_new_fx["misc/fx_exp_raygun_impact"] ) )
+	{
+		return level.bz_elem_new_fx["misc/fx_exp_raygun_impact"];
+	}
+	return undefined;
+}
+
 bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self_immune )
 {
 	hits = 0;
+	trace_origin = ( center[0], center[1], center[2] + 16 );
 	enemies = GetAiSpeciesArray( "axis", "all" );
 	if ( IsDefined( enemies ) )
 	{
@@ -938,6 +963,15 @@ bz_pap_apply_radial_blast( player, center, radius, damage, self_cap_damage, self
 			dist = Distance( enemy.origin, center );
 			if ( dist <= radius )
 			{
+				if ( dist > 24.0 )
+				{
+					target_pt = ( enemy.origin[0], enemy.origin[1], enemy.origin[2] + 36 );
+					tr = BulletTrace( trace_origin, target_pt, false, enemy );
+					if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 0.95 )
+					{
+						continue;
+					}
+				}
 				final_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( enemy, damage, "MOD_GRENADE_SPLASH", "stielhandgranate", player, center );
 				enemy.bz_in_damage_dispatch = true;
 				enemy.bz_damage_dispatch_time = GetTime();
@@ -1010,6 +1044,8 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 		count = offsets.size;
 	}
 
+	cluster_fx = bz_pap_resolve_cluster_fx();
+	orig_trace = ( ox, oy, oz + 16 );
 	for ( i = 0; i < count; i++ )
 	{
 		wait( 0.12 );
@@ -1017,7 +1053,28 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 		{
 			break;
 		}
-		total_hits = total_hits + bz_pap_apply_radial_blast( player, offsets[i], mini_radius, spec.mini_damage, 12, self_immune );
+		m_pos = offsets[i];
+		mtr = BulletTrace( orig_trace, m_pos, false, player );
+		if ( IsDefined( mtr ) && IsDefined( mtr["fraction"] ) && mtr["fraction"] < 1.0 )
+		{
+			sfrac = mtr["fraction"] - 0.12;
+			if ( sfrac < 0.0 )
+			{
+				sfrac = 0.0;
+			}
+			m_pos = (
+				orig_trace[0] + ( ( m_pos[0] - orig_trace[0] ) * sfrac ),
+				orig_trace[1] + ( ( m_pos[1] - orig_trace[1] ) * sfrac ),
+				orig_trace[2] + ( ( m_pos[2] - orig_trace[2] ) * sfrac )
+			);
+		}
+		if ( IsDefined( cluster_fx ) )
+		{
+			PlayFX( cluster_fx, m_pos );
+		}
+		PlaySoundAtPosition( "grenade_explode_default", m_pos );
+		Earthquake( 0.20, 0.20, m_pos, 160 );
+		total_hits = total_hits + bz_pap_apply_radial_blast( player, m_pos, mini_radius, spec.mini_damage, 12, self_immune );
 	}
 
 	fields = [];

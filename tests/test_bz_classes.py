@@ -853,10 +853,10 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_HOOKS_MOD, "bz_set_speed_modifier", self.p1, "staminup", 1.25)
         self.gsc.call(BZ_HOOKS_MOD, "bz_recompute_player_speed", self.p1)
 
-        # 1. Takeoff applies upward SetVelocity boost ONLY to Daredevil (never global jump_height dvar!)
+        # 1. Takeoff from an elevated ledge (Z=130) applies upward SetVelocity boost ONLY to Daredevil (never global jump_height dvar!)
         self.p1.on_ground = False
         self.p1.set_velocity(120, 0, 250)
-        self.p1.set_origin(0, 0, 70)
+        self.p1.set_origin(0, 0, 130)
         self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_movement_tick", self.p1)
 
         self.assertEqual(self.dvars.get("jump_height"), "", "Must NEVER mutate global jump_height dvar")
@@ -873,7 +873,7 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_movement_tick", self.p2)
         self.assertEqual(self.p2.velocity_calls, [])
 
-        # 2. Climb to peak Z=184 (fall_height = 184 - 64 = 120 >= 64) and land near zombies
+        # 2. Climb to peak Z=184 (net_drop = 130 - 64 = 66 >= 64, fall_height = 184 - 64 = 120) and land near zombies
         self.p1.set_origin(0, 0, 184)
         self.p1.set_velocity(120, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_movement_tick", self.p1)
@@ -962,10 +962,13 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.assertFalse(self.p1.get_field("bz_daredevil_burst_active"))
         self.assertAlmostEqual(self.p1.get_field("bz_move_speed_scale"), 1.25)
 
-        # 6. Small hop (< 64u) triggers no slam and no burst
+        # 6. Flat-ground 3x jump (launch Z=64 -> peak Z=181 -> land Z=64; net_drop=0, fall_height=117 < 145)
+        #    must NOT spam Flopper Slam on every normal jump!
         self.p1.on_ground = False
-        self.p1.set_origin(0, 0, 90)
-        self.p1.set_velocity(0, 0, 10)
+        self.p1.set_origin(0, 0, 64)
+        self.p1.set_velocity(0, 0, 250)
+        self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_movement_tick", self.p1)
+        self.p1.set_origin(0, 0, 181)
         self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_movement_tick", self.p1)
         self.p1.on_ground = True
         self.p1.set_origin(0, 0, 64)
@@ -1020,14 +1023,19 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         self.assertEqual(dmg_body, 100)
 
         # 2. Ghost Slip-Through inactive while standing still
+        orig_p1_contents = self.p1.contents
+        orig_p2_contents = self.p2.contents
         self.p1.set_velocity(0, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
         self.assertEqual(z_close.contents, orig_contents)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
 
-        # 3. Moving near zombie calls SetContents(0) on close zombie only (never NotSolid)
+        # 3. Moving near zombie applies player-side SetContents(0) on Assassin ONLY:
+        #    zombies NEVER lose contents (so bullets ALWAYS hit zombies in Solo & Co-op!)
         self.p1.set_velocity(200, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
-        self.assertEqual(z_close.contents, 0)
+        self.assertEqual(self.p1.contents, 0)
+        self.assertEqual(z_close.contents, orig_contents)
         self.assertEqual(z_far.contents, orig_contents)
 
         # 4. Zombies STILL land full normal melee damage while ghosted
@@ -1049,31 +1057,38 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         )
         self.assertEqual(melee_dmg, 50)
 
-        # 5. Stopping restores original contents cleanly
+        # 5. Stopping restores player original contents cleanly (and never touched zombie contents)
         self.p1.set_velocity(0, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
         self.assertEqual(z_close.contents, orig_contents)
 
-        # 6. Co-op refcount safety: two moving Assassins share zombie, restoring only after both release
+        # 6. Co-op isolation: two moving Assassins slip independently without ever making zombies bulletproof
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:assassin")
         self.p2.set_origin(50, 0, 64)
         self.p1.set_velocity(200, 0, 0)
         self.p2.set_velocity(-200, 0, 0)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1)
         self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p2)
-        self.assertEqual(z_close.contents, 0)
+        self.assertEqual(self.p1.contents, 0)
+        self.assertEqual(self.p2.contents, 0)
+        self.assertEqual(z_close.contents, orig_contents)
 
-        # p1 goes down -> p2 still moving nearby keeps contents=0
+        # p1 goes down -> p1 restores contents while p2 still moving nearby keeps slip-through
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_downed", self.p1)
-        self.assertEqual(z_close.contents, 0)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
+        self.assertEqual(self.p2.contents, 0)
+        self.assertEqual(z_close.contents, orig_contents)
 
-        # p2 swaps off Assassin -> last ref released, original contents restored!
+        # p2 swaps off Assassin -> p2 restores contents cleanly!
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:broker")
+        self.assertEqual(self.p2.contents, orig_p2_contents)
         self.assertEqual(z_close.contents, orig_contents)
 
     def test_assassin_contact_radius_speed_gate_release_and_hellhound_protection(self) -> None:
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:assassin")
         self.p1.set_origin(0, 0, 64)
+        orig_p1_contents = self.p1.contents
 
         z_contact = ClassFakeEntity("ZContact", ent_num=60, is_player=False, origin=(40, 0, 64))
         z_contact.set_field("health", 1000)
@@ -1095,18 +1110,21 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         # 1. Slow ADS strafe (35 u/s < 40 u/s) must NOT trigger ghosting even at contact range
         self.p1.set_velocity(35, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
         self.assertEqual(z_contact.contents, orig_contents)
         self.assertEqual(dog_contact.contents, orig_contents)
 
         # 1b. Moving AWAY from zombie at >= 40 u/s must NOT acquire ghosting
         self.p1.set_velocity(-120, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
-        self.assertEqual(z_contact.contents, orig_contents)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
 
-        # 2. Moving TOWARD zombie (>= 40 u/s): ONLY zombie <= 42u is ghosted; 48u/64u/96u & Hellhound stay solid!
+        # 2. Moving TOWARD zombie (>= 40 u/s): tracks ONLY zombie <= 42u, sets player-side slip contents,
+        #    while keeping ALL zombies & Hellhound 100% bullet-hittable!
         self.p1.set_velocity(120, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
-        self.assertEqual(z_contact.contents, 0)
+        self.assertEqual(self.p1.contents, 0)
+        self.assertEqual(z_contact.contents, orig_contents)
         self.assertEqual(z_mid_48.contents, orig_contents)
         self.assertEqual(z_mid_64.contents, orig_contents)
         self.assertEqual(z_mid_96.contents, orig_contents)
@@ -1119,18 +1137,18 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         # 2b. Reversing direction at 40u (still inside 42u contact radius, outside 16u overlap) restores immediately!
         self.p1.set_velocity(-200, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
-        self.assertEqual(z_contact.contents, orig_contents)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
 
         # Re-acquire moving forward, then back out past 42u -> restores immediately!
         self.p1.set_velocity(200, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 1)
-        self.assertEqual(z_contact.contents, 0)
+        self.assertEqual(self.p1.contents, 0)
 
-        # 3. Immediate release outside 42u contact radius (e.g. backing away to 50u restores bullet collision!)
+        # 3. Immediate release outside 42u contact radius
         self.p1.set_origin(-10, 0, 64)
         self.p1.set_velocity(-200, 0, 0)
         self.assertEqual(self.gsc.call(BZ_CLASSES_MOD, "bz_assassin_ghost_tick", self.p1), 0)
-        self.assertEqual(z_contact.contents, orig_contents)
+        self.assertEqual(self.p1.contents, orig_p1_contents)
 
         # 4. Spawning Hellhounds are skipped by Titan aggro & Daredevil slam
         dog_spawning = ClassFakeEntity("DogSpawning", ent_num=65, is_player=False, origin=(60, 0, 64))
@@ -1148,6 +1166,37 @@ class TestDaredevilAndAssassinClasses(unittest.TestCase):
         slam_res = self.gsc.call(BZ_CLASSES_MOD, "bz_daredevil_execute_slam", self.p1, 120, GscArray([0, 0, 64]))
         self.assertEqual(slam_res.get_field("hits"), 0)
         self.assertEqual(dog_spawning.damage_taken, [])
+
+    def test_p2o_t7_medic_stowed_spill_and_titan_stationary_phase2_scripted_damage(self) -> None:
+        # 1. Field Medic spills 15s ammo regen into stowed primary when held weapon is full (or Boomerang)
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:medic")
+        self.p1.give_weapon("thompson", make_current=True)
+        self.p1.give_weapon("stg44")
+        self.p1.ammo_stock["thompson"] = 200  # full (max=200)
+        self.p1.ammo_stock["stg44"] = 60  # below max (max=180)
+        tick = self.gsc.call(BZ_CLASSES_MOD, "bz_medic_ammo_regen_tick", self.p1)
+        self.assertGreater(tick.get_field("self_added"), 0)
+        self.assertGreater(self.p1.ammo_stock["stg44"], 60)
+        self.assertFalse(self.gsc.call(BZ_CLASSES_MOD, "bz_medic_is_primary_ammo_weapon", "bz_blade_boomerang"))
+        self.assertFalse(self.gsc.call(BZ_CLASSES_MOD, "bz_medic_is_primary_ammo_weapon", "zombie_perk_bottle_jugg"))
+
+        # 2. Titan stationary 2x applies to scripted Phase 2 damage via bz_elem_new_apply_status_damage_mult
+        self.dvars.set("bz_elements_enabled", "1")
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:titan")
+        self.p1.set_field("bz_titan_is_stationary", True)
+        z_t = ClassFakeEntity("ZTitanP2", ent_num=66, is_player=False, origin=(120, 0, 64))
+        z_t.set_field("health", 5000)
+        boosted = self.gsc.call(
+            "maps\\_bz_elem_new",
+            "bz_elem_new_apply_status_damage_mult",
+            z_t,
+            1000,
+            "MOD_EXPLOSIVE",
+            "bz_multi_crossbow",
+            self.p1,
+            GscArray([120, 0, 64]),
+        )
+        self.assertEqual(boosted, 2000)
 
 
 if __name__ == "__main__":

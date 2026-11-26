@@ -1514,6 +1514,7 @@ def inject_laststand_hooks(script_bytes: bytes) -> bytes:
         f"{all_indent}if ( maps\\_bz_hooks::bz_enabled() && GetPlayers().size == 1 && maps\\_bz_perks::bz_perks_try_consume_solo_revive( self ) ){newline}"
         f"{all_indent}{{{newline}"
         f"{all_indent}\tself reviveplayer();{newline}"
+        f"{all_indent}\tmaps\\_bz_hooks::bz_recompute_player_max_health( self );{newline}"
         f"{all_indent}\tself.health = self.maxhealth;{newline}"
         f"{all_indent}\tmaps\\_bz_perks::bz_perks_apply_revive_completed( self, self );{newline}"
         f"{all_indent}\treturn;{newline}"
