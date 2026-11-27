@@ -172,6 +172,12 @@ bz_classes_pre_init()
 	level.bz_classes_precached = true;
 	PrecacheModel( "bz_sapper_trap_fire" );
 	PrecacheModel( "bz_sapper_trap_betty" );
+	PrecacheShader( "bz_icon_class_medic" );
+	PrecacheShader( "bz_icon_class_titan" );
+	PrecacheShader( "bz_icon_class_sapper" );
+	PrecacheShader( "bz_icon_class_daredevil" );
+	PrecacheShader( "bz_icon_class_assassin" );
+	PrecacheShader( "bz_icon_class_broker" );
 }
 
 bz_class_get_frag_weapon( player )
@@ -306,8 +312,46 @@ bz_class_format_hud_text( class_id )
 }
 
 // ---------------------------------------------------------------------------
-// Per-Player ASCII Class HUD Badge (Top-Right Lane, Zero Leaks)
+// Per-Player Class Shield Icon (Bottom-Left) + Dynamic Status Relay (Zero Leaks)
 // ---------------------------------------------------------------------------
+
+bz_class_get_icon_shader( class_id )
+{
+	id = bz_normalize_id( class_id );
+	if ( id == "medic" || id == "titan" || id == "sapper" || id == "daredevil" || id == "assassin" || id == "broker" )
+	{
+		return "bz_icon_class_" + id;
+	}
+	return "";
+}
+
+bz_class_format_dynamic_status( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return "";
+	}
+	active_class = bz_state_get_class( player );
+	if ( active_class == "sapper" && IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
+	{
+		frag = bz_class_get_frag_weapon( player );
+		cur_clip = Int( player GetWeaponAmmoClip( frag ) );
+		if ( cur_clip < 0 )
+		{
+			cur_clip = 0;
+		}
+		return "GREN: " + cur_clip + "+" + Int( player.bz_sapper_grenade_reserve );
+	}
+	if ( active_class == "titan" && IsDefined( player.bz_titan_is_stationary ) && player.bz_titan_is_stationary )
+	{
+		return "2X DMG";
+	}
+	if ( active_class == "daredevil" && IsDefined( player.bz_daredevil_burst_active ) && player.bz_daredevil_burst_active )
+	{
+		return "BURST";
+	}
+	return "";
+}
 
 bz_class_update_hud( player )
 {
@@ -321,34 +365,75 @@ bz_class_update_hud( player )
 	if ( active_class == "" )
 	{
 		bz_class_destroy_hud( player );
+		if ( IsDefined( level.bz_perks_registered ) && level.bz_perks_registered && GetDvarInt( "bz_perks_enabled" ) == 1 )
+		{
+			bz_class_sync_perks_hud( player );
+		}
 		return undefined;
 	}
 
-	badge_text = bz_class_format_hud_text( active_class );
-	if ( badge_text == "" )
+	shader = bz_class_get_icon_shader( active_class );
+	if ( shader == "" )
 	{
 		bz_class_destroy_hud( player );
 		return undefined;
 	}
-	if ( active_class == "sapper" && IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
+
+	// Bottom-left Class Heraldic Shield (28x28u at x=12, y=-118 above perk icon row)
+	if ( !IsDefined( player.bz_class_icon_hud ) )
 	{
-		frag = bz_class_get_frag_weapon( player );
-		cur_clip = Int( player GetWeaponAmmoClip( frag ) );
-		if ( cur_clip < 0 )
+		icon = NewClientHudElem( player );
+		icon.alignX = "left";
+		icon.alignY = "bottom";
+		icon.horzAlign = "left";
+		icon.vertAlign = "bottom";
+		icon.x = 12;
+		icon.y = -118;
+		icon.foreground = true;
+		icon.sort = 4;
+		icon.hidewheninmenu = true;
+		icon.alpha = 0.95;
+		player.bz_class_icon_hud = icon;
+		player.bz_class_icon_shader = "";
+		if ( !IsDefined( level.bz_class_hud_elems ) )
 		{
-			cur_clip = 0;
+			level.bz_class_hud_elems = [];
 		}
-		badge_text = badge_text + " | GREN: " + cur_clip + "+" + Int( player.bz_sapper_grenade_reserve );
-	}
-	else if ( active_class == "titan" && IsDefined( player.bz_titan_is_stationary ) && player.bz_titan_is_stationary )
-	{
-		badge_text = badge_text + " | 2X DMG";
-	}
-	else if ( active_class == "daredevil" && IsDefined( player.bz_daredevil_burst_active ) && player.bz_daredevil_burst_active )
-	{
-		badge_text = badge_text + " | BURST";
+		level.bz_class_hud_elems[level.bz_class_hud_elems.size] = icon;
 	}
 
+	player.bz_class_icon_hud.alpha = 0.95;
+	if ( !IsDefined( player.bz_class_icon_shader ) || player.bz_class_icon_shader != shader )
+	{
+		player.bz_class_icon_hud SetShader( shader, 28, 28 );
+		player.bz_class_icon_shader = shader;
+	}
+
+	// Dynamic class status readouts (GREN: clip+reserve, 2X DMG, BURST) feed the consolidated
+	// STATUS lane at y(50): delegated to _bz_perks when registered & enabled, or rendered directly otherwise.
+	if ( IsDefined( level.bz_perks_registered ) && level.bz_perks_registered && GetDvarInt( "bz_perks_enabled" ) == 1 )
+	{
+		if ( IsDefined( player.bz_class_hud ) )
+		{
+			player.bz_class_hud.alpha = 0;
+			player.bz_class_hud_text = "";
+		}
+		bz_class_sync_perks_hud( player );
+		return player.bz_class_icon_hud;
+	}
+
+	dyn = bz_class_format_dynamic_status( player );
+	if ( dyn == "" )
+	{
+		if ( IsDefined( player.bz_class_hud ) )
+		{
+			player.bz_class_hud.alpha = 0;
+			player.bz_class_hud_text = "";
+		}
+		return player.bz_class_icon_hud;
+	}
+
+	status_text = "STATUS: " + dyn;
 	if ( !IsDefined( player.bz_class_hud ) )
 	{
 		hud = NewClientHudElem( player );
@@ -357,11 +442,11 @@ bz_class_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 14 );
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 50 );
 		hud.foreground = true;
 		hud.sort = 6;
 		hud.hidewheninmenu = true;
-		hud.fontScale = 1.25;
+		hud.fontScale = 1.15;
 		hud.color = ( 0.90, 0.92, 0.98 );
 		hud.alpha = 0.92;
 		player.bz_class_hud = hud;
@@ -373,13 +458,14 @@ bz_class_update_hud( player )
 		level.bz_class_hud_elems[level.bz_class_hud_elems.size] = hud;
 	}
 
-	if ( player.bz_class_hud_text != badge_text )
+	player.bz_class_hud.alpha = 0.92;
+	if ( !IsDefined( player.bz_class_hud_text ) || player.bz_class_hud_text != status_text )
 	{
-		player.bz_class_hud SetText( badge_text );
-		player.bz_class_hud_text = badge_text;
+		player.bz_class_hud SetText( status_text );
+		player.bz_class_hud_text = status_text;
 	}
 
-	return player.bz_class_hud;
+	return player.bz_class_icon_hud;
 }
 
 bz_class_destroy_hud( player )
@@ -390,6 +476,25 @@ bz_class_destroy_hud( player )
 	}
 
 	destroyed = false;
+	if ( IsDefined( player.bz_class_icon_hud ) )
+	{
+		icon = player.bz_class_icon_hud;
+		player.bz_class_icon_hud = undefined;
+		if ( IsDefined( level.bz_class_hud_elems ) )
+		{
+			for ( i = 0; i < level.bz_class_hud_elems.size; i++ )
+			{
+				if ( IsDefined( level.bz_class_hud_elems[i] ) && level.bz_class_hud_elems[i] == icon )
+				{
+					level.bz_class_hud_elems[i] = undefined;
+				}
+			}
+		}
+		icon Destroy();
+		destroyed = true;
+	}
+	player.bz_class_icon_shader = "";
+
 	if ( IsDefined( player.bz_class_hud ) )
 	{
 		hud = player.bz_class_hud;
@@ -2704,6 +2809,11 @@ bz_normalize_id( raw_id )
 bz_state_get_class( player )
 {
 	return maps\_bz_state::bz_state_get_class( player );
+}
+
+bz_class_sync_perks_hud( player )
+{
+	maps\_bz_perks::bz_perks_update_hud( player );
 }
 
 // Local function pointers used by the gated live selftests.

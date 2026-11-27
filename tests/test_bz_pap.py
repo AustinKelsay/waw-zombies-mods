@@ -54,6 +54,8 @@ class FakeHudElem(GscStruct):
         super().__init__()
         self.owner = owner
         self.text_history: list[str] = []
+        self.shader: str = ""
+        self.shader_history: list[tuple[str, int, int]] = []
         self.destroyed: bool = False
         self.destroy_count: int = 0
 
@@ -150,6 +152,13 @@ class PapGscRuntime(BzGscRuntime):
             if method == "settext":
                 txt = _waw_to_str(args[0]) if args else ""
                 receiver.text_history.append(txt)
+                return UNDEFINED
+            if method == "setshader":
+                sh = _waw_to_str(args[0]) if len(args) > 0 else ""
+                w = int(args[1]) if len(args) > 1 else 0
+                h = int(args[2]) if len(args) > 2 else 0
+                receiver.shader = sh
+                receiver.shader_history.append((sh, w, h))
                 return UNDEFINED
             if method == "destroy":
                 receiver.destroyed = True
@@ -880,7 +889,7 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
         # No upgrades yet -> no HUD clutter created
         self.assertEqual(gsc.hud_elems, [])
 
-        # Single PaP scripted on Nacht -> creates top-right badge showing "PAP I"
+        # Single PaP scripted on Nacht -> creates UPGRADES badge at y=14 showing "PAP I"
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_pap", "buy_pap:single_pap")
         self.assertEqual(len(gsc.hud_elems), 1)
         hud1 = gsc.hud_elems[0]
@@ -888,39 +897,47 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(hud1.get_field("alignX"), "right")
         self.assertEqual(hud1.get_field("horzAlign"), "right")
         self.assertEqual(hud1.get_field("x"), -12)
-        self.assertEqual(hud1.get_field("y"), 50)
+        self.assertEqual(hud1.get_field("y"), 14)
         self.assertEqual(hud1.current_text, "PAP I")
 
-        # Double PaP + PaP Knife + PaP Bowie + PaP Cluster -> shows "PAP II" and all concise flags
+        # Double PaP + PaP Knife + PaP Bowie + PaP Cluster -> Double-PaP shows 28x28u "II" Diamond at y=68
+        # (mutually exclusive with "PAP I" text!) while UPGRADES lane shows concise melee/cluster flags
         p1.give_perk("specialty_altmelee")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_pap", "buy_pap:double_pap")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_knife")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_bowie")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_cluster")
 
-        self.assertEqual(hud1.current_text, "PAP II | KNIFE+ | BOWIE+ | CLUSTER")
+        self.assertEqual(hud1.current_text, "KNIFE+ | BOWIE+ | CLUSTER")
         self.assertTrue(all(32 <= ord(ch) <= 126 for ch in hud1.current_text))
+        pap2_icon = p1.get_field("bz_pap2_icon_hud")
+        self.assertIsInstance(pap2_icon, FakeHudElem)
+        self.assertEqual(pap2_icon.get_field("x"), -12)
+        self.assertEqual(pap2_icon.get_field("y"), 68)
+        self.assertEqual(pap2_icon.shader, "bz_icon_pap2_badge")
+        self.assertGreater(float(pap2_icon.get_field("alpha")), 0.0)
 
         # Redundant HUD refresh with same state skips SetText() to protect configstrings
         prev_writes = len(hud1.text_history)
         gsc.call(BZ_PAP_MOD, "bz_pap_update_hud", p1)
         self.assertEqual(len(hud1.text_history), prev_writes)
 
-        # Switching to un-upgraded secondary weapon drops "PAP II" while keeping melee/cluster flags
+        # Switching to un-upgraded secondary weapon hides "II" diamond while keeping melee/cluster flags
         p1.give_weapon("colt", make_current=True)
         gsc.call(BZ_PAP_MOD, "bz_pap_update_hud", p1)
         self.assertEqual(hud1.current_text, "KNIFE+ | BOWIE+ | CLUSTER")
+        self.assertEqual(pap2_icon.get_field("alpha"), 0)
 
         # Player 2 gets their own independent HUD element
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p2, "bz_station_pap", "buy_pap:single_pap")
-        self.assertEqual(len(gsc.hud_elems), 2)
-        hud2 = gsc.hud_elems[1]
+        hud2 = p2.get_field("bz_pap_hud")
         self.assertIs(hud2.owner, p2)
         self.assertEqual(hud2.current_text, "PAP I")
 
-        # Disconnect destroys p1's HUD without affecting p2
+        # Disconnect destroys p1's HUD & diamond icon without affecting p2
         gsc.call(BZ_PAP_MOD, "bz_pap_destroy_player_hud", p1)
         self.assertTrue(hud1.destroyed)
+        self.assertTrue(pap2_icon.destroyed)
         self.assertFalse(hud2.destroyed)
 
         # end_game destroys all remaining HUD elements with zero leaks and zero double-destroys

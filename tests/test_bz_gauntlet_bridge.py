@@ -186,7 +186,8 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
         player.give_weapon(ACID, make_current=True)
         runtime.call(BRIDGE_MOD, "restore_player_bz_state", player, VERRUCKT)
 
-        self.assertEqual(player.get_field("bz_pap_hud_text"), "PAP II")
+        self.assertTrue(player.get_field("bz_pap2_badge_visible"))
+        self.assertEqual(player.get_field("bz_pap2_icon_hud").shader, "bz_icon_pap2_badge")
         self.assertEqual(player.client_dvars["ui_bz_pap_single_pap"], "UPGRADED")
         self.assertEqual(player.client_dvars["ui_bz_pap_double_pap"], "MAXED (II)")
         self.assert_restored_counts(runtime, 2, 1)

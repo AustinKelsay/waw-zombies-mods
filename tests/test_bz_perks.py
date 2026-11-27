@@ -65,6 +65,8 @@ class FakeHudElem(GscStruct):
         self.owner = owner
         self.text: str = ""
         self.set_text_calls: list[str] = []
+        self.shader: str = ""
+        self.shader_history: list[tuple[str, int, int]] = []
         self.destroyed: bool = False
 
 
@@ -148,6 +150,13 @@ class BzPerksRuntime(BzGscRuntime):
                 txt = _waw_to_str(args[0]) if args else ""
                 receiver.text = txt
                 receiver.set_text_calls.append(txt)
+                return UNDEFINED
+            if method == "setshader":
+                sh = _waw_to_str(args[0]) if len(args) > 0 else ""
+                w = int(args[1]) if len(args) > 1 else 0
+                h = int(args[2]) if len(args) > 2 else 0
+                receiver.shader = sh
+                receiver.shader_history.append((sh, w, h))
                 return UNDEFINED
             if method == "destroy":
                 receiver.destroyed = True
@@ -971,19 +980,34 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         )
 
     def test_compact_ascii_right_lane_hud_coop_isolation_and_zero_leaks_on_disconnect_and_end_game(self) -> None:
-        # Buy custom Standard Perk, Tier 2, and Apex on p1 only
+        # Buy custom Standard Perk -> Tier 2 in-place SetShader swap (0 extra elems!) + Apex on p1 only
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_perk:staminup")
-        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_t2:staminup")
-        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_apex:second_chance")
+        perk_hud_p1 = self.p1.get_field("perk_hud")
+        stam_icon = perk_hud_p1["bz_perk_staminup"]
+        self.assertIsInstance(stam_icon, FakeHudElem)
+        self.assertEqual(stam_icon.shader, "bz_icon_perk_staminup")
+        self.assertEqual(stam_icon.get_field("y"), -70)
+        self.assertEqual(stam_icon.shader_history[-1], ("bz_icon_perk_staminup", 24, 24))
+        count_before_t2 = len(self.gsc.hud_elems)
 
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_t2:staminup")
+        # Tier-2 MUST swap existing slot in-place via SetShader() with 0 extra HUD elements!
+        self.assertEqual(len(self.gsc.hud_elems), count_before_t2)
+        self.assertEqual(stam_icon.shader, "bz_icon_perk_staminup_t2")
+
+        self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", "buy_apex:second_chance")
+        sc_icon = perk_hud_p1["bz_apex_second_chance"]
+        self.assertEqual(sc_icon.shader, "bz_icon_apex_secondchance")
+        self.assertEqual(sc_icon.get_field("x"), 30)
+
+        # Consolidated STATUS lane at y=50 retains dynamic 2ND CH[RDY] readout without static perk text spam!
         hud_p1 = self.p1.get_field("bz_perks_hud")
         self.assertIsInstance(hud_p1, FakeHudElem)
         self.assertEqual(hud_p1.get_field("alignX"), "right")
         self.assertEqual(hud_p1.get_field("horzAlign"), "right")
         self.assertEqual(hud_p1.get_field("x"), -12)
-        self.assertEqual(hud_p1.get_field("y"), 32)
-        self.assertIn("STAM II", hud_p1.text)
-        self.assertIn("2ND CH", hud_p1.text)
+        self.assertEqual(hud_p1.get_field("y"), 50)
+        self.assertEqual(hud_p1.text, "STATUS: 2ND CH[RDY]")
         self.assertTrue(
             all(32 <= ord(ch) <= 126 for ch in hud_p1.text),
             f"Non-ASCII HUD text: {hud_p1.text!r}",
@@ -999,13 +1023,12 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
         if isinstance(hud_p2, FakeHudElem):
             self.assertEqual(hud_p2.get_field("alpha"), 0)
 
-        # Give p2 Blast Shield so p2 gets its own HUD, then test disconnect on p1 and end_game on p2
+        # Give p2 Blast Shield -> gets circular bronze Apex icon at bottom-left, zero idle top-right text spam!
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_perks", "buy_apex:blast_shield")
-        hud_p2 = self.p2.get_field("bz_perks_hud")
-        self.assertIsInstance(hud_p2, FakeHudElem)
-        self.assertIn("BLAST", hud_p2.text)
+        p2_blast_icon = self.p2.get_field("perk_hud")["bz_apex_blast_shield"]
+        self.assertEqual(p2_blast_icon.shader, "bz_icon_apex_blastshield")
 
-        # Maxed perk loadout wraps cleanly into 2 compact non-overflowing right-hand HUD rows (y=32 & y=84)
+        # Maxed perk loadout puts all 7 T2 + 4 Apex icons on bottom-left perk_hud with ZERO row2 text clutter
         for tok in (
             "buy_perk:juggernog", "buy_t2:juggernog",
             "buy_perk:speed_cola", "buy_t2:speed_cola",
@@ -1016,23 +1039,20 @@ class TestBzPerksDownResetHudAndWaw17Compliance(unittest.TestCase):
             "buy_apex:double_ammo", "buy_apex:lightweight_heavy", "buy_apex:blast_shield",
         ):
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_perks", tok)
-        hud_p1_row2 = self.p1.get_field("bz_perks_hud_row2")
-        self.assertIsInstance(hud_p1_row2, FakeHudElem)
-        self.assertEqual(hud_p1_row2.get_field("y"), 84)
+        self.assertEqual(perk_hud_p1["specialty_armorvest"].shader, "bz_icon_perk_jugg_t2")
+        self.assertEqual(perk_hud_p1["bz_apex_blast_shield"].shader, "bz_icon_apex_blastshield")
         self.assertLessEqual(len(hud_p1.text), 56)
-        self.assertIn("BLAST", hud_p1_row2.text)
 
-        # Disconnect destroys both p1 HUD rows cleanly without touching p2
+        # Disconnect destroys all p1 HUD elems & perk icons cleanly without touching p2
         self.gsc.call(BZ_PERKS_MOD, "bz_perks_destroy_hud", self.p1)
         self.assertTrue(hud_p1.destroyed)
-        self.assertTrue(hud_p1_row2.destroyed)
+        self.assertTrue(stam_icon.destroyed)
         self.assertIs(self.p1.get_field("bz_perks_hud"), UNDEFINED)
-        self.assertIs(self.p1.get_field("bz_perks_hud_row2"), UNDEFINED)
-        self.assertFalse(hud_p2.destroyed)
+        self.assertFalse(p2_blast_icon.destroyed)
 
         # end_game destroys all remaining HUDs with zero leaks
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
-        self.assertTrue(hud_p2.destroyed)
+        self.assertTrue(p2_blast_icon.destroyed)
         self.assertTrue(all(h.destroyed for h in self.gsc.hud_elems))
 
     def test_bz_perks_gsc_is_strictly_waw17_compliant(self) -> None:

@@ -419,8 +419,10 @@ bz_run_p1_selftest()
 	cluster_res = bz_pap_detonate_cluster( p, p.origin, "stielhandgranate" );
 	bz_selftest_check( st, bz_state_has_pap_upgrade( p, "pap_cluster", "" ) && IsDefined( cluster_res ) && cluster_res.mini_count == 4 && cluster_res.self_immune, "pap_cluster" );
 
-	// 5. Verify HUD creation across all 3 Phase 1 HUD lanes
-	huds_created = IsDefined( p.bz_perks_hud ) && IsDefined( p.bz_class_hud ) && IsDefined( p.bz_pap_hud );
+	// 5. Verify HUD creation across all 3 Phase 1 HUD systems (Perks STATUS + Class Shield + PaP badge)
+	huds_created = IsDefined( p.bz_perks_hud ) &&
+		IsDefined( p.bz_class_icon_hud ) &&
+		( IsDefined( p.bz_pap_hud ) || IsDefined( p.bz_pap2_icon_hud ) );
 	bz_selftest_check( st, huds_created, "huds_created" );
 
 	// 6. Down-Reset vs Class/PaP Persistence Boundary
@@ -441,7 +443,9 @@ bz_run_p1_selftest()
 	bz_on_end_game();
 	cleanup_ok = !IsDefined( p.bz_perks_hud ) &&
 		!IsDefined( p.bz_class_hud ) &&
+		!IsDefined( p.bz_class_icon_hud ) &&
 		!IsDefined( p.bz_pap_hud ) &&
+		!IsDefined( p.bz_pap2_icon_hud ) &&
 		IsDefined( level.bz_station_entities ) &&
 		level.bz_station_entities.size == 0;
 	bz_selftest_check( st, cleanup_ok, "hud_station_cleanup" );
@@ -920,6 +924,8 @@ bz_run_p2_selftest()
 	cleanup_ok = !IsDefined( p.bz_special_hud ) &&
 		!IsDefined( p.bz_perks_hud ) &&
 		!IsDefined( p.bz_class_hud ) &&
+		!IsDefined( p.bz_class_icon_hud ) &&
+		!IsDefined( p.bz_pap2_icon_hud ) &&
 		IsDefined( level.bz_acid_puddles ) && level.bz_acid_puddles.size == 0 &&
 		IsDefined( level.bz_elem_new_entities ) && level.bz_elem_new_entities.size == 0 &&
 		IsDefined( level.bz_special_entities ) && level.bz_special_entities.size == 0 &&

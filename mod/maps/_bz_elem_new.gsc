@@ -905,7 +905,7 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 		return false;
 	}
 
-	weap = maps\_bz_rules::bz_strip_pap_suffix( ctx.weapon );
+	weap = bz_strip_pap_suffix( ctx.weapon );
 	if ( weap == "bz_cryo_cannon" )
 	{
 		return false;
@@ -1420,7 +1420,7 @@ bz_elem_new_watch_acid_stream()
 			continue;
 		}
 		cur_weap = bz_normalize_id( self GetCurrentWeapon() );
-		if ( maps\_bz_rules::bz_strip_pap_suffix( cur_weap ) != "bz_acid_sprayer" )
+		if ( bz_strip_pap_suffix( cur_weap ) != "bz_acid_sprayer" )
 		{
 			continue;
 		}
@@ -1486,7 +1486,7 @@ bz_elem_new_on_weapon_fired( player, weapon_name )
 	}
 
 	weap = bz_normalize_id( weapon_name );
-	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	base_weap = bz_strip_pap_suffix( weap );
 	if ( base_weap == "bz_acid_sprayer" )
 	{
 		player.bz_acid_last_puddle_ms = GetTime();
@@ -1580,7 +1580,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 		mult = mult * bz_get_acid_brittle_mult();
 	}
 
-	norm_weap = maps\_bz_rules::bz_strip_pap_suffix( weapon );
+	norm_weap = bz_strip_pap_suffix( weapon );
 	if ( bz_elem_new_is_cryo_frozen( zombie ) && norm_weap != "bz_cryo_cannon" && bz_elem_new_is_shatter_mod( mod ) )
 	{
 		shatter_mult = bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point );
@@ -1600,7 +1600,7 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 	// Continuous Acid Sprayer gas stream contact (MOD_BURNED from bz_acid_sprayer / _pap1 / _pap2):
 	// applies Acid slow (40%), Acid Brittle (1.50x), throttled round-scaled melt damage,
 	// green splash FX, and coats the ground beneath the zombie with sizzling acid puddles.
-	norm_weap = maps\_bz_rules::bz_strip_pap_suffix( ctx.weapon );
+	norm_weap = bz_strip_pap_suffix( ctx.weapon );
 	norm_mod = bz_normalize_id( ctx.mod );
 	if ( norm_weap == "bz_acid_sprayer" && norm_mod == "mod_burned" && IsDefined( ctx.attacker ) && IsPlayer( ctx.attacker ) )
 	{
@@ -1716,6 +1716,11 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_strip_pap_suffix( weapon_name )
+{
+	return maps\_bz_rules::bz_strip_pap_suffix( weapon_name );
 }
 
 bz_get_acid_brittle_mult()

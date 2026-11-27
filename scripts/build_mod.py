@@ -2684,7 +2684,7 @@ def _expected_custom_image_stems() -> tuple[list[str], list[str]]:
     spec_stems: list[str] = []
     for spec in bz_models.MATERIAL_SPECS:
         stem = spec.name.removeprefix("mtl_")
-        if spec.material_type in ("model unlit", "effect"):
+        if spec.material_type in ("model unlit", "effect", "2d"):
             direct_images.append(f"{stem}_c")
         else:
             direct_images.append(f"{stem}_c")
@@ -3606,9 +3606,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             if (raw_xmodel_dir / xm).is_file()
         ]
         raw_mat_dir = tools_root / "raw" / "materials"
-        effect_materials = [
+        linked_materials = [
             mat
-            for mat in bz_models.EFFECT_MATERIALS
+            for mat in (*bz_models.EFFECT_MATERIALS, *bz_models.HUD_ICON_MATERIALS)
             if (raw_mat_dir / mat).is_file()
         ]
         updated_csv = generate_staged_mod_csv(
@@ -3616,7 +3616,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
             staged_gscs,
             staged_weapon_relpaths=staged_weapons,
             extra_xmodels=compat_xmodels,
-            extra_materials=effect_materials,
+            extra_materials=linked_materials,
         )
         staged_mod_csv.write_text(updated_csv, encoding="latin1")
 

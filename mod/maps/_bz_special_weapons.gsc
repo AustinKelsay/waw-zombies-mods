@@ -2335,7 +2335,7 @@ bz_special_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 68 );
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 32 );
 		hud.foreground = true;
 		hud.sort = 6;
 		hud.hidewheninmenu = true;

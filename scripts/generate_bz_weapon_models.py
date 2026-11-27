@@ -208,6 +208,28 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_xbow_glow_pap2",
     "mtl_bz_blade_glow_pap1",
     "mtl_bz_blade_glow_pap2",
+    # Wave 4 (NSV-W4, Sheet 11 — 21 linked 2D HUD icon materials, 0 FX)
+    "bz_icon_class_medic",
+    "bz_icon_class_titan",
+    "bz_icon_class_sapper",
+    "bz_icon_class_daredevil",
+    "bz_icon_class_assassin",
+    "bz_icon_class_broker",
+    "bz_icon_perk_staminup",
+    "bz_icon_perk_mulekick",
+    "bz_icon_perk_armorpiercing",
+    "bz_icon_perk_jugg_t2",
+    "bz_icon_perk_speed_t2",
+    "bz_icon_perk_dtap_t2",
+    "bz_icon_perk_revive_t2",
+    "bz_icon_perk_staminup_t2",
+    "bz_icon_perk_mulekick_t2",
+    "bz_icon_perk_armorpiercing_t2",
+    "bz_icon_apex_dblammo",
+    "bz_icon_apex_lightheavy",
+    "bz_icon_apex_secondchance",
+    "bz_icon_apex_blastshield",
+    "bz_icon_pap2_badge",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -215,6 +237,30 @@ EFFECT_MATERIALS: tuple[str, ...] = (
     "mtl_bz_acid_billow",
     "mtl_bz_acid_drips",
     "mtl_bz_acid_mist",
+)
+
+HUD_ICON_MATERIALS: tuple[str, ...] = (
+    "bz_icon_class_medic",
+    "bz_icon_class_titan",
+    "bz_icon_class_sapper",
+    "bz_icon_class_daredevil",
+    "bz_icon_class_assassin",
+    "bz_icon_class_broker",
+    "bz_icon_perk_staminup",
+    "bz_icon_perk_mulekick",
+    "bz_icon_perk_armorpiercing",
+    "bz_icon_perk_jugg_t2",
+    "bz_icon_perk_speed_t2",
+    "bz_icon_perk_dtap_t2",
+    "bz_icon_perk_revive_t2",
+    "bz_icon_perk_staminup_t2",
+    "bz_icon_perk_mulekick_t2",
+    "bz_icon_perk_armorpiercing_t2",
+    "bz_icon_apex_dblammo",
+    "bz_icon_apex_lightheavy",
+    "bz_icon_apex_secondchance",
+    "bz_icon_apex_blastshield",
+    "bz_icon_pap2_badge",
 )
 
 
@@ -1688,11 +1734,211 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_xbow_glow_pap2", "model unlit", "glass", "amber_glow", (255, 220, 130), (255, 246, 206)),
     MaterialSpec("mtl_bz_blade_glow_pap1", "model unlit", "glass", "crimson_glow", (242, 66, 112), (255, 164, 190)),
     MaterialSpec("mtl_bz_blade_glow_pap2", "model unlit", "glass", "crimson_glow", (255, 122, 158), (255, 208, 222)),
+    # Wave 4: 21 Linked 64x64 2D HUD Icons (Sheet 11 — Shield / Square / Gold-T2 / Bronze-Circle / Steel-Diamond)
+    MaterialSpec("bz_icon_class_medic", "2d", "<none>", "hud_class_medic", (42, 48, 54), (224, 52, 64), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_class_titan", "2d", "<none>", "hud_class_titan", (42, 48, 54), (176, 186, 196), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_class_sapper", "2d", "<none>", "hud_class_sapper", (42, 48, 54), (255, 148, 42), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_class_daredevil", "2d", "<none>", "hud_class_daredevil", (42, 48, 54), (255, 204, 56), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_class_assassin", "2d", "<none>", "hud_class_assassin", (42, 48, 54), (232, 30, 80), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_class_broker", "2d", "<none>", "hud_class_broker", (42, 48, 54), (222, 182, 74), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_staminup", "2d", "<none>", "hud_perk_staminup", (54, 44, 24), (255, 192, 52), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_mulekick", "2d", "<none>", "hud_perk_mulekick", (28, 56, 36), (92, 224, 118), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_armorpiercing", "2d", "<none>", "hud_perk_armorpiercing", (28, 44, 62), (76, 198, 255), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_jugg_t2", "2d", "<none>", "hud_t2_jugg", (128, 28, 36), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_speed_t2", "2d", "<none>", "hud_t2_speed", (28, 108, 54), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_dtap_t2", "2d", "<none>", "hud_t2_dtap", (152, 86, 20), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_revive_t2", "2d", "<none>", "hud_t2_revive", (24, 108, 148), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_staminup_t2", "2d", "<none>", "hud_t2_staminup", (142, 96, 22), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_mulekick_t2", "2d", "<none>", "hud_t2_mulekick", (34, 114, 56), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_perk_armorpiercing_t2", "2d", "<none>", "hud_t2_armorpiercing", (34, 84, 136), (255, 220, 130), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_apex_dblammo", "2d", "<none>", "hud_apex_dblammo", (148, 108, 52), (248, 222, 152), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_apex_lightheavy", "2d", "<none>", "hud_apex_lightheavy", (148, 108, 52), (248, 222, 152), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_apex_secondchance", "2d", "<none>", "hud_apex_secondchance", (148, 108, 52), (248, 222, 152), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_apex_blastshield", "2d", "<none>", "hud_apex_blastshield", (148, 108, 52), (248, 222, 152), blend_func="Blend", fogable=False),
+    MaterialSpec("bz_icon_pap2_badge", "2d", "<none>", "hud_pap2_diamond", (42, 48, 56), (255, 220, 130), blend_func="Blend", fogable=False),
 )
+
+
+def _render_hud_icon_64(spec: MaterialSpec, size: int = 64) -> bytearray:
+    """Render a crisp 2D HUD icon (default 64x64) with monochrome-distinct silhouette (Sheet 11 / ADR-0007)."""
+    buf = bytearray(size * size * 4)
+    br, bg, bb = spec.base_rgb
+    ar, ag, ab = spec.accent_rgb
+    style = spec.style
+    is_shield = style.startswith("hud_class_")
+    is_perk = style.startswith("hud_perk_")
+    is_t2 = style.startswith("hud_t2_")
+    is_apex = style.startswith("hud_apex_")
+    is_diamond = style == "hud_pap2_diamond"
+
+    def _sample(nx: float, ny: float) -> tuple[int, int, int, int]:
+        # nx, ny in [-1, 1], ny=-1 top, ny=+1 bottom
+        ax, ay = abs(nx), abs(ny)
+        # 1. Silhouette SDF (negative inside, positive outside)
+        if is_shield:
+            # Pointed WWII heraldic shield: flat top y=-0.88, tapered curved lower point to y=+0.92
+            if ny < -0.88 or ny > 0.92:
+                return (0, 0, 0, 0)
+            max_w = 0.80 if ny <= 0.05 else max(0.0, 0.80 * (1.0 - ((ny - 0.05) / 0.87) ** 1.45))
+            if ax > max_w:
+                return (0, 0, 0, 0)
+            edge = min(max_w - ax, ny - (-0.88), 0.92 - ny)
+            if edge < 0.09:
+                return (20, 24, 28, 255)
+            if edge < 0.17:
+                return (142, 150, 160, 255)
+            r, g, b = br, bg, bb
+            # Distinct class center glyphs
+            glyph = False
+            if style == "hud_class_medic":
+                glyph = (ax < 0.16 and -0.48 < ny < 0.36) or (ax < 0.44 and -0.22 < ny < 0.10)
+            elif style == "hud_class_titan":
+                glyph = (ax < 0.46 and abs(ny - (-0.18 + ax * 0.55)) < 0.11) or (ax < 0.40 and abs(ny - (0.14 + ax * 0.55)) < 0.10)
+            elif style == "hud_class_sapper":
+                d = math.hypot(nx, ny - 0.06)
+                glyph = (d < 0.34) or (ax < 0.10 and -0.52 < ny < -0.22) or (abs(ax - 0.24) < 0.07 and -0.44 < ny < -0.20)
+            elif style == "hud_class_daredevil":
+                glyph = (abs(nx + ny * 0.38) < 0.13 and -0.50 < ny < 0.05) or (abs(nx - 0.14 + ny * 0.38) < 0.13 and -0.10 < ny < 0.48)
+            elif style == "hud_class_assassin":
+                glyph = (ax < 0.09 and -0.52 < ny < 0.48) or (ax < 0.36 and abs(ny - 0.10) < 0.07) or (abs(math.hypot(nx, ny + 0.10) - 0.34) < 0.06)
+            elif style == "hud_class_broker":
+                glyph = (ax < 0.42 and abs(ny + 0.28) < 0.08) or (ax < 0.34 and abs(ny + 0.02) < 0.08) or (ax < 0.44 and abs(ny - 0.24) < 0.08)
+            if glyph:
+                return (ar, ag, ab, 255)
+            return (r, g, b, 255)
+
+        if is_perk or is_t2:
+            # Beveled square (0.86 half-width, 0.12 corner chamfer)
+            if ax > 0.88 or ay > 0.88 or (ax + ay) > 1.62:
+                return (0, 0, 0, 0)
+            edge = min(0.88 - ax, 0.88 - ay, (1.62 - (ax + ay)) * 0.707)
+            if is_t2:
+                # Dark-separated bright gold (#ffdc82) Tier-2 bezel!
+                if edge < 0.07:
+                    return (18, 16, 14, 255)
+                if edge < 0.19:
+                    return (255, 220, 130, 255)
+                if edge < 0.25:
+                    return (22, 20, 18, 255)
+            else:
+                if edge < 0.08:
+                    return (18, 20, 24, 255)
+                if edge < 0.16:
+                    return (136, 144, 154, 255)
+
+            # Baked wide-gap bottom-right "II" Roman bars for Tier-2 (0 extra HUD elements!)
+            if is_t2 and nx > 0.18 and ny > 0.16:
+                if nx > 0.22 and ny > 0.20:
+                    # Dark backing pill for high legibility
+                    in_bar1 = (0.32 <= nx <= 0.43) and (0.28 <= ny <= 0.64)
+                    in_bar2 = (0.53 <= nx <= 0.64) and (0.28 <= ny <= 0.64)
+                    in_cap = (0.28 <= nx <= 0.68) and ((0.26 <= ny <= 0.32) or (0.60 <= ny <= 0.66))
+                    if in_bar1 or in_bar2 or in_cap:
+                        return (255, 228, 142, 255)
+                    return (20, 18, 16, 255)
+
+            # Inner perk symbol
+            sym = False
+            sx, sy = (nx + 0.06, ny + 0.06) if is_t2 else (nx, ny)
+            if "staminup" in style:
+                sym = (abs(sy + sx * 0.55) < 0.14 and -0.45 < sx < 0.42) or (sx > 0.05 and abs(sy - (0.38 - sx)) < 0.12)
+            elif "mulekick" in style:
+                sym = (-0.44 < sx < 0.44) and (abs(sy + 0.26) < 0.09 or abs(sy) < 0.09 or abs(sy - 0.26) < 0.09)
+            elif "armorpiercing" in style:
+                sym = (abs(sx) < 0.38 and abs(sy + 0.28 - abs(sx) * 0.9) < 0.11) or (abs(sx) < 0.12 and -0.18 < sy < 0.44)
+            elif "jugg" in style:
+                sym = (abs(sx) < 0.15 and -0.44 < sy < 0.40) or (abs(sx) < 0.42 and -0.15 < sy < 0.15)
+            elif "speed" in style:
+                sym = (abs(sx + 0.16) < 0.14 and -0.42 < sy < 0.42) or (abs(sx - 0.18) < 0.10 and -0.34 < sy < 0.34)
+            elif "dtap" in style:
+                sym = (abs(sx + 0.20) < 0.11 and -0.42 < sy < 0.42) or (abs(sx - 0.20) < 0.11 and -0.42 < sy < 0.42)
+            elif "revive" in style:
+                sym = (abs(sx) < 0.13 and -0.44 < sy < 0.44) or (abs(sx) < 0.44 and -0.13 < sy < 0.13)
+            if sym:
+                return (248, 246, 238, 255) if is_t2 else (ar, ag, ab, 255)
+            return (br, bg, bb, 255)
+
+        if is_apex:
+            # Circular antique-bronze Apex medallion
+            dist = math.hypot(nx, ny)
+            if dist > 0.90:
+                return (0, 0, 0, 0)
+            if dist > 0.80:
+                return (28, 20, 14, 255)
+            if dist > 0.68:
+                return (188, 144, 74, 255)
+            if dist > 0.62:
+                return (46, 32, 18, 255)
+            sym = False
+            if style == "hud_apex_dblammo":
+                sym = (abs(nx + 0.18) < 0.10 and -0.36 < ny < 0.36) or (abs(nx - 0.18) < 0.10 and -0.36 < ny < 0.36) or (abs(ny - 0.26) < 0.08 and ax < 0.34)
+            elif style == "hud_apex_lightheavy":
+                sym = (abs(ny + 0.24 - ax * 0.7) < 0.10 and ax < 0.44) or (abs(ny - 0.18) < 0.10 and ax < 0.38)
+            elif style == "hud_apex_secondchance":
+                sym = (dist < 0.20) or (ax < 0.08 and ay < 0.46) or (ay < 0.08 and ax < 0.46) or (abs(ax - ay) < 0.08 and dist < 0.44)
+            elif style == "hud_apex_blastshield":
+                sym = (abs(dist - 0.36) < 0.10 and ny < 0.20) or (ax < 0.12 and -0.22 < ny < 0.36)
+            if sym:
+                return (ar, ag, ab, 255)
+            return (br, bg, bb, 255)
+
+        if is_diamond:
+            # Brushed-steel Double-PaP "II" diamond (zero violet!)
+            man = ax + ay
+            if man > 0.92:
+                return (0, 0, 0, 0)
+            if man > 0.82:
+                return (20, 24, 28, 255)
+            if man > 0.70:
+                return (146, 154, 164, 255)
+            if man > 0.62:
+                return (ar, ag, ab, 255)
+            # Bold centered Roman "II" in warm gold #ffdc82
+            bar1 = (-0.24 <= nx <= -0.09) and (-0.32 <= ny <= 0.32)
+            bar2 = (0.09 <= nx <= 0.24) and (-0.32 <= ny <= 0.32)
+            caps = (-0.30 <= nx <= 0.30) and ((-0.34 <= ny <= -0.24) or (0.24 <= ny <= 0.34))
+            if bar1 or bar2 or caps:
+                return (ar, ag, ab, 255)
+            return (br, bg, bb, 255)
+
+        return (br, bg, bb, 255)
+
+    for y in range(size):
+        for x in range(size):
+            # 2x2 supersampling for crisp anti-aliased silhouettes
+            sr_t = sg_t = sb_t = sa_t = 0
+            for sy in (0.25, 0.75):
+                for sx in (0.25, 0.75):
+                    nx = ((x + sx) / size) * 2.0 - 1.0
+                    ny = ((y + sy) / size) * 2.0 - 1.0
+                    r, g, b, a = _sample(nx, ny)
+                    sr_t += r * a
+                    sg_t += g * a
+                    sb_t += b * a
+                    sa_t += a
+            off = (y * size + x) * 4
+            if sa_t > 0:
+                buf[off + 0] = clamp255(sr_t / sa_t)
+                buf[off + 1] = clamp255(sg_t / sa_t)
+                buf[off + 2] = clamp255(sb_t / sa_t)
+                buf[off + 3] = clamp255(sa_t / 4.0)
+            else:
+                buf[off + 0] = 0
+                buf[off + 1] = 0
+                buf[off + 2] = 0
+                buf[off + 3] = 0
+    return buf
 
 
 def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DEFAULT_TEX_SIZE) -> dict[str, str]:
     """Generate deterministic 32-bit TGA textures for one material; return relative asset paths."""
+    if spec.material_type == "2d":
+        stem = spec.name.removeprefix("mtl_")
+        c_file = tex_dir / f"{stem}_c.tga"
+        icon_size = min(size, 64)
+        write_tga_rgba(c_file, icon_size, icon_size, _render_hud_icon_64(spec, size=icon_size))
+        return {"colorMap": f"texture_assets\\\\{ASSET_SUBDIR}\\\\{c_file.name}"}
+
     color_buf = bytearray(size * size * 4)
     spec_buf = bytearray(size * size * 4)
     gloss_buf = bytearray(size * size * 4)
@@ -2006,6 +2252,30 @@ def build_gdt_text(
     """Build a valid WaW source_data/*.gdt manifest for converter.exe."""
     blocks: list[str] = ["{"]
     for mat_name, (spec, paths) in material_paths.items():
+        if spec.material_type == "2d":
+            lines = [
+                f'\t"{mat_name}" ( "material.gdf" )',
+                "\t{",
+                '\t\t"alphaTest" "Always*"',
+                f'\t\t"blendFunc" "{spec.blend_func}"',
+                f'\t\t"colorMap" "{paths["colorMap"]}"',
+                '\t\t"colorTint" "1.000000 1.000000 1.000000 1.000000"',
+                '\t\t"cullFace" "None"',
+                '\t\t"depthTest" "Always"',
+                '\t\t"depthWrite" "Off"',
+                '\t\t"filterColor" "mip standard (2x bilinear)*"',
+                '\t\t"materialType" "2d"',
+                '\t\t"nopicmipColor" "1"',
+                '\t\t"polygonOffset" "None*"',
+                f'\t\t"surfaceType" "{spec.surface_type}"',
+                '\t\t"template" "material.template"',
+                '\t\t"tileColor" "no tile"',
+                '\t\t"usage" "<not in editor>"',
+                "\t}",
+            ]
+            blocks.append("\n".join(lines))
+            continue
+
         if spec.material_type == "effect":
             lines = [
                 f'\t"{mat_name}" ( "material.gdf" )',
