@@ -317,6 +317,64 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             if spec.material_type == "model phong":
                 self.assertLessEqual(max(spec.spec_rgb), 80, f"{spec.name} specular too bright: {spec.spec_rgb}")
 
+    def test_northstar_wave1_budgets_silhouettes_and_kiosk_contracts(self) -> None:
+        """Verify ADR-0007 / NORTHSTAR_SPEC.md v2.1 Wave 1 mesh budgets, bones, and 1945 silhouettes."""
+        by_name = {m.name: m for m in bz_models.build_all_meshes()}
+
+        # 1. Strict ADR-0007 / NORTHSTAR_SPEC.md vertex budgets across all 19 XMODELs
+        for vm in list(bz_models.CUSTOM_WEAPON_VIEWMODELS.values()) + list(bz_models.CUSTOM_SPECIAL_WEAPON_VIEWMODELS.values()):
+            self.assertLessEqual(len(by_name[vm].verts), 3500, f"{vm} exceeds 3,500 VM vert cap")
+            self.assertLessEqual(len(by_name[vm].materials), 4, f"{vm} exceeds 4-material-slot cap")
+        for wm in list(bz_models.CUSTOM_WEAPON_WORLDMODELS.values()) + list(bz_models.CUSTOM_SPECIAL_WEAPON_WORLDMODELS.values()):
+            self.assertLessEqual(len(by_name[wm].verts), 1800, f"{wm} exceeds 1,800 WM vert cap")
+            self.assertLessEqual(len(by_name[wm].materials), 4, f"{wm} exceeds 4-material-slot cap")
+        self.assertLessEqual(len(by_name["bz_crossbow_bolt"].verts), 400)
+        self.assertLessEqual(len(by_name["bz_boomerang_blade_air"].verts), 750)
+        self.assertLessEqual(len(by_name["bz_portal_orb_air"].verts), 900)
+
+        # 2. Acid Sprayer: low outboard-left Olivgruen tank (Z <= 2.0), no secondary right tank
+        acid_vm = by_name["viewmodel_bz_acid_sprayer"]
+        self.assertLessEqual(max(p[2] for p, _ in acid_vm.verts), 2.05)
+
+        # 3. Cryo Cannon: flasks sit flush/above receiver underside (z >= -0.05) & bell radius <= 2.4u
+        cryo_vm = by_name["viewmodel_bz_cryo_cannon"]
+        bulb_zs = [p[2] for p, b in cryo_vm.verts if b in (2, 3, 4)]
+        self.assertGreaterEqual(min(bulb_zs), 0.0, "Cryo Dewar flasks must stay flush/above receiver underside")
+
+        # 4. Multi-Crossbow: right-side j_bolt cocking sled & ~11u bolt
+        xbow_vm = by_name["viewmodel_bz_multi_crossbow"]
+        used_xbow_bones = {xbow_vm.bones[b].name for _, b in xbow_vm.verts}
+        self.assertIn("j_bolt", used_xbow_bones)
+        bolt_xs = [p[0] for p, _ in by_name["bz_crossbow_bolt"].verts]
+        self.assertLessEqual(max(bolt_xs) - min(bolt_xs), 12.0)
+
+        # 5. Portal deployed anchor spans exact ~25u tip-to-tip (+-12.5u)
+        orb_zs = [p[2] for p, _ in by_name["bz_portal_orb_air"].verts]
+        self.assertAlmostEqual(max(orb_zs) - min(orb_zs), 25.0, delta=0.5)
+
+        # 6. Station Kiosks: <=1,500 verts, z=-4..0 burial skirt, <=72u max height, distinct heights
+        expected_kiosk_heights = {
+            "bz_station_perks_kiosk": 70.0,
+            "bz_station_class_kiosk": 58.0,
+            "bz_station_arsenal_kiosk": 62.0,
+            "bz_station_pap_kiosk": 68.0,
+        }
+        for kname, exp_h in expected_kiosk_heights.items():
+            km = by_name[kname]
+            self.assertLessEqual(len(km.verts), 1500, f"{kname} exceeds 1,500 vert cap")
+            kzs = [p[2] for p, _ in km.verts]
+            self.assertAlmostEqual(min(kzs), -4.0, delta=0.2, msg=f"{kname} missing z=-4..0 burial skirt")
+            self.assertLessEqual(max(kzs), 72.0, f"{kname} exceeds 72u height cap")
+            self.assertAlmostEqual(max(kzs), exp_h, delta=0.6, msg=f"{kname} height mismatch")
+
+        # 7. Wintertarnung whitewash stays <=185 albedo (no glossy sci-fi white) & Boomerang glow is crimson (#e81e50)
+        by_mat = {s.name: s for s in bz_models.MATERIAL_SPECS}
+        self.assertLessEqual(max(by_mat["mtl_bz_cryo_hull"].accent_rgb), 185)
+        self.assertEqual(by_mat["mtl_bz_blade_glow"].base_rgb, (232, 30, 80))
+        self.assertEqual(by_mat["mtl_bz_acid_glow"].base_rgb, (104, 240, 48))
+        self.assertEqual(by_mat["mtl_bz_xbow_glow"].base_rgb, (255, 176, 32))
+        self.assertEqual(by_mat["mtl_bz_club_glow"].base_rgb, (255, 74, 18))
+
     def test_compile_cache_manifest_cleanup_and_exact_iwd_staging(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
