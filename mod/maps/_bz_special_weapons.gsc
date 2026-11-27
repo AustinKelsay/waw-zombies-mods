@@ -2493,17 +2493,20 @@ bz_special_watch_portal_notify()
 
 bz_special_get_owned_boomerang_weapon( player )
 {
-	if ( !IsDefined( player ) )
+	if ( !IsDefined( player ) || !bz_elements_enabled() )
 	{
 		return "";
 	}
-	if ( player HasWeapon( "bz_blade_boomerang_pap2" ) )
+	if ( GetDvarInt( "bz_pap_enabled" ) == 1 )
 	{
-		return "bz_blade_boomerang_pap2";
-	}
-	if ( player HasWeapon( "bz_blade_boomerang_pap1" ) )
-	{
-		return "bz_blade_boomerang_pap1";
+		if ( player HasWeapon( "bz_blade_boomerang_pap2" ) )
+		{
+			return "bz_blade_boomerang_pap2";
+		}
+		if ( player HasWeapon( "bz_blade_boomerang_pap1" ) )
+		{
+			return "bz_blade_boomerang_pap1";
+		}
 	}
 	if ( player HasWeapon( "bz_blade_boomerang" ) )
 	{

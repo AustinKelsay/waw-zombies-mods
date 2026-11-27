@@ -1091,14 +1091,21 @@ bz_stations_find_owned_element_weapon( player, base_weap )
 	{
 		return "";
 	}
-	base = bz_strip_pap_suffix( base_weap );
-	if ( player HasWeapon( base + "_pap2" ) )
+	if ( !bz_elements_enabled() )
 	{
-		return base + "_pap2";
+		return "";
 	}
-	if ( player HasWeapon( base + "_pap1" ) )
+	base = bz_strip_pap_suffix( base_weap );
+	if ( bz_pap_enabled() )
 	{
-		return base + "_pap1";
+		if ( player HasWeapon( base + "_pap2" ) )
+		{
+			return base + "_pap2";
+		}
+		if ( player HasWeapon( base + "_pap1" ) )
+		{
+			return base + "_pap1";
+		}
 	}
 	if ( player HasWeapon( base ) )
 	{
@@ -1502,14 +1509,15 @@ bz_stations_sync_player_ui( player, feedback )
 	for ( i = 0; i < elem_ids.size; i++ )
 	{
 		eid = elem_ids[i];
-		e_cost = [[ rules.bz_get_element_weapon_price ]]( eid );
-		e_weap = bz_get_element_weapon_name( eid );
-		owned_weap = bz_stations_find_owned_element_weapon( player, e_weap );
 		if ( !elements_on )
 		{
 			bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "DISABLED" );
+			continue;
 		}
-		else if ( owned_weap != "" )
+		e_cost = [[ rules.bz_get_element_weapon_price ]]( eid );
+		e_weap = bz_get_element_weapon_name( eid );
+		owned_weap = bz_stations_find_owned_element_weapon( player, e_weap );
+		if ( owned_weap != "" )
 		{
 			if ( bz_stations_is_infinite_item( owned_weap ) )
 			{

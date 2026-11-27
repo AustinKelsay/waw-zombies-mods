@@ -1410,6 +1410,63 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
         self.assertTrue(all(h.destroyed for h in gsc.hud_elems))
         self.assertTrue(all(h.destroy_count == 1 for h in gsc.hud_elems))
 
+    def test_disabled_feature_gates_never_call_hasweapon_on_unprecached_custom_variants(self) -> None:
+        """WaW 1.7 throws script runtime error if HasWeapon() queries an unprecached custom weapon."""
+        dvars, gsc, player = _setup_pap_env(map_name="nazi_zombie_factory")
+        unprecached_elem = {
+            "bz_acid_sprayer", "bz_acid_sprayer_pap1", "bz_acid_sprayer_pap2",
+            "bz_cryo_cannon", "bz_cryo_cannon_pap1", "bz_cryo_cannon_pap2",
+            "bz_multi_crossbow", "bz_multi_crossbow_pap1", "bz_multi_crossbow_pap2",
+            "bz_blade_boomerang", "bz_blade_boomerang_pap1", "bz_blade_boomerang_pap2",
+        }
+        orig_exec_method = gsc._exec_method
+
+        def strict_exec_method(receiver, method, args, line):
+            if method == "hasweapon" and args:
+                wname = str(args[0]).lower()
+                if dvars.get_int("bz_elements_enabled") != 1 and wname in unprecached_elem:
+                    raise AssertionError(
+                        f"HasWeapon queried unprecached element weapon {wname!r} with bz_elements_enabled=0"
+                    )
+                if dvars.get_int("bz_pap_enabled") != 1 and (
+                    wname.endswith("_pap1") or wname.endswith("_pap2") or wname == "bz_pap_cluster_grenade"
+                ):
+                    raise AssertionError(
+                        f"HasWeapon queried unprecached PaP weapon {wname!r} with bz_pap_enabled=0"
+                    )
+            return orig_exec_method(receiver, method, args, line)
+
+        gsc._exec_method = strict_exec_method
+
+        # Phase 1 mode (bz_elements_enabled=0, bz_pap_enabled=1): station sync + boomerang lookup must be clean
+        gsc.call("maps/_bz_stations.gsc", "bz_stations_sync_player_ui", player, "test")
+        self.assertEqual(
+            gsc.call("maps/_bz_stations.gsc", "bz_stations_find_owned_element_weapon", player, "bz_acid_sprayer"),
+            "",
+        )
+        self.assertEqual(
+            gsc.call("maps/_bz_special_weapons.gsc", "bz_special_get_owned_boomerang_weapon", player),
+            "",
+        )
+        self.assertEqual(player.client_dvars.get("ui_bz_elem_acid_sprayer"), "DISABLED")
+
+        # Elements enabled, PaP disabled (bz_elements_enabled=1, bz_pap_enabled=0): must skip _pap1/_pap2 & cluster
+        dvars.set("bz_elements_enabled", "1")
+        dvars.set("bz_pap_enabled", "0")
+        self.assertEqual(
+            gsc.call("maps/_bz_stations.gsc", "bz_stations_find_owned_element_weapon", player, "bz_acid_sprayer"),
+            "",
+        )
+        self.assertEqual(
+            gsc.call("maps/_bz_special_weapons.gsc", "bz_special_get_owned_boomerang_weapon", player),
+            "",
+        )
+        self.assertEqual(gsc.call("maps/_bz_classes.gsc", "bz_class_get_frag_weapon", player), "stielhandgranate")
+        player.set_field("bz_class", "sapper")
+        player.set_field("bz_sapper_grenade_reserve", 4)
+        tokens = gsc.call("maps/_bz_perks.gsc", "bz_perks_collect_hud_tokens", player)
+        self.assertTrue(any("GREN:" in str(tokens[i]) for i in range(tokens.size)))
+
 
 if __name__ == "__main__":
     unittest.main()

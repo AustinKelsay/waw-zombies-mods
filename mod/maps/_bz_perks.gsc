@@ -2069,7 +2069,7 @@ bz_perks_collect_hud_tokens( player )
 		if ( active_class == "sapper" && IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
 		{
 			frag = "stielhandgranate";
-			if ( player HasWeapon( "bz_pap_cluster_grenade" ) )
+			if ( GetDvarInt( "bz_pap_enabled" ) == 1 && player HasWeapon( "bz_pap_cluster_grenade" ) )
 			{
 				frag = "bz_pap_cluster_grenade";
 			}

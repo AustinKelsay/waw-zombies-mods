@@ -186,7 +186,7 @@ bz_class_get_frag_weapon( player )
 	{
 		return "stielhandgranate";
 	}
-	if ( player HasWeapon( "bz_pap_cluster_grenade" ) )
+	if ( GetDvarInt( "bz_pap_enabled" ) == 1 && player HasWeapon( "bz_pap_cluster_grenade" ) )
 	{
 		return "bz_pap_cluster_grenade";
 	}
