@@ -12,9 +12,11 @@ GitHub Issues in `AustinKelsay/waw-zombies-mods` via the `gh` CLI (native sub-is
 
 Five canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) plus `/wayfinder` labels (`wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task`). See `docs/agents/triage-labels.md`.
 
-### Domain docs
+### Domain docs & Art Direction
 
 Multi-context layout anchored by `GLOSSARY-MAP.md` (`Shared Platform` root `GLOSSARY.md`, `Base Zombies` under `docs/contexts/base-zombies/`, `Zombie Gauntlet` under `docs/contexts/zombie-gauntlet/`, and system-wide ADRs under `docs/adr/`). See `docs/agents/domain.md`.
+
+Canonical visual targets, mesh/material budgets, and WaW 1.7 rendering/HUD contracts live in `docs/art/` (`README.md`, `NORTHSTAR_SPEC.md`, `NORTHSTAR_EXPANSION_SPEC.md`, Sheets `01`–`11`) and are governed by `docs/contexts/base-zombies/docs/adr/0007-northstar-art-direction-and-visual-asset-contracts.md`. Read them before authoring or updating any custom 3D model, texture, PaP finish, trap prop, companion rig, or 2D HUD icon.
 
 ### Coding standards & verification
 

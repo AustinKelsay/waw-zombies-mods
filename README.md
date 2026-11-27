@@ -2,7 +2,7 @@
 
 Unified vanilla Steam 1.7 Call of Duty: World at War Nazi Zombies mod package and automated build/verification tooling for **Zombie Gauntlet** alongside untouched **Classic Mode**.
 
-See [GLOSSARY.md](GLOSSARY.md) for canonical terminology and [docs/adr/](docs/adr/) for architectural decisions.
+See [GLOSSARY.md](GLOSSARY.md) for canonical terminology, [docs/adr/](docs/adr/) for architectural decisions, and [docs/art/](docs/art/) for the Council-locked **North Star Art Direction** (Sheets 01–11 covering all custom 3D weapons, stations, traps, PaP finishes, Phase 3 Companion rig, and 2D HUD icons).
 
 ## Prerequisites (`plebdev-ultra`)
 
