@@ -545,6 +545,131 @@ BZ_SPECIAL_ITEM_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]],
             "fireSoundPlayer": "attack_whoosh",
         },
     ),
+    (
+        "bz_pap_knife",
+        ("zombie_colt", "colt"),
+        {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
+            "displayName": "PaP Combat Knife",
+            "gunModel": bz_models.CUSTOM_SPECIAL_WEAPON_VIEWMODELS["bz_pap_knife"],
+            "worldModel": bz_models.CUSTOM_SPECIAL_WEAPON_WORLDMODELS["bz_pap_knife"],
+            "inventoryType": "item",
+            "weaponType": "bullet",
+            "weaponClass": "rifle",
+            "shotCount": "1",
+            "fireType": "Single Shot",
+            "ammoName": "bz_pap_knife",
+            "clipName": "bz_pap_knife",
+            "clipSize": "1",
+            "maxAmmo": "0",
+            "startAmmo": "0",
+            "dropAmmoMin": "0",
+            "dropAmmoMax": "0",
+            "moveSpeedScale": "1",
+            "fireTime": "0.42",
+            "reloadTime": "0.25",
+            "reloadEmptyTime": "0.25",
+            "cancelAutoHolsterWhenEmpty": "1",
+            "idleAnim": "viewmodel_ray_gun_idle",
+            "fireAnim": "viewmodel_colt45_melee2",
+            "lastShotAnim": "viewmodel_colt45_melee2",
+            "emptyIdleAnim": "viewmodel_ray_gun_idle",
+            "raiseAnim": "viewmodel_colt45_melee1",
+            "firstRaiseAnim": "viewmodel_colt45_melee1",
+            "quickRaiseAnim": "viewmodel_colt45_melee1",
+            "dropAnim": "viewmodel_ray_gun_drop",
+            "quickDropAnim": "viewmodel_ray_gun_drop",
+            "meleeAnim": "viewmodel_colt45_melee1",
+            "meleeChargeAnim": "viewmodel_colt45_melee2",
+            "reloadAnim": "viewmodel_ray_gun_raise",
+            "reloadEmptyAnim": "viewmodel_ray_gun_raise",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "adsUpAnim": "",
+            "adsDownAnim": "",
+            "adsFireAnim": "",
+            "adsLastShotAnim": "",
+            "adsRechamberAnim": "",
+            "fireSound": "attack_whoosh",
+            "fireSoundPlayer": "attack_whoosh",
+        },
+    ),
+    (
+        "bz_pap_bowie",
+        ("zombie_colt", "colt"),
+        {
+            **BZ_ELEMENT_LOC_MULTIPLIERS,
+            "displayName": "PaP Bowie Knife",
+            "gunModel": bz_models.CUSTOM_SPECIAL_WEAPON_VIEWMODELS["bz_pap_bowie"],
+            "worldModel": bz_models.CUSTOM_SPECIAL_WEAPON_WORLDMODELS["bz_pap_bowie"],
+            "inventoryType": "item",
+            "weaponType": "bullet",
+            "weaponClass": "rifle",
+            "shotCount": "1",
+            "fireType": "Single Shot",
+            "ammoName": "bz_pap_bowie",
+            "clipName": "bz_pap_bowie",
+            "clipSize": "1",
+            "maxAmmo": "0",
+            "startAmmo": "0",
+            "dropAmmoMin": "0",
+            "dropAmmoMax": "0",
+            "moveSpeedScale": "1",
+            "fireTime": "0.45",
+            "reloadTime": "0.25",
+            "reloadEmptyTime": "0.25",
+            "cancelAutoHolsterWhenEmpty": "1",
+            "idleAnim": "viewmodel_ray_gun_idle",
+            "fireAnim": "viewmodel_colt45_melee2",
+            "lastShotAnim": "viewmodel_colt45_melee2",
+            "emptyIdleAnim": "viewmodel_ray_gun_idle",
+            "raiseAnim": "viewmodel_colt45_melee1",
+            "firstRaiseAnim": "viewmodel_colt45_melee1",
+            "quickRaiseAnim": "viewmodel_colt45_melee1",
+            "dropAnim": "viewmodel_ray_gun_drop",
+            "quickDropAnim": "viewmodel_ray_gun_drop",
+            "meleeAnim": "viewmodel_colt45_melee1",
+            "meleeChargeAnim": "viewmodel_colt45_melee2",
+            "reloadAnim": "viewmodel_ray_gun_raise",
+            "reloadEmptyAnim": "viewmodel_ray_gun_raise",
+            "damage": "1",
+            "minDamage": "1",
+            "explosionInnerDamage": "0",
+            "explosionOuterDamage": "0",
+            "explosionRadius": "0",
+            "altWeapon": "",
+            "aimDownSight": "0",
+            "adsFire": "0",
+            "adsUpAnim": "",
+            "adsDownAnim": "",
+            "adsFireAnim": "",
+            "adsLastShotAnim": "",
+            "adsRechamberAnim": "",
+            "fireSound": "attack_whoosh",
+            "fireSoundPlayer": "attack_whoosh",
+        },
+    ),
+)
+
+# Offhand Arsenal upgrade weapons (zero added FX — ADR-0007 / NSV-W2).
+BZ_OFFHAND_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
+    (
+        "bz_pap_cluster_grenade",
+        ("stielhandgranate", "fraggrenade"),
+        {
+            "displayName": "PaP Cluster Grenade",
+            "gunModel": bz_models.CUSTOM_OFFHAND_WEAPON_VIEWMODELS["bz_pap_cluster_grenade"],
+            "worldModel": bz_models.CUSTOM_OFFHAND_WEAPON_WORLDMODELS["bz_pap_cluster_grenade"],
+            "projectileModel": bz_models.CUSTOM_OFFHAND_WEAPON_WORLDMODELS["bz_pap_cluster_grenade"],
+            "inventoryType": "offhand",
+        },
+    ),
 )
 
 
@@ -2256,6 +2381,47 @@ def stage_bz_special_item_weapons(
     return staged_items
 
 
+def stage_bz_offhand_weapons(
+    tools_root: Path,
+    stage_dir: Path,
+    allowed_fx_set: set[str] | frozenset[str] | None = None,
+) -> list[str]:
+    """Generate and stage zero-FX offhand Arsenal upgrade weapons (PaP Cluster Grenade) under stage_dir/weapons/sp/."""
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
+
+    out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    staged_offhand: list[str] = []
+    for weap_name, template_candidates, overrides in BZ_OFFHAND_WEAPON_SPECS:
+        template_path: Path | None = None
+        for candidate in template_candidates:
+            path = raw_weapons_dir / candidate
+            if path.is_file():
+                template_path = path
+                break
+        if template_path is None:
+            raise FileNotFoundError(
+                f"No stock weapon template found for {weap_name} in {raw_weapons_dir} "
+                f"(tried: {', '.join(template_candidates)})"
+            )
+        stock_text = template_path.read_text(encoding="latin1")
+        cloned_text = clone_zero_fx_weapon_file(
+            stock_text,
+            overrides=overrides,
+            allowed_fx_set=allowed_fx_set,
+            xanim_case_map=xanim_case_map,
+        )
+        (out_dir / weap_name).write_text(cloned_text, encoding="latin1")
+        staged_offhand.append(f"weapons/sp/{weap_name}")
+    return staged_offhand
+
+
 # Canonical 1x base reserve stock for all 72 playable stock zombie primary weapons across
 # Nacht, Verruckt, Shi No Numa, and Der Riese (ADR-0005). Staged into mod.ff with maxAmmo = 3x
 # so Double Ammo (2x) and Double PaP (1.5x -> 3x) display true native WaW HUD counts while
@@ -3346,6 +3512,7 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
     # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons for mod.csv.
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
     staged_weapons.extend(stage_bz_special_item_weapons(tools_root=tools_root, stage_dir=stage_dir))
+    staged_weapons.extend(stage_bz_offhand_weapons(tools_root=tools_root, stage_dir=stage_dir))
     # Stage 3x maxAmmo stock weapon overrides into stage_dir/weapons/sp/ for waw_gauntlet.iwd ONLY
     # (NOT mod.csv): under fs_game, WaW 1.7 BG_LoadWeaponDef reads weapons/sp/* from .iwd without
     # duplicating stock weapon FxEffectDef assets inside mod.ff (keeping Der Riese strictly at 329/400 FX).

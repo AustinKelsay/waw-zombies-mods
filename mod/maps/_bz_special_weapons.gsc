@@ -545,7 +545,7 @@ bz_special_restore_war_club_viewmodel( prev_weap )
 	if ( self HasWeapon( "bz_war_club" ) )
 	{
 		cur = self GetCurrentWeapon();
-		if ( IsDefined( prev_weap ) && prev_weap != "" && prev_weap != "none" && prev_weap != "bz_war_club" && prev_weap != "bz_portal_grenade" && self HasWeapon( prev_weap ) )
+		if ( IsDefined( prev_weap ) && prev_weap != "" && prev_weap != "none" && prev_weap != "bz_war_club" && prev_weap != "bz_portal_grenade" && prev_weap != "bz_pap_knife" && prev_weap != "bz_pap_bowie" && self HasWeapon( prev_weap ) )
 		{
 			if ( !IsDefined( cur ) || cur == "bz_war_club" )
 			{
@@ -1907,7 +1907,7 @@ bz_special_switch_back_to_primary( player )
 	for ( i = 0; i < primaries.size; i++ )
 	{
 		w = primaries[i];
-		if ( IsDefined( w ) && w != "" && w != "none" && w != "bz_portal_grenade" && w != "bz_war_club" && player HasWeapon( w ) )
+		if ( IsDefined( w ) && w != "" && w != "none" && w != "bz_portal_grenade" && w != "bz_war_club" && w != "bz_pap_knife" && w != "bz_pap_bowie" && player HasWeapon( w ) )
 		{
 			player SwitchToWeapon( w );
 			return;

@@ -563,6 +563,10 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 receiver.set_field("model", _waw_to_str(args[0]) if args else "")
             return UNDEFINED
+        if method == "moveto":
+            if isinstance(receiver, FakeEntity) and args:
+                receiver.set_field("origin", args[0])
+            return UNDEFINED
         if method == "dodamage":
             if isinstance(receiver, FakeEntity) and args:
                 dmg = int(args[0])

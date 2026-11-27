@@ -24,6 +24,7 @@ bz_classes_register()
 	}
 	level.bz_classes_registered = true;
 
+	bz_register_hook( "pre_init", ::bz_classes_pre_init, "classes" );
 	bz_register_hook( "init", ::bz_classes_init, "classes" );
 	bz_register_hook( "player_connect", ::bz_classes_on_player_connect, "classes" );
 	bz_register_hook( "player_spawned", ::bz_classes_on_player_spawned, "classes" );
@@ -158,11 +159,30 @@ bz_class_get_zombies_safe()
 	return zombies;
 }
 
+bz_classes_pre_init()
+{
+	if ( !bz_classes_enabled() )
+	{
+		return;
+	}
+	if ( IsDefined( level.bz_classes_precached ) && level.bz_classes_precached )
+	{
+		return;
+	}
+	level.bz_classes_precached = true;
+	PrecacheModel( "bz_sapper_trap_fire" );
+	PrecacheModel( "bz_sapper_trap_betty" );
+}
+
 bz_class_get_frag_weapon( player )
 {
 	if ( !IsDefined( player ) )
 	{
 		return "stielhandgranate";
+	}
+	if ( player HasWeapon( "bz_pap_cluster_grenade" ) )
+	{
+		return "bz_pap_cluster_grenade";
 	}
 	if ( player HasWeapon( "stielhandgranate" ) )
 	{
@@ -1005,7 +1025,7 @@ bz_medic_is_primary_ammo_weapon( weapon_name )
 	w = bz_normalize_id( weapon_name );
 	if ( w == "" || w == "none" || w == "fraggrenade" || w == "stielhandgranate" ||
 		w == "zombie_knuckles" || w == "knife" || w == "bowie_knife" || w == "syrette" ||
-		w == "bz_blade_boomerang" || w == "bz_portal_grenade" || w == "bz_war_club" ||
+		w == "bz_blade_boomerang" || w == "bz_portal_grenade" || w == "bz_war_club" || w == "bz_pap_knife" || w == "bz_pap_bowie" ||
 		w == "mine_bouncing_betty" || w == "zombie_bowie_flourish" ||
 		w == "molotov" || w == "monkey_bomb" || w == "zombie_cymbal_monkey" ||
 		IsSubStr( w, "perk_bottle" ) )
@@ -1795,6 +1815,45 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	{
 		return undefined;
 	}
+
+	// ADR-0007 / NSV-W2: derive flattened outward pushoff from player->wall vector (18u),
+	// BulletTrace floor snap w/ player-floor fallback BEFORE committing the 10s wall cooldown!
+	spawn_pos = pos;
+	spawn_angles = ( 0, 0, 0 );
+	dir_x = 1.0;
+	dir_y = 0.0;
+	if ( IsDefined( player.origin ) )
+	{
+		dx = player.origin[0] - pos[0];
+		dy = player.origin[1] - pos[1];
+		dist2d = Distance( ( player.origin[0], player.origin[1], 0 ), ( pos[0], pos[1], 0 ) );
+		if ( dist2d > 0.01 )
+		{
+			dir_x = dx / dist2d;
+			dir_y = dy / dist2d;
+		}
+	}
+	push_pos = ( pos[0] + ( dir_x * 18.0 ), pos[1] + ( dir_y * 18.0 ), pos[2] + 12.0 );
+	tr = BulletTrace( push_pos, ( push_pos[0], push_pos[1], push_pos[2] - 128.0 ), false, undefined );
+	hit_floor = IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 && IsDefined( tr["position"] );
+	if ( !hit_floor && IsDefined( player.origin ) )
+	{
+		p_start = ( player.origin[0], player.origin[1], player.origin[2] + 12.0 );
+		tr = BulletTrace( p_start, ( p_start[0], p_start[1], p_start[2] - 128.0 ), false, undefined );
+		hit_floor = IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 && IsDefined( tr["position"] );
+	}
+	if ( hit_floor )
+	{
+		spawn_pos = tr["position"];
+		if ( IsDefined( tr["normal"] ) )
+		{
+			norm = tr["normal"];
+			pitch = 0.0 - ( norm[0] * 45.0 );
+			roll = norm[1] * 45.0;
+			spawn_angles = ( pitch, 0, roll );
+		}
+	}
+
 	level.bz_sapper_wall_cooldowns[wid] = now + cooldown_ms;
 
 	trap_type = player.bz_sapper_trap_next_type;
@@ -1816,19 +1875,22 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 		level.bz_class_traps = [];
 	}
 
-	anchor = Spawn( "script_origin", pos );
+	anchor = Spawn( "script_origin", spawn_pos );
 	level.bz_class_traps[level.bz_class_traps.size] = anchor;
 
-	marker_fx = bz_classes_resolve_stock_fx( "marker" );
-	fx_ent = undefined;
-	if ( IsDefined( marker_fx ) )
+	// Replace old generic green marker FX with custom non-solid 3D Sapper trap prop (0 added FX!)
+	trap_model_name = "bz_sapper_trap_betty";
+	if ( trap_type == "fire" )
 	{
-		fx_ent = SpawnFx( marker_fx, pos );
-		if ( IsDefined( fx_ent ) )
-		{
-			TriggerFx( fx_ent );
-			level.bz_class_traps[level.bz_class_traps.size] = fx_ent;
-		}
+		trap_model_name = "bz_sapper_trap_fire";
+	}
+	model_ent = Spawn( "script_model", spawn_pos );
+	if ( IsDefined( model_ent ) )
+	{
+		model_ent.angles = spawn_angles;
+		model_ent SetModel( trap_model_name );
+		model_ent SetContents( 0 );
+		level.bz_class_traps[level.bz_class_traps.size] = model_ent;
 	}
 
 	r = bz_classes_get_round_safe();
@@ -1836,9 +1898,11 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	trap.owner = player;
 	trap.wall_id = wid;
 	trap.trap_type = trap_type;
-	trap.origin = pos;
+	trap.origin = spawn_pos;
 	trap.anchor = anchor;
-	trap.fx_ent = fx_ent;
+	trap.model_ent = model_ent;
+	trap.model_name = trap_model_name;
+	trap.fx_ent = undefined;
 	trap.active = true;
 	trap.detonated = false;
 
@@ -1859,9 +1923,9 @@ bz_sapper_on_wall_buy( player, wall_id, origin )
 	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "wall", wid );
 	fields[2] = bz_log_kv( "type", trap_type );
-	fields[3] = bz_log_kv( "x", Int( pos[0] ) );
-	fields[4] = bz_log_kv( "y", Int( pos[1] ) );
-	fields[5] = bz_log_kv( "z", Int( pos[2] ) );
+	fields[3] = bz_log_kv( "x", Int( spawn_pos[0] ) );
+	fields[4] = bz_log_kv( "y", Int( spawn_pos[1] ) );
+	fields[5] = bz_log_kv( "z", Int( spawn_pos[2] ) );
 	bz_log_emit( "SAPPER_TRAP_PLANTED", bz_log_join( fields ) );
 
 	if ( trap_type == "fire" )
@@ -1921,6 +1985,13 @@ bz_sapper_cleanup_trap_visuals( trap )
 	if ( !IsDefined( trap ) )
 	{
 		return;
+	}
+	if ( IsDefined( trap.model_ent ) )
+	{
+		m_ent = trap.model_ent;
+		trap.model_ent = undefined;
+		bz_sapper_untrack_trap_anchor( m_ent );
+		m_ent Delete();
 	}
 	if ( IsDefined( trap.fx_ent ) )
 	{
