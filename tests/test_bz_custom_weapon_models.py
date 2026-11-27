@@ -375,6 +375,38 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
         self.assertEqual(by_mat["mtl_bz_xbow_glow"].base_rgb, (255, 176, 32))
         self.assertEqual(by_mat["mtl_bz_club_glow"].base_rgb, (255, 74, 18))
 
+    def test_northstar_wave2_arsenal_upgrades_and_sapper_traps(self) -> None:
+        """Verify ADR-0007 / NORTHSTAR_EXPANSION_SPEC.md Wave 2 budgets, dimensions & +3 weapon wiring."""
+        by_name = {m.name: m for m in bz_models.build_all_meshes()}
+
+        # 1. Exact Wave 2 vertex/face/material budgets (Sheet 09 — 9 new XMODELs, 0 FX)
+        self.assertLessEqual(len(by_name["viewmodel_bz_pap_cluster"].verts), 1650)
+        self.assertLessEqual(len(by_name["world_bz_pap_cluster"].verts), 950)
+        self.assertLessEqual(len(by_name["bz_pap_cluster_sub"].verts), 340)
+        self.assertLessEqual(len(by_name["viewmodel_bz_pap_knife"].verts), 850)
+        self.assertLessEqual(len(by_name["world_bz_pap_knife"].verts), 500)
+        self.assertLessEqual(len(by_name["viewmodel_bz_pap_bowie"].verts), 1100)
+        self.assertLessEqual(len(by_name["world_bz_pap_bowie"].verts), 620)
+        self.assertLessEqual(len(by_name["bz_sapper_trap_fire"].verts), 650)
+        self.assertLessEqual(len(by_name["bz_sapper_trap_betty"].verts), 600)
+        self.assertEqual(len(by_name["bz_sapper_trap_fire"].materials), 2)
+        self.assertEqual(len(by_name["bz_sapper_trap_betty"].materials), 2)
+
+        # 2. Reconciled Sapper Trap dimensions & grounded z=-1..0 base skirts
+        fire_zs = [p[2] for p, _ in by_name["bz_sapper_trap_fire"].verts]
+        betty_zs = [p[2] for p, _ in by_name["bz_sapper_trap_betty"].verts]
+        self.assertAlmostEqual(min(fire_zs), -1.0, delta=0.1)
+        self.assertAlmostEqual(max(fire_zs), 6.2, delta=0.3)
+        self.assertAlmostEqual(min(betty_zs), -1.0, delta=0.1)
+        self.assertAlmostEqual(max(betty_zs), 13.8, delta=0.2)
+
+        # 3. Offhand PaP Cluster weapon spec & melee-swap PaP Knife/Bowie item specs
+        offhand_specs = {name: ov for name, _c, ov in build_mod.BZ_OFFHAND_WEAPON_SPECS}
+        self.assertIn("bz_pap_cluster_grenade", offhand_specs)
+        self.assertEqual(offhand_specs["bz_pap_cluster_grenade"]["gunModel"], "viewmodel_bz_pap_cluster")
+        self.assertEqual(offhand_specs["bz_pap_cluster_grenade"]["worldModel"], "world_bz_pap_cluster")
+        self.assertEqual(offhand_specs["bz_pap_cluster_grenade"]["inventoryType"], "offhand")
+
     def test_compile_cache_manifest_cleanup_and_exact_iwd_staging(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

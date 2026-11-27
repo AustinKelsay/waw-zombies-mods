@@ -44,17 +44,35 @@ CUSTOM_PROJECTILE_XMODELS: tuple[str, ...] = (
     "bz_crossbow_bolt",
     "bz_boomerang_blade_air",
     "bz_portal_orb_air",
+    "bz_pap_cluster_sub",
 )
 
 CUSTOM_SPECIAL_WEAPON_VIEWMODELS: dict[str, str] = {
     "bz_portal_grenade": "viewmodel_bz_portal_grenade",
     "bz_war_club": "viewmodel_bz_war_club",
+    "bz_pap_knife": "viewmodel_bz_pap_knife",
+    "bz_pap_bowie": "viewmodel_bz_pap_bowie",
 }
 
 CUSTOM_SPECIAL_WEAPON_WORLDMODELS: dict[str, str] = {
     "bz_portal_grenade": "world_bz_portal_grenade",
     "bz_war_club": "world_bz_war_club",
+    "bz_pap_knife": "world_bz_pap_knife",
+    "bz_pap_bowie": "world_bz_pap_bowie",
 }
+
+CUSTOM_OFFHAND_WEAPON_VIEWMODELS: dict[str, str] = {
+    "bz_pap_cluster_grenade": "viewmodel_bz_pap_cluster",
+}
+
+CUSTOM_OFFHAND_WEAPON_WORLDMODELS: dict[str, str] = {
+    "bz_pap_cluster_grenade": "world_bz_pap_cluster",
+}
+
+CUSTOM_TRAP_XMODELS: tuple[str, ...] = (
+    "bz_sapper_trap_fire",
+    "bz_sapper_trap_betty",
+)
 
 CUSTOM_STATION_XMODELS: tuple[str, ...] = (
     "bz_station_perks_kiosk",
@@ -83,6 +101,16 @@ ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "bz_station_class_kiosk",
     "bz_station_arsenal_kiosk",
     "bz_station_pap_kiosk",
+    # Wave 2 (NSV-W2, Sheet 09 — 9 XMODELs, +3 weapons, 0 FX)
+    "viewmodel_bz_pap_cluster",
+    "world_bz_pap_cluster",
+    "bz_pap_cluster_sub",
+    "viewmodel_bz_pap_knife",
+    "world_bz_pap_knife",
+    "viewmodel_bz_pap_bowie",
+    "world_bz_pap_bowie",
+    "bz_sapper_trap_fire",
+    "bz_sapper_trap_betty",
 )
 
 ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
@@ -116,6 +144,17 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_kiosk_class_glow",
     "mtl_bz_kiosk_arsenal_glow",
     "mtl_bz_kiosk_pap_glow",
+    # Wave 2 (NSV-W2, Sheet 09)
+    "mtl_bz_pap_cluster_steel",
+    "mtl_bz_pap_cluster_wood",
+    "mtl_bz_pap_cluster_glow",
+    "mtl_bz_pap_melee_steel",
+    "mtl_bz_pap_knife_glow",
+    "mtl_bz_pap_bowie_glow",
+    "mtl_bz_trap_fire_body",
+    "mtl_bz_trap_fire_glow",
+    "mtl_bz_trap_betty_body",
+    "mtl_bz_trap_betty_glow",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -1337,6 +1376,139 @@ def build_station_kiosk(name: str, kind: str) -> MeshBuilder:
 
 
 # ---------------------------------------------------------------------------
+# 8. WAVE 2: ARSENAL UPGRADES & SAPPER DEPLOYABLE TRAPS (Sheet 09 — 9 XMODELs)
+# ---------------------------------------------------------------------------
+
+
+def build_pap_cluster_grenade(name: str, is_world: bool = False) -> MeshBuilder:
+    """1945 smooth-cylinder M24 Geballte Ladung (14.5u L x 5.6u dia; 0 US pineapple grooves; VM <=1,650v, WM <=950v)."""
+    bones = world_weapon_bones((4.0, 0.0, 2.0)) if is_world else BONES_COLT45
+    m = MeshBuilder(name, bones, model_type="animated")
+    b_gun = 0
+    steel = "mtl_bz_pap_cluster_steel"
+    wood = "mtl_bz_pap_cluster_wood"
+    brass = "mtl_bz_xbow_brass"
+    glow = "mtl_bz_pap_cluster_glow"
+
+    s = 1.0 if not is_world else 1.15
+    sides = 6 if is_world else 8
+
+    # Turned oiled walnut M24 stick handle + screwed bottom steel fuse cap (14.5u overall length!)
+    m.add_tapered_prism(steel, (0.0, 0.0, -5.8 * s), (0.0, 0.0, -4.9 * s), 0.56 * s, 0.58 * s, sides=sides, bone_idx=b_gun)
+    m.add_tapered_prism(wood, (0.0, 0.0, -4.9 * s), (0.0, 0.0, 3.6 * s), 0.54 * s, 0.48 * s, sides=sides, bone_idx=b_gun)
+    m.add_tapered_prism(brass, (0.0, 0.0, 3.2 * s), (0.0, 0.0, 4.0 * s), 0.62 * s, 0.68 * s, sides=sides, bone_idx=b_gun)
+
+    # Central smooth cylindrical M24 head + #ffc448 PaP arming band
+    m.add_tapered_prism(steel, (0.0, 0.0, 3.8 * s), (0.0, 0.0, 8.7 * s), 1.28 * s, 1.28 * s, sides=sides, bone_idx=b_gun)
+    m.add_tapered_prism(glow, (0.0, 0.0, 5.9 * s), (0.0, 0.0, 6.5 * s), 1.32 * s, 1.32 * s, sides=sides, bone_idx=b_gun, cap_start=False, cap_end=False)
+
+    # 4 strapped smooth cylindrical submunition canisters ringing the M24 head (total ~5.6u dia!) + copper wire clamps
+    for k in range(4):
+        ang = math.radians(k * 90.0 + 45.0)
+        cy = math.cos(ang) * 1.92 * s
+        cz_x = math.sin(ang) * 1.92 * s
+        m.add_tapered_prism(steel, (cz_x, cy, 4.1 * s), (cz_x, cy, 8.3 * s), 0.88 * s, 0.88 * s, sides=sides, bone_idx=b_gun)
+        m.add_tapered_prism(glow, (cz_x, cy, 5.95 * s), (cz_x, cy, 6.45 * s), 0.91 * s, 0.91 * s, sides=sides, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(brass, (0.0, 0.0, 5.0 * s), (0.0, 0.0, 5.45 * s), 2.80 * s, 2.80 * s, sides=8, bone_idx=b_gun, cap_start=False, cap_end=False)
+    m.add_tapered_prism(brass, (0.0, 0.0, 7.15 * s), (0.0, 0.0, 7.55 * s), 2.80 * s, 2.80 * s, sides=8, bone_idx=b_gun, cap_start=False, cap_end=False)
+    return m
+
+
+def build_pap_cluster_submunition() -> MeshBuilder:
+    """Detached 2.0u dia x 4.5u H smooth cylindrical M24 submunition (<=340 verts, 0 FX)."""
+    m = MeshBuilder("bz_pap_cluster_sub", BONES_RIGID, model_type="rigid")
+    steel = "mtl_bz_pap_cluster_steel"
+    glow = "mtl_bz_pap_cluster_glow"
+    m.add_tapered_prism(steel, (0.0, 0.0, -2.25), (0.0, 0.0, +2.25), 1.0, 1.0, sides=8, bone_idx=0)
+    m.add_tapered_prism(glow, (0.0, 0.0, -0.35), (0.0, 0.0, +0.35), 1.04, 1.04, sides=8, bone_idx=0, cap_start=False, cap_end=False)
+    m.add_tapered_prism(steel, (0.0, 0.0, +2.20), (0.0, 0.0, +2.55), 0.42, 0.36, sides=6, bone_idx=0)
+    return m
+
+
+def build_pap_knife(name: str, is_world: bool = False) -> MeshBuilder:
+    """PaP Combat Knife: walnut handle, cold matte steel edge, recessed #ff6a1a fuller on BOTH blade faces (VM <=850v, WM <=500v)."""
+    bones = world_weapon_bones((6.0, 0.0, 1.2)) if is_world else BONES_COLT45
+    m = MeshBuilder(name, bones, model_type="animated")
+    b_gun = 0
+    steel = "mtl_bz_pap_melee_steel"
+    wood = "mtl_bz_pap_cluster_wood"
+    glow = "mtl_bz_pap_knife_glow"
+    s = 1.35 if is_world else 1.0
+    sides = 6 if is_world else 8
+
+    m.add_tapered_prism(steel, (-0.4 * s, 0.0, -2.8 * s), (-0.2 * s, 0.0, -2.2 * s), 0.42 * s, 0.48 * s, sides=sides, bone_idx=b_gun)
+    m.add_tapered_prism(wood, (-0.2 * s, 0.0, -2.2 * s), (0.3 * s, 0.0, 1.2 * s), 0.44 * s, 0.46 * s, sides=sides, bone_idx=b_gun)
+    m.add_box(steel, (0.45 * s, 0.0, 1.35 * s), (1.75 * s, 0.62 * s, 0.34 * s), bone_idx=b_gun)
+    m.add_box(steel, (1.55 * s, 0.0, 4.4 * s), (1.10 * s, 0.20 * s, 5.8 * s), bone_idx=b_gun, rot_xyz=(0.0, 14.0, 0.0))
+    m.add_tapered_prism(steel, (2.25 * s, 0.0, 7.1 * s), (2.95 * s, 0.0, 9.6 * s), 0.56 * s, 0.04 * s, sides=4, bone_idx=b_gun, scale_y=0.22)
+    # Recessed #ff6a1a thermal fuller slot visible on BOTH +Y and -Y blade faces (cold steel edge!)
+    for side in (-1.0, +1.0):
+        m.add_box(glow, (1.42 * s, side * 0.11 * s, 4.45 * s), (0.28 * s, 0.05 * s, 4.1 * s), bone_idx=b_gun, rot_xyz=(0.0, 14.0, 0.0))
+    return m
+
+
+def build_pap_bowie(name: str, is_world: bool = False) -> MeshBuilder:
+    """PaP Bowie Knife: clipped-point heavy blade, stacked leather grip, 3 oblong #ff4a12 coil windows (VM <=1,100v, WM <=620v)."""
+    bones = world_weapon_bones((8.0, 0.0, 1.5)) if is_world else BONES_COLT45
+    m = MeshBuilder(name, bones, model_type="animated")
+    b_gun = 0
+    steel = "mtl_bz_pap_melee_steel"
+    leather = "mtl_bz_blade_leather"
+    glow = "mtl_bz_pap_bowie_glow"
+    s = 1.40 if is_world else 1.0
+    sides = 6 if is_world else 8
+
+    m.add_tapered_prism(steel, (-0.5 * s, 0.0, -3.1 * s), (-0.2 * s, 0.0, -2.4 * s), 0.48 * s, 0.56 * s, sides=sides, bone_idx=b_gun)
+    m.add_tapered_prism(leather, (-0.2 * s, 0.0, -2.4 * s), (0.3 * s, 0.0, 1.3 * s), 0.48 * s, 0.52 * s, sides=sides, bone_idx=b_gun)
+    m.add_box(steel, (0.45 * s, 0.0, 1.45 * s), (2.45 * s, 0.72 * s, 0.38 * s), bone_idx=b_gun)
+    m.add_box(steel, (1.95 * s, 0.0, 5.2 * s), (1.72 * s, 0.26 * s, 7.2 * s), bone_idx=b_gun, rot_xyz=(0.0, 16.0, 0.0))
+    m.add_tapered_prism(steel, (2.95 * s, 0.0, 8.6 * s), (4.15 * s, 0.0, 11.8 * s), 0.86 * s, 0.05 * s, sides=4, bone_idx=b_gun, scale_y=0.22)
+    # 3 oblong recessed #ff4a12 copper coil windows along upper spine on BOTH faces!
+    for w_idx, wz in enumerate((3.1, 4.9, 6.7)):
+        wx = 1.08 + w_idx * 0.52
+        for side in (-1.0, +1.0):
+            m.add_box(glow, (wx * s, side * 0.14 * s, wz * s), (0.34 * s, 0.06 * s, 1.35 * s), bone_idx=b_gun, rot_xyz=(0.0, 16.0, 0.0))
+    return m
+
+
+def build_sapper_trap_fire() -> MeshBuilder:
+    """Sapper BRANDSATZ Fire Trap (11u dia x 6u H, flat z=-1..0 base, 2 material slots, <=650 verts)."""
+    m = MeshBuilder("bz_sapper_trap_fire", BONES_RIGID, model_type="rigid")
+    body = "mtl_bz_trap_fire_body"
+    glow = "mtl_bz_trap_fire_glow"
+    m.add_tapered_prism(body, (0.0, 0.0, -1.0), (0.0, 0.0, 0.6), 6.0, 5.8, sides=10, bone_idx=0)
+    m.add_tapered_prism(body, (0.0, 0.0, 0.5), (0.0, 0.0, 5.6), 5.4, 5.4, sides=10, bone_idx=0)
+    m.add_tapered_prism(body, (0.0, 0.0, 5.4), (0.0, 0.0, 6.0), 5.6, 5.3, sides=10, bone_idx=0)
+    m.add_tapered_prism(glow, (0.0, 0.0, 5.85), (0.0, 0.0, 6.12), 4.3, 4.3, sides=10, bone_idx=0, cap_start=False)
+    m.add_box(body, (0.0, 0.0, 6.18), (8.6, 0.62, 0.24), bone_idx=0, rot_xyz=(0.0, 0.0, 45.0))
+    m.add_box(body, (0.0, 0.0, 6.18), (8.6, 0.62, 0.24), bone_idx=0, rot_xyz=(0.0, 0.0, -45.0))
+    return m
+
+
+def build_sapper_trap_betty() -> MeshBuilder:
+    """Sapper S-Mine 35 Blast Mine (5.2u body / 6.6u flange x 13.8u overall H w/ 3 prongs, 2 slots, <=600 verts)."""
+    m = MeshBuilder("bz_sapper_trap_betty", BONES_RIGID, model_type="rigid")
+    body = "mtl_bz_trap_betty_body"
+    glow = "mtl_bz_trap_betty_glow"
+    m.add_tapered_prism(body, (0.0, 0.0, -1.0), (0.0, 0.0, 0.6), 3.3, 3.2, sides=10, bone_idx=0)
+    m.add_tapered_prism(body, (0.0, 0.0, 0.5), (0.0, 0.0, 9.2), 2.6, 2.6, sides=10, bone_idx=0)
+    m.add_tapered_prism(glow, (0.0, 0.0, 9.1), (0.0, 0.0, 10.3), 2.85, 2.75, sides=10, bone_idx=0)
+    m.add_tapered_prism(body, (0.0, 0.0, 10.2), (0.0, 0.0, 11.0), 0.72, 0.56, sides=6, bone_idx=0)
+    for pdeg in (0.0, 120.0, 240.0):
+        rad = math.radians(pdeg)
+        m.add_tapered_prism(
+            body,
+            (math.cos(rad) * 0.25, math.sin(rad) * 0.25, 10.8),
+            (math.cos(rad) * 1.45, math.sin(rad) * 1.45, 13.8),
+            0.14,
+            0.05,
+            sides=4,
+            bone_idx=0,
+        )
+    return m
+
+
+# ---------------------------------------------------------------------------
 # Procedural 32-bit Uncompressed TGA Texture Generator (Diffuse, Normal, Spec)
 # ---------------------------------------------------------------------------
 
@@ -1439,6 +1611,17 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_kiosk_class_glow", "model unlit", "glass", "kiosk_panel", (24, 108, 226), (124, 202, 255)),
     MaterialSpec("mtl_bz_kiosk_arsenal_glow", "model unlit", "glass", "kiosk_panel", (222, 118, 22), (255, 204, 98)),
     MaterialSpec("mtl_bz_kiosk_pap_glow", "model unlit", "glass", "kiosk_panel", (142, 34, 218), (228, 134, 255)),
+    # Wave 2: Arsenal Upgrades & Sapper Traps (Sheet 09 — 100% opaque WaW 1.7)
+    MaterialSpec("mtl_bz_pap_cluster_steel", "model phong", "metal", "panel_metal", (54, 60, 66), (80, 88, 96), (48, 52, 56), 165),
+    MaterialSpec("mtl_bz_pap_cluster_wood", "model phong", "wood", "wood_grain", (88, 53, 32), (52, 28, 14), (20, 16, 12), 78),
+    MaterialSpec("mtl_bz_pap_cluster_glow", "model unlit", "glass", "amber_glow", (255, 196, 72), (255, 232, 152)),
+    MaterialSpec("mtl_bz_pap_melee_steel", "model phong", "metal", "brushed_metal", (42, 46, 51), (78, 84, 92), (56, 60, 64), 195),
+    MaterialSpec("mtl_bz_pap_knife_glow", "model unlit", "glass", "amber_glow", (255, 106, 26), (255, 196, 110)),
+    MaterialSpec("mtl_bz_pap_bowie_glow", "model unlit", "glass", "amber_glow", (255, 74, 18), (255, 178, 92)),
+    MaterialSpec("mtl_bz_trap_fire_body", "model phong", "metal", "panel_metal", (92, 53, 40), (54, 60, 66), (46, 48, 50), 150),
+    MaterialSpec("mtl_bz_trap_fire_glow", "model unlit", "glass", "amber_glow", (255, 120, 24), (255, 204, 102)),
+    MaterialSpec("mtl_bz_trap_betty_body", "model phong", "metal", "olivgruen_enamel", (66, 75, 58), (94, 106, 80), (40, 44, 36), 140),
+    MaterialSpec("mtl_bz_trap_betty_glow", "model unlit", "glass", "crimson_glow", (232, 30, 80), (255, 138, 168)),
 )
 
 
@@ -1831,6 +2014,16 @@ def build_all_meshes() -> list[MeshBuilder]:
         build_station_kiosk("bz_station_class_kiosk", "class"),
         build_station_kiosk("bz_station_arsenal_kiosk", "arsenal"),
         build_station_kiosk("bz_station_pap_kiosk", "pap"),
+        # Wave 2 (NSV-W2, Sheet 09 — 9 XMODELs)
+        build_pap_cluster_grenade("viewmodel_bz_pap_cluster", is_world=False),
+        build_pap_cluster_grenade("world_bz_pap_cluster", is_world=True),
+        build_pap_cluster_submunition(),
+        build_pap_knife("viewmodel_bz_pap_knife", is_world=False),
+        build_pap_knife("world_bz_pap_knife", is_world=True),
+        build_pap_bowie("viewmodel_bz_pap_bowie", is_world=False),
+        build_pap_bowie("world_bz_pap_bowie", is_world=True),
+        build_sapper_trap_fire(),
+        build_sapper_trap_betty(),
     ]
 
 
