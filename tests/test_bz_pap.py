@@ -1192,19 +1192,21 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
         player.set_field("score", 25000)
         player.give_weapon("bz_acid_sprayer", make_current=True, stock=40)
 
-        # Case C: Un-upgraded bz_* weapon -> scripted Tier 1 PaP (5000 pts)
+        # Case C: Un-upgraded bz_* weapon -> scripted Tier 1 PaP (5000 pts, swaps to bz_acid_sprayer_pap1)
         self.assertTrue(
             gsc.call(
                 BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "bz_acid_sprayer", machine, rollers
             )
         )
         self.assertEqual(player.get_field("score"), 20000)
-        self.assertTrue(gsc.call(BZ_PAP_MOD, "bz_pap_is_weapon_papped", player, "bz_acid_sprayer"))
-        self.assertEqual(player.weapon_stock["bz_acid_sprayer"], 120)
+        self.assertIn("bz_acid_sprayer_pap1", player.weapons)
+        self.assertTrue(gsc.call(BZ_PAP_MOD, "bz_pap_is_weapon_papped", player, "bz_acid_sprayer_pap1"))
+        self.assertEqual(player.weapon_stock["bz_acid_sprayer_pap1"], 120)
         self.assertTrue(
             any(
                 e.startswith("BZ_EVENT|PAP_SINGLE_UPGRADE|")
                 and "weapon=bz_acid_sprayer" in e
+                and "upgraded=bz_acid_sprayer_pap1" in e
                 and "mode=scripted" in e
                 and "console=native" in e
                 for e in gsc.emitted_events
@@ -1212,16 +1214,17 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
             f"Missing console=native PAP_SINGLE_UPGRADE event: {gsc.emitted_events}",
         )
 
-        # Case B follow-up after debounce: scripted Tier 1 bz_acid_sprayer -> Double PaP (5000 pts)
+        # Case B follow-up after debounce: Tier 1 bz_acid_sprayer_pap1 -> Double PaP (5000 pts, swaps to bz_acid_sprayer_pap2)
         gsc.sim_time_ms += 900
         self.assertTrue(
             gsc.call(
-                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "bz_acid_sprayer", machine, rollers
+                BZ_PAP_MOD, "bz_pap_try_native_console_upgrade", trig, player, "bz_acid_sprayer_pap1", machine, rollers
             )
         )
         self.assertEqual(player.get_field("score"), 15000)
-        self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, "bz_acid_sprayer"))
-        self.assertEqual(player.weapon_stock["bz_acid_sprayer"], 180)  # 120 * 1.5
+        self.assertIn("bz_acid_sprayer_pap2", player.weapons)
+        self.assertTrue(gsc.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, "bz_acid_sprayer_pap2"))
+        self.assertEqual(player.weapon_stock["bz_acid_sprayer_pap2"], 180)  # 120 * 1.5
 
         zombie = PapFakeEntity("ZAcid", ent_num=30, is_player=False)
         zombie.set_field("health", 5000)

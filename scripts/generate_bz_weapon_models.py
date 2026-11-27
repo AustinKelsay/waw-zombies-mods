@@ -40,6 +40,29 @@ CUSTOM_WEAPON_WORLDMODELS: dict[str, str] = {
     "bz_blade_boomerang": "world_bz_blade_boomerang",
 }
 
+# Wave 3 (NSV-W3, Sheet 10 — +8 PaP variant weapons / +16 XMODELs, strictly 4 PaP-eligible primaries)
+CUSTOM_PAP_WEAPON_VIEWMODELS: dict[str, str] = {
+    "bz_acid_sprayer_pap1": "viewmodel_bz_acid_sprayer_pap1",
+    "bz_acid_sprayer_pap2": "viewmodel_bz_acid_sprayer_pap2",
+    "bz_cryo_cannon_pap1": "viewmodel_bz_cryo_cannon_pap1",
+    "bz_cryo_cannon_pap2": "viewmodel_bz_cryo_cannon_pap2",
+    "bz_multi_crossbow_pap1": "viewmodel_bz_multi_crossbow_pap1",
+    "bz_multi_crossbow_pap2": "viewmodel_bz_multi_crossbow_pap2",
+    "bz_blade_boomerang_pap1": "viewmodel_bz_blade_boomerang_pap1",
+    "bz_blade_boomerang_pap2": "viewmodel_bz_blade_boomerang_pap2",
+}
+
+CUSTOM_PAP_WEAPON_WORLDMODELS: dict[str, str] = {
+    "bz_acid_sprayer_pap1": "world_bz_acid_sprayer_pap1",
+    "bz_acid_sprayer_pap2": "world_bz_acid_sprayer_pap2",
+    "bz_cryo_cannon_pap1": "world_bz_cryo_cannon_pap1",
+    "bz_cryo_cannon_pap2": "world_bz_cryo_cannon_pap2",
+    "bz_multi_crossbow_pap1": "world_bz_multi_crossbow_pap1",
+    "bz_multi_crossbow_pap2": "world_bz_multi_crossbow_pap2",
+    "bz_blade_boomerang_pap1": "world_bz_blade_boomerang_pap1",
+    "bz_blade_boomerang_pap2": "world_bz_blade_boomerang_pap2",
+}
+
 CUSTOM_PROJECTILE_XMODELS: tuple[str, ...] = (
     "bz_crossbow_bolt",
     "bz_boomerang_blade_air",
@@ -111,6 +134,23 @@ ALL_CUSTOM_XMODELS: tuple[str, ...] = (
     "world_bz_pap_bowie",
     "bz_sapper_trap_fire",
     "bz_sapper_trap_betty",
+    # Wave 3 (NSV-W3, Sheet 10 — 16 XMODELs, +8 weapons, 0 FX)
+    "viewmodel_bz_acid_sprayer_pap1",
+    "world_bz_acid_sprayer_pap1",
+    "viewmodel_bz_acid_sprayer_pap2",
+    "world_bz_acid_sprayer_pap2",
+    "viewmodel_bz_cryo_cannon_pap1",
+    "world_bz_cryo_cannon_pap1",
+    "viewmodel_bz_cryo_cannon_pap2",
+    "world_bz_cryo_cannon_pap2",
+    "viewmodel_bz_multi_crossbow_pap1",
+    "world_bz_multi_crossbow_pap1",
+    "viewmodel_bz_multi_crossbow_pap2",
+    "world_bz_multi_crossbow_pap2",
+    "viewmodel_bz_blade_boomerang_pap1",
+    "world_bz_blade_boomerang_pap1",
+    "viewmodel_bz_blade_boomerang_pap2",
+    "world_bz_blade_boomerang_pap2",
 )
 
 ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
@@ -155,6 +195,19 @@ ALL_CUSTOM_MATERIALS: tuple[str, ...] = (
     "mtl_bz_trap_fire_glow",
     "mtl_bz_trap_betty_body",
     "mtl_bz_trap_betty_glow",
+    # Wave 3 (NSV-W3, Sheet 10 — Stage 1 & Stage 2 PaP weapon finishes, zero violet bleed)
+    "mtl_bz_pap1_steel",
+    "mtl_bz_pap1_brass",
+    "mtl_bz_pap2_steel",
+    "mtl_bz_pap2_trim",
+    "mtl_bz_acid_glow_pap1",
+    "mtl_bz_acid_glow_pap2",
+    "mtl_bz_cryo_glow_pap1",
+    "mtl_bz_cryo_glow_pap2",
+    "mtl_bz_xbow_glow_pap1",
+    "mtl_bz_xbow_glow_pap2",
+    "mtl_bz_blade_glow_pap1",
+    "mtl_bz_blade_glow_pap2",
 )
 
 EFFECT_MATERIALS: tuple[str, ...] = (
@@ -1622,6 +1675,19 @@ MATERIAL_SPECS: tuple[MaterialSpec, ...] = (
     MaterialSpec("mtl_bz_trap_fire_glow", "model unlit", "glass", "amber_glow", (255, 120, 24), (255, 204, 102)),
     MaterialSpec("mtl_bz_trap_betty_body", "model phong", "metal", "olivgruen_enamel", (66, 75, 58), (94, 106, 80), (40, 44, 36), 140),
     MaterialSpec("mtl_bz_trap_betty_glow", "model unlit", "glass", "crimson_glow", (232, 30, 80), (255, 138, 168)),
+    # Wave 3: Custom Primary Pack-a-Punch Stage 1 & Stage 2 Finishes (Sheet 10 — 0 violet bleed, +/-8 deg hue lock)
+    MaterialSpec("mtl_bz_pap1_steel", "model phong", "metal", "pap1_etched", (37, 42, 50), (155, 123, 60), (54, 56, 58), 185),
+    MaterialSpec("mtl_bz_pap1_brass", "model phong", "metal", "brushed_metal", (155, 123, 60), (108, 82, 36), (64, 52, 26), 205),
+    MaterialSpec("mtl_bz_pap2_steel", "model phong", "metal", "pap2_crystalline", (25, 29, 34), (138, 146, 156), (62, 66, 70), 205),
+    MaterialSpec("mtl_bz_pap2_trim", "model phong", "metal", "pap2_crystalline", (138, 146, 156), (82, 90, 98), (66, 70, 72), 215),
+    MaterialSpec("mtl_bz_acid_glow_pap1", "model unlit", "glass", "acid_glow", (114, 245, 61), (198, 255, 152)),
+    MaterialSpec("mtl_bz_acid_glow_pap2", "model unlit", "glass", "acid_glow", (152, 255, 110), (226, 255, 196)),
+    MaterialSpec("mtl_bz_cryo_glow_pap1", "model unlit", "glass", "cryo_glow", (56, 196, 255), (186, 244, 255)),
+    MaterialSpec("mtl_bz_cryo_glow_pap2", "model unlit", "glass", "cryo_glow", (138, 226, 255), (228, 250, 255)),
+    MaterialSpec("mtl_bz_xbow_glow_pap1", "model unlit", "glass", "amber_glow", (255, 196, 72), (255, 234, 160)),
+    MaterialSpec("mtl_bz_xbow_glow_pap2", "model unlit", "glass", "amber_glow", (255, 220, 130), (255, 246, 206)),
+    MaterialSpec("mtl_bz_blade_glow_pap1", "model unlit", "glass", "crimson_glow", (242, 66, 112), (255, 164, 190)),
+    MaterialSpec("mtl_bz_blade_glow_pap2", "model unlit", "glass", "crimson_glow", (255, 122, 158), (255, 208, 222)),
 )
 
 
@@ -1689,6 +1755,45 @@ def generate_material_textures(spec: MaterialSpec, tex_dir: Path, size: int = DE
                 # Industrial crimson (#e81e50) tracer & gyro-hub marker
                 pulse = math.sin((u * 4.0 + v * 4.0) * math.tau) * 0.25 + 0.5
                 mix = clamp01(0.22 + pulse * 0.55)
+            elif spec.style == "pap1_etched":
+                # Stage 1 PaP: darkened blued steel (#252a32) w/ restrained geometric oxidized brass etching (<=15%)
+                gx = x % 64
+                gy = y % 64
+                diag_a = abs(((x + y) % 64) - 32)
+                diag_b = abs(((x - y) % 64) - 32)
+                border = gx < 2 or gy < 2
+                etch = (diag_a <= 1 or diag_b <= 1) and ((gx in range(10, 54)) and (gy in range(10, 54)))
+                if border:
+                    mix = 0.0
+                    h = 0.22
+                    spec_mult = 0.50
+                elif etch:
+                    mix = 0.84
+                    h = 0.78
+                    spec_mult = 1.15
+                else:
+                    mix = clamp01(0.04 + n_coarse * 0.04)
+                    h = 0.50 + n_fine * 0.05
+                    spec_mult = 0.94
+            elif spec.style == "pap2_crystalline":
+                # Stage 2 PaP: obsidian steel (#191d22) w/ neutral brushed-steel crystalline facet relief (#8a929c)
+                cell_x = (x % 48) - 24
+                cell_y = (y % 48) - 24
+                diamond = abs(cell_x) + abs(cell_y)
+                facet_ridge = (diamond in (18, 19)) or (abs(cell_x) == 0 and diamond < 18) or (abs(cell_y) == 0 and diamond < 18)
+                facet_hi = diamond < 18 and ((cell_x + cell_y) > 4)
+                if facet_ridge:
+                    mix = 0.78
+                    h = 0.86
+                    spec_mult = 1.18
+                elif facet_hi:
+                    mix = 0.26
+                    h = 0.62
+                    spec_mult = 1.05
+                else:
+                    mix = clamp01(0.06 + n_coarse * 0.05)
+                    h = 0.42 + n_fine * 0.05
+                    spec_mult = 0.88
             elif spec.style == "cryo_armor":
                 # Frosted arctic-titanium armor plates with crisp beveled seams & subtle ice rime
                 grain = math.sin(u * math.tau * 20.0 + n_coarse * 1.8) * 0.04
@@ -1993,17 +2098,171 @@ def build_gdt_text(
 # ---------------------------------------------------------------------------
 
 
+def _clone_mesh_for_pap_tier(
+    base_mesh: MeshBuilder,
+    new_name: str,
+    mat_remap: dict[str, str],
+    weapon_key: str,
+    pap_tier: int,
+    is_world: bool,
+) -> MeshBuilder:
+    """Clone one of the 4 custom primary meshes into a Stage-1 or Stage-2 PaP finish (<=4 material slots)."""
+    m = MeshBuilder(new_name, base_mesh.bones, model_type=base_mesh.model_type)
+    m.verts = list(base_mesh.verts)
+    for face in base_mesh.faces:
+        orig_mat = base_mesh.materials[face.mat_idx]
+        mapped_mat = mat_remap.get(orig_mat, orig_mat)
+        m.faces.append(
+            FaceDef(
+                mat_idx=m.mat(mapped_mat),
+                v0=face.v0,
+                v1=face.v1,
+                v2=face.v2,
+                n0=face.n0,
+                n1=face.n1,
+                n2=face.n2,
+                uv0=face.uv0,
+                uv1=face.uv1,
+                uv2=face.uv2,
+            )
+        )
+
+    # Subtle 1P-visible rear dorsal collar (Stage 1) or parallel "II" crest bars (Stage 2)
+    accent = "mtl_bz_pap1_brass" if pap_tier == 1 else "mtl_bz_pap2_trim"
+    glow = f"mtl_bz_{weapon_key}_glow_pap{pap_tier}"
+    if weapon_key == "acid":
+        if pap_tier == 1:
+            m.add_tapered_prism(accent, (1.6, 0.0, -0.26), (2.2, 0.0, -0.26), 1.24, 1.24, sides=6, bone_idx=0)
+        else:
+            m.add_box(accent, (2.4, -0.28, 0.96), (1.4, 0.16, 0.16), bone_idx=0)
+            m.add_box(accent, (2.4, +0.28, 0.96), (1.4, 0.16, 0.16), bone_idx=0)
+            m.add_box(glow, (2.4, 0.0, 0.94), (1.0, 0.24, 0.10), bone_idx=0)
+    elif weapon_key == "cryo":
+        if pap_tier == 1:
+            m.add_box(accent, (4.8, 0.0, 3.06), (1.2, 2.05, 0.22), bone_idx=0)
+        else:
+            m.add_box(accent, (5.2, -0.34, 3.10), (1.35, 0.16, 0.16), bone_idx=0)
+            m.add_box(accent, (5.2, +0.34, 3.10), (1.35, 0.16, 0.16), bone_idx=0)
+    elif weapon_key == "xbow":
+        if pap_tier == 1:
+            m.add_box(accent, (3.2, 0.0, 2.48), (1.15, 2.10, 0.18), bone_idx=0)
+        else:
+            m.add_box(accent, (3.2, -0.32, 2.52), (1.25, 0.14, 0.14), bone_idx=0)
+            m.add_box(accent, (3.2, +0.32, 2.52), (1.25, 0.14, 0.14), bone_idx=0)
+    elif weapon_key == "blade":
+        s = 2.45 if is_world else 1.0
+        if pap_tier == 1:
+            m.add_tapered_prism(accent, (0.0, 0.0, 0.30 * s), (0.0, 0.0, 0.72 * s), 0.44 * s, 0.44 * s, sides=6, bone_idx=0)
+        else:
+            m.add_box(accent, (0.15 * s, -0.18 * s, 1.35 * s), (0.14 * s, 0.08 * s, 0.56 * s), bone_idx=0)
+            m.add_box(accent, (0.15 * s, +0.18 * s, 1.35 * s), (0.14 * s, 0.08 * s, 0.56 * s), bone_idx=0)
+    return m
+
+
 def build_all_meshes() -> list[MeshBuilder]:
+    acid_vm = build_acid_sprayer("viewmodel_bz_acid_sprayer", is_world=False)
+    acid_wm = build_acid_sprayer("world_bz_acid_sprayer", is_world=True)
+    cryo_vm = build_cryo_cannon("viewmodel_bz_cryo_cannon", is_world=False)
+    cryo_wm = build_cryo_cannon("world_bz_cryo_cannon", is_world=True)
+    xbow_vm = build_multi_crossbow("viewmodel_bz_multi_crossbow", is_world=False)
+    xbow_wm = build_multi_crossbow("world_bz_multi_crossbow", is_world=True)
+    blade_vm = build_blade_boomerang_held("viewmodel_bz_blade_boomerang", is_world=False)
+    blade_wm = build_blade_boomerang_held("world_bz_blade_boomerang", is_world=True)
+
+    pap_variants: list[MeshBuilder] = []
+    pap_specs = (
+        (
+            "acid",
+            "bz_acid_sprayer",
+            acid_vm,
+            acid_wm,
+            {
+                "mtl_bz_acid_metal": "mtl_bz_pap1_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap1_brass",
+                "mtl_bz_acid_glow": "mtl_bz_acid_glow_pap1",
+            },
+            {
+                "mtl_bz_acid_metal": "mtl_bz_pap2_steel",
+                "mtl_bz_acid_hazard": "mtl_bz_pap2_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap2_trim",
+                "mtl_bz_acid_glow": "mtl_bz_acid_glow_pap2",
+            },
+        ),
+        (
+            "cryo",
+            "bz_cryo_cannon",
+            cryo_vm,
+            cryo_wm,
+            {
+                "mtl_bz_cryo_hull": "mtl_bz_pap1_steel",
+                "mtl_bz_cryo_dark": "mtl_bz_pap1_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap1_brass",
+                "mtl_bz_cryo_glow": "mtl_bz_cryo_glow_pap1",
+            },
+            {
+                "mtl_bz_cryo_hull": "mtl_bz_pap2_steel",
+                "mtl_bz_cryo_dark": "mtl_bz_pap2_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap2_trim",
+                "mtl_bz_cryo_glow": "mtl_bz_cryo_glow_pap2",
+            },
+        ),
+        (
+            "xbow",
+            "bz_multi_crossbow",
+            xbow_vm,
+            xbow_wm,
+            {
+                "mtl_bz_xbow_metal": "mtl_bz_pap1_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap1_brass",
+                "mtl_bz_xbow_glow": "mtl_bz_xbow_glow_pap1",
+            },
+            {
+                "mtl_bz_xbow_metal": "mtl_bz_pap2_steel",
+                "mtl_bz_xbow_brass": "mtl_bz_pap2_trim",
+                "mtl_bz_xbow_glow": "mtl_bz_xbow_glow_pap2",
+            },
+        ),
+        (
+            "blade",
+            "bz_blade_boomerang",
+            blade_vm,
+            blade_wm,
+            {
+                "mtl_bz_blade_steel": "mtl_bz_pap1_steel",
+                "mtl_bz_blade_brass": "mtl_bz_pap1_brass",
+                "mtl_bz_blade_glow": "mtl_bz_blade_glow_pap1",
+            },
+            {
+                "mtl_bz_blade_steel": "mtl_bz_pap2_steel",
+                "mtl_bz_blade_brass": "mtl_bz_pap2_trim",
+                "mtl_bz_blade_glow": "mtl_bz_blade_glow_pap2",
+            },
+        ),
+    )
+    for wkey, base_weap, vm, wm, remap1, remap2 in pap_specs:
+        pap_variants.append(
+            _clone_mesh_for_pap_tier(vm, f"viewmodel_{base_weap}_pap1", remap1, wkey, 1, False)
+        )
+        pap_variants.append(
+            _clone_mesh_for_pap_tier(wm, f"world_{base_weap}_pap1", remap1, wkey, 1, True)
+        )
+        pap_variants.append(
+            _clone_mesh_for_pap_tier(vm, f"viewmodel_{base_weap}_pap2", remap2, wkey, 2, False)
+        )
+        pap_variants.append(
+            _clone_mesh_for_pap_tier(wm, f"world_{base_weap}_pap2", remap2, wkey, 2, True)
+        )
+
     return [
-        build_acid_sprayer("viewmodel_bz_acid_sprayer", is_world=False),
-        build_acid_sprayer("world_bz_acid_sprayer", is_world=True),
-        build_cryo_cannon("viewmodel_bz_cryo_cannon", is_world=False),
-        build_cryo_cannon("world_bz_cryo_cannon", is_world=True),
-        build_multi_crossbow("viewmodel_bz_multi_crossbow", is_world=False),
-        build_multi_crossbow("world_bz_multi_crossbow", is_world=True),
+        acid_vm,
+        acid_wm,
+        cryo_vm,
+        cryo_wm,
+        xbow_vm,
+        xbow_wm,
         build_crossbow_bolt(),
-        build_blade_boomerang_held("viewmodel_bz_blade_boomerang", is_world=False),
-        build_blade_boomerang_held("world_bz_blade_boomerang", is_world=True),
+        blade_vm,
+        blade_wm,
         build_blade_boomerang_air(),
         build_portal_grenade_held("viewmodel_bz_portal_grenade", is_world=False),
         build_portal_grenade_held("world_bz_portal_grenade", is_world=True),
@@ -2024,6 +2283,8 @@ def build_all_meshes() -> list[MeshBuilder]:
         build_pap_bowie("world_bz_pap_bowie", is_world=True),
         build_sapper_trap_fire(),
         build_sapper_trap_betty(),
+        # Wave 3 (NSV-W3, Sheet 10 — 16 XMODELs)
+        *pap_variants,
     ]
 
 

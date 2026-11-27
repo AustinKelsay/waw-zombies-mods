@@ -278,9 +278,59 @@ bz_get_element_weapon_name( item_id )
 	return undefined;
 }
 
-bz_get_element_weapon_id_from_weapon( weapon_name )
+bz_strip_pap_suffix( weapon_name )
 {
 	weap = bz_normalize_id( weapon_name );
+	if ( weap.size > 5 )
+	{
+		tail = GetSubStr( weap, weap.size - 5, weap.size );
+		if ( tail == "_pap1" || tail == "_pap2" )
+		{
+			return GetSubStr( weap, 0, weap.size - 5 );
+		}
+	}
+	return weap;
+}
+
+bz_get_custom_pap_tier_from_weapon( weapon_name )
+{
+	weap = bz_normalize_id( weapon_name );
+	if ( weap.size > 5 )
+	{
+		tail = GetSubStr( weap, weap.size - 5, weap.size );
+		if ( tail == "_pap1" )
+		{
+			return 1;
+		}
+		if ( tail == "_pap2" )
+		{
+			return 2;
+		}
+	}
+	return 0;
+}
+
+bz_get_custom_pap_variant( weapon_name, tier )
+{
+	base = bz_strip_pap_suffix( weapon_name );
+	if ( base != "bz_acid_sprayer" && base != "bz_cryo_cannon" && base != "bz_multi_crossbow" && base != "bz_blade_boomerang" )
+	{
+		return "";
+	}
+	if ( IsDefined( tier ) && Int( tier ) == 1 )
+	{
+		return base + "_pap1";
+	}
+	if ( IsDefined( tier ) && Int( tier ) == 2 )
+	{
+		return base + "_pap2";
+	}
+	return "";
+}
+
+bz_get_element_weapon_id_from_weapon( weapon_name )
+{
+	weap = bz_strip_pap_suffix( weapon_name );
 	if ( weap == "bz_acid_sprayer" )
 	{
 		return "acid_sprayer";
@@ -332,13 +382,13 @@ bz_get_element_weapon_cost( item_id )
 
 bz_is_infinite_single_item_weapon( weapon_name )
 {
-	weap = bz_normalize_id( weapon_name );
+	weap = bz_strip_pap_suffix( weapon_name );
 	return weap == "bz_blade_boomerang" || weap == "bz_portal_grenade" || weap == "bz_war_club" || weap == "bz_pap_knife" || weap == "bz_pap_bowie";
 }
 
 bz_get_element_ammo_cost( item_id )
 {
-	id = bz_normalize_id( item_id );
+	id = bz_strip_pap_suffix( item_id );
 	if ( id == "blade_boomerang" || id == "bz_blade_boomerang" )
 	{
 		return 0;
@@ -357,7 +407,7 @@ bz_get_element_ammo_cost( item_id )
 // Blade Boomerang is a single infinite-use throwable item (clipSize=1, maxAmmo=0).
 bz_get_element_base_reserve( weapon_name )
 {
-	weap = bz_normalize_id( weapon_name );
+	weap = bz_strip_pap_suffix( weapon_name );
 	if ( weap == "bz_acid_sprayer" )
 	{
 		return 120;
@@ -1684,5 +1734,7 @@ bz_rules_get_stations_api()
 	api.bz_get_standard_perk_price = ::bz_get_standard_perk_price;
 	api.bz_is_infinite_single_item_weapon = ::bz_is_infinite_single_item_weapon;
 	api.bz_normalize_id = ::bz_normalize_id;
+	api.bz_strip_pap_suffix = ::bz_strip_pap_suffix;
+	api.bz_get_custom_pap_tier_from_weapon = ::bz_get_custom_pap_tier_from_weapon;
 	return api;
 }

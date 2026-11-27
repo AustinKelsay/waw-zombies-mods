@@ -143,10 +143,11 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 returning = self.add_player(destination)
                 returning.give_weapon("zombie_colt", make_current=True)
                 destination.call(GAUNTLET_MODE_MOD, "apply_connected_players_starting_points", 11, VERRUCKT)
-                self.assertEqual(returning.weapons, {ACID, CRYO})
+                acid_pap2 = f"{ACID}_pap2"
+                self.assertEqual(returning.weapons, {acid_pap2, CRYO})
                 self.assertEqual(returning.taken_weapons, ["zombie_colt"])
-                self.assertCountEqual(returning.max_ammo_calls, [ACID, CRYO])
-                self.assertEqual(returning.weapon_stock[ACID], acid_stock)
+                self.assertCountEqual(returning.max_ammo_calls, [acid_pap2, CRYO])
+                self.assertEqual(returning.weapon_stock[acid_pap2], acid_stock)
                 self.assertEqual(returning.weapon_stock[CRYO], 192 if double_ammo else 96)
                 self.assertTrue(returning.get_field("bz_single_pap_weapons")[ACID])
                 self.assertTrue(returning.get_field("bz_pap_weapons")[ACID])
@@ -154,10 +155,13 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 self.assert_restored_counts(destination, 2, 1, "ac:2,cr:0")
 
     def test_mule_kick_tiers_set_restore_cap_and_telemetry_counts_applied_weapons(self) -> None:
+        acid_pap2 = f"{ACID}_pap2"
+        boom_pap1 = f"{BOOMERANG}_pap1"
+        xbow_pap2 = f"{CROSSBOW}_pap2"
         for perks, expected in (
-            ("", {ACID, BOOMERANG}),
-            ("g_1=mk|-|-", {ACID, BOOMERANG, CRYO}),
-            ("g_1=mk|mk|-", set(ELEMENTAL_LOADOUT)),
+            ("", {acid_pap2, boom_pap1}),
+            ("g_1=mk|-|-", {acid_pap2, boom_pap1, CRYO}),
+            ("g_1=mk|mk|-", {acid_pap2, boom_pap1, CRYO, xbow_pap2}),
         ):
             with self.subTest(perks=perks):
                 dvars = _make_enhanced_dvars()
@@ -172,7 +176,7 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 self.assertTrue(player.get_field("bz_single_pap_weapons")[BOOMERANG])
                 self.assertTrue(player.get_field("bz_pap_weapons")[BOOMERANG])
                 self.assertFalse(runtime.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", player, BOOMERANG))
-                self.assert_restored_counts(runtime, len(expected), 2 if CROSSBOW in expected else 1)
+                self.assert_restored_counts(runtime, len(expected), 2 if xbow_pap2 in expected else 1)
 
     def test_restore_refreshes_pap_hud_and_station_for_held_weapon(self) -> None:
         dvars = _make_enhanced_dvars()
@@ -275,3 +279,57 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
         guest.weapons.discard(CRYO)
         runtime.call_on(guest, GAUNTLET_MODE_MOD, "watch_player_disconnect")
         self.assertEqual(dvars.get(LEDGER), "g_7=ac:2")
+
+    def test_wave3_all_four_primaries_two_tiers_carryover_round_trip_and_arsenal_ownership(self) -> None:
+        """Verify ADR-0007 / NSV-W3: all 4 primaries x Tier 1 & Tier 2 round-trip across Gauntlet maps and stay owned in Arsenal."""
+        for base_weap, code in (
+            (ACID, "ac"),
+            (CRYO, "cr"),
+            (CROSSBOW, "xb"),
+            (BOOMERANG, "bm"),
+        ):
+            for tier in (1, 2):
+                with self.subTest(weapon=base_weap, tier=tier):
+                    dvars = _make_enhanced_dvars()
+                    source = self.make_stage(dvars, NACHT)
+                    p_src = self.add_player(source)
+                    p_src.give_weapon(base_weap, make_current=True)
+                    p_src.set_field("score", 30000)
+
+                    # Upgrade to Tier 1 (_pap1) and optionally Tier 2 (_pap2) via live PaP functions
+                    pap_mod = r"maps\_bz_pap"
+                    upgraded1 = source.call(pap_mod, "bz_pap_apply_single_pap", p_src, base_weap)
+                    self.assertEqual(upgraded1, f"{base_weap}_pap1")
+                    self.assertIn(f"{base_weap}_pap1", p_src.weapons)
+                    if tier == 2:
+                        ok2 = source.call(pap_mod, "bz_pap_apply_double_pap", p_src, upgraded1)
+                        self.assertTrue(ok2)
+                        self.assertIn(f"{base_weap}_pap2", p_src.weapons)
+
+                    expected_variant = f"{base_weap}_pap{tier}"
+                    self.assertEqual(source.call(BRIDGE_MOD, "encode_weapons_record", p_src), f"{code}:{tier}")
+                    source.call(GAUNTLET_MODE_MOD, "snapshot_all_players_points", NACHT)
+                    self.assertEqual(dvars.get(LEDGER), f"g_1={code}:{tier}")
+
+                    # Restore on next Gauntlet map -> must restore exact _pap1 / _pap2 variant + preserve PaP state
+                    dest = self.make_stage(dvars, VERRUCKT)
+                    p_dst = self.add_player(dest)
+                    p_dst.give_weapon("zombie_colt", make_current=True)
+                    dest.call(GAUNTLET_MODE_MOD, "apply_connected_players_starting_points", 11, VERRUCKT)
+                    self.assertEqual(p_dst.weapons, {"zombie_colt", expected_variant})
+                    self.assertTrue(dest.call(pap_mod, "bz_pap_is_weapon_papped", p_dst, expected_variant))
+                    self.assertEqual(
+                        bool(dest.call(BZ_STATE_MOD, "bz_state_is_weapon_double_pap", p_dst, expected_variant)),
+                        tier == 2,
+                    )
+                    self.assertEqual(dest.call(BRIDGE_MOD, "encode_weapons_record", p_dst), f"{code}:{tier}")
+
+                    # Arsenal MUST recognize the upgraded variant as already owned (never offering duplicate 5000-pt purchase!)
+                    dest.call(r"maps\_bz_stations", "bz_stations_sync_player_ui", p_dst, "")
+                    elem_id = dest.call(r"maps\_bz_rules", "bz_get_element_weapon_id_from_weapon", expected_variant)
+                    ui_pill = p_dst.client_dvars.get(f"ui_bz_elem_{elem_id}", "")
+                    self.assertIn(
+                        ui_pill,
+                        ("OWNED", "FULL", "AMMO 2500"),
+                        f"Arsenal failed to recognize {expected_variant}: {ui_pill}",
+                    )

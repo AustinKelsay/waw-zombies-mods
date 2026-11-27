@@ -905,7 +905,7 @@ bz_elem_new_can_shatter_hit( zombie, ctx )
 		return false;
 	}
 
-	weap = bz_normalize_id( ctx.weapon );
+	weap = maps\_bz_rules::bz_strip_pap_suffix( ctx.weapon );
 	if ( weap == "bz_cryo_cannon" )
 	{
 		return false;
@@ -1420,7 +1420,7 @@ bz_elem_new_watch_acid_stream()
 			continue;
 		}
 		cur_weap = bz_normalize_id( self GetCurrentWeapon() );
-		if ( cur_weap != "bz_acid_sprayer" )
+		if ( maps\_bz_rules::bz_strip_pap_suffix( cur_weap ) != "bz_acid_sprayer" )
 		{
 			continue;
 		}
@@ -1428,11 +1428,11 @@ bz_elem_new_watch_acid_stream()
 		{
 			continue;
 		}
-		if ( self GetWeaponAmmoClip( "bz_acid_sprayer" ) <= 0 )
+		if ( self GetWeaponAmmoClip( cur_weap ) <= 0 )
 		{
 			continue;
 		}
-		bz_elem_new_maybe_spawn_acid_stream_puddle( self, "bz_acid_sprayer", undefined, undefined, 450 );
+		bz_elem_new_maybe_spawn_acid_stream_puddle( self, cur_weap, undefined, undefined, 450 );
 	}
 }
 
@@ -1486,13 +1486,14 @@ bz_elem_new_on_weapon_fired( player, weapon_name )
 	}
 
 	weap = bz_normalize_id( weapon_name );
-	if ( weap == "bz_acid_sprayer" )
+	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	if ( base_weap == "bz_acid_sprayer" )
 	{
 		player.bz_acid_last_puddle_ms = GetTime();
 		bz_elem_new_fire_acid_sprayer( player, weap );
 		return;
 	}
-	if ( weap == "bz_cryo_cannon" )
+	if ( base_weap == "bz_cryo_cannon" )
 	{
 		bz_elem_new_fire_cryo_cannon( player, weap );
 		return;
@@ -1579,7 +1580,7 @@ bz_elem_new_apply_status_damage_mult( zombie, dmg, mod, weapon, attacker, point 
 		mult = mult * bz_get_acid_brittle_mult();
 	}
 
-	norm_weap = bz_normalize_id( weapon );
+	norm_weap = maps\_bz_rules::bz_strip_pap_suffix( weapon );
 	if ( bz_elem_new_is_cryo_frozen( zombie ) && norm_weap != "bz_cryo_cannon" && bz_elem_new_is_shatter_mod( mod ) )
 	{
 		shatter_mult = bz_elem_new_execute_cryo_shatter( zombie, attacker, weapon, mod, point );
@@ -1596,17 +1597,17 @@ bz_elem_new_on_actor_damage( zombie, ctx )
 		return;
 	}
 
-	// Continuous Acid Sprayer gas stream contact (MOD_BURNED from bz_acid_sprayer):
+	// Continuous Acid Sprayer gas stream contact (MOD_BURNED from bz_acid_sprayer / _pap1 / _pap2):
 	// applies Acid slow (40%), Acid Brittle (1.50x), throttled round-scaled melt damage,
 	// green splash FX, and coats the ground beneath the zombie with sizzling acid puddles.
-	norm_weap = bz_normalize_id( ctx.weapon );
+	norm_weap = maps\_bz_rules::bz_strip_pap_suffix( ctx.weapon );
 	norm_mod = bz_normalize_id( ctx.mod );
 	if ( norm_weap == "bz_acid_sprayer" && norm_mod == "mod_burned" && IsDefined( ctx.attacker ) && IsPlayer( ctx.attacker ) )
 	{
 		now = GetTime();
 		attacker = ctx.attacker;
-		is_pap = bz_elem_new_is_weapon_papped( attacker, "bz_acid_sprayer" );
-		is_dpap = bz_elem_new_is_weapon_double_pap( attacker, "bz_acid_sprayer" );
+		is_pap = bz_elem_new_is_weapon_papped( attacker, ctx.weapon );
+		is_dpap = bz_elem_new_is_weapon_double_pap( attacker, ctx.weapon );
 
 		bz_elem_new_apply_acid_debuff( zombie, 2500 );
 

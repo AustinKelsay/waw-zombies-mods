@@ -617,6 +617,49 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             with self.assertRaises(ValueError):
                 build_mod.stage_custom_weapon_images(tools, root / "stage_mixed_tokens")
 
+    def test_northstar_wave3_pap_finishes_and_weapon_staging(self) -> None:
+        """Verify ADR-0007 / NORTHSTAR_EXPANSION_SPEC.md Wave 3: +8 PaP variants / +16 XMODELs, <=4 slots, zero violet."""
+        meshes = {m.name: m for m in bz_models.build_all_meshes()}
+        self.assertEqual(len(bz_models.CUSTOM_PAP_WEAPON_VIEWMODELS), 8)
+        self.assertEqual(len(bz_models.CUSTOM_PAP_WEAPON_WORLDMODELS), 8)
+        self.assertEqual(len(build_mod.BZ_PAP_VARIANT_WEAPON_SPECS), 8)
+
+        # Verify all 16 PaP variant XMODELs stay strictly inside ADR-0007 vert & material slot caps
+        for weap_name, vm_name in bz_models.CUSTOM_PAP_WEAPON_VIEWMODELS.items():
+            wm_name = bz_models.CUSTOM_PAP_WEAPON_WORLDMODELS[weap_name]
+            self.assertIn(vm_name, meshes)
+            self.assertIn(wm_name, meshes)
+            vm = meshes[vm_name]
+            wm = meshes[wm_name]
+            self.assertLessEqual(len(vm.verts), 3500, f"{vm_name} exceeded 3500v: {len(vm.verts)}")
+            self.assertLessEqual(len(wm.verts), 1800, f"{wm_name} exceeded 1800v: {len(wm.verts)}")
+            self.assertLessEqual(len(vm.materials), 4, f"{vm_name} exceeded 4 materials: {vm.materials}")
+            self.assertLessEqual(len(wm.materials), 4, f"{wm_name} exceeded 4 materials: {wm.materials}")
+
+        # Verify zero violet/magenta bleed on any Wave 3 material spec
+        w3_specs = [s for s in bz_models.MATERIAL_SPECS if "_pap1" in s.name or "_pap2" in s.name]
+        self.assertEqual(len(w3_specs), 12)
+        for spec in w3_specs:
+            r, g, b = spec.base_rgb
+            # Violet has B > R > G with high blue; forbid B > 140 when G < 60 and R > 90
+            self.assertFalse(b > 140 and r > 90 and g < 60, f"Violet bleed detected in {spec.name}: {spec.base_rgb}")
+            if spec.material_type == "model phong":
+                self.assertLessEqual(max(spec.spec_rgb), 76, f"{spec.name} specular exceeds calibrated WaW cap")
+
+        # Verify all 8 PaP variant weapons stage with 0 added FX and exact gunModel/worldModel bindings
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_sp = root / "raw" / "weapons" / "sp"
+            raw_sp.mkdir(parents=True)
+            for tmpl in ("m2_flamethrower_zombie", "tesla_gun", "fg42_scoped", "zombie_colt"):
+                (raw_sp / tmpl).write_text("WEAPONFILE\\displayName\\Stock\\gunModel\\stock_vm\\worldModel\\stock_wm", encoding="latin1")
+            staged = build_mod.stage_bz_pap_variant_weapons(root, root / "stage")
+            self.assertEqual(len(staged), 8)
+            for weap_name, vm_name in bz_models.CUSTOM_PAP_WEAPON_VIEWMODELS.items():
+                text = (root / "stage" / "weapons" / "sp" / weap_name).read_text(encoding="latin1")
+                self.assertIn(f"\\gunModel\\{vm_name}", text)
+                self.assertIn(f"\\worldModel\\{bz_models.CUSTOM_PAP_WEAPON_WORLDMODELS[weap_name]}", text)
+
 
 if __name__ == "__main__":
     unittest.main()

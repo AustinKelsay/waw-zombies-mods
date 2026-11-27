@@ -514,8 +514,8 @@ class TestLiveHookGates(unittest.TestCase):
         self.assertEqual(runtime.call(bridge, "encode_perks_record", host), "su,mk|-|-")
         self.assertEqual(runtime.call(bridge, "encode_weapons_record", host), "ac:2,cr:0")
         self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_has_pap_war_club", host))
-        self.assertTrue({"bz_acid_sprayer", "bz_cryo_cannon"}.issubset(host.weapons))
-        self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_is_weapon_double_pap", host, "bz_acid_sprayer"))
+        self.assertTrue({"bz_acid_sprayer_pap2", "bz_cryo_cannon"}.issubset(host.weapons))
+        self.assertTrue(runtime.call(r"maps\_bz_state", "bz_state_is_weapon_double_pap", host, "bz_acid_sprayer_pap2"))
         self.assertIn("BZ_EVENT|GAUNTLET_BZ_SEEDED|map=nazi_zombie_prototype;class=titan;weapons=2",
                       runtime.emitted_events)
 

@@ -437,6 +437,23 @@ BZ_ELEMENT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]
     ),
 )
 
+# Wave 3 (NSV-W3, Sheet 10): +8 zero-FX Pack-a-Punch Stage 1 (_pap1) & Stage 2 (_pap2) weapon
+# variants strictly for the 4 PaP-eligible custom primaries (ADR-0006/ADR-0007).
+BZ_PAP_VARIANT_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = tuple(
+    (
+        f"{base_name}_pap{tier}",
+        templates,
+        {
+            **base_overrides,
+            "displayName": f"{base_overrides['displayName']} ({'PaP' if tier == 1 else 'PaP II'})",
+            "gunModel": bz_models.CUSTOM_PAP_WEAPON_VIEWMODELS[f"{base_name}_pap{tier}"],
+            "worldModel": bz_models.CUSTOM_PAP_WEAPON_WORLDMODELS[f"{base_name}_pap{tier}"],
+        },
+    )
+    for base_name, templates, base_overrides in BZ_ELEMENT_WEAPON_SPECS
+    for tier in (1, 2)
+)
+
 # Special item-slot weapons (inventoryType = "item", excluded from primary weapon slots & PaP — ADR-0006).
 BZ_SPECIAL_ITEM_WEAPON_SPECS: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...] = (
     (
@@ -2422,6 +2439,47 @@ def stage_bz_offhand_weapons(
     return staged_offhand
 
 
+def stage_bz_pap_variant_weapons(
+    tools_root: Path,
+    stage_dir: Path,
+    allowed_fx_set: set[str] | frozenset[str] | None = None,
+) -> list[str]:
+    """Generate and stage the 8 zero-FX Stage-1/Stage-2 PaP variant primaries under stage_dir/weapons/sp/."""
+    raw_weapons_dir = tools_root / "raw" / "weapons" / "sp"
+    if not raw_weapons_dir.is_dir():
+        return []
+
+    raw_xanim_dir = tools_root / "raw" / "xanim"
+    xanim_case_map = build_xanim_case_map(raw_xanim_dir) if raw_xanim_dir.is_dir() else None
+
+    out_dir = stage_dir / "weapons" / "sp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    staged_variants: list[str] = []
+    for weap_name, template_candidates, overrides in BZ_PAP_VARIANT_WEAPON_SPECS:
+        template_path: Path | None = None
+        for candidate in template_candidates:
+            path = raw_weapons_dir / candidate
+            if path.is_file():
+                template_path = path
+                break
+        if template_path is None:
+            raise FileNotFoundError(
+                f"No stock weapon template found for {weap_name} in {raw_weapons_dir} "
+                f"(tried: {', '.join(template_candidates)})"
+            )
+        stock_text = template_path.read_text(encoding="latin1")
+        cloned_text = clone_zero_fx_weapon_file(
+            stock_text,
+            overrides=overrides,
+            allowed_fx_set=allowed_fx_set,
+            xanim_case_map=xanim_case_map,
+        )
+        (out_dir / weap_name).write_text(cloned_text, encoding="latin1")
+        staged_variants.append(f"weapons/sp/{weap_name}")
+    return staged_variants
+
+
 # Canonical 1x base reserve stock for all 72 playable stock zombie primary weapons across
 # Nacht, Verruckt, Shi No Numa, and Der Riese (ADR-0005). Staged into mod.ff with maxAmmo = 3x
 # so Double Ammo (2x) and Double PaP (1.5x -> 3x) display true native WaW HUD counts while
@@ -3391,10 +3449,10 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
                 rewire_powerups_module=powerups_mod,
                 rewire_spawner_module=spawner_mod,
             )
-            # Prevent stock orange flame ignition when sprayed by bz_acid_sprayer (ADR-0004).
+            # Prevent stock orange flame ignition when sprayed by bz_acid_sprayer (or _pap1/_pap2) (ADR-0004/ADR-0007).
             spawner_text = re.sub(
                 r"(zombie_flame_damage\s*\(\s*mod\s*,\s*player\s*\)\s*\{)",
-                r'\1\n\tif ( maps\\_bz_hooks::bz_elements_enabled() && IsDefined( player ) && IsPlayer( player ) && tolower( "" + player GetCurrentWeapon() ) == "bz_acid_sprayer" )\n\t{\n\t\treturn false;\n\t}',
+                r'\1\n\tif ( maps\\_bz_hooks::bz_elements_enabled() && IsDefined( player ) && IsPlayer( player ) && maps\\_bz_rules::bz_strip_pap_suffix( player GetCurrentWeapon() ) == "bz_acid_sprayer" )\n\t{\n\t\treturn false;\n\t}',
                 spawner_text,
                 count=1,
             )
@@ -3509,8 +3567,9 @@ def stage_mod_files(tools_root: Path, steam_game: Path) -> Path:
         steam_game=steam_game,
     )
 
-    # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons for mod.csv.
+    # Generate and stage zero-FX cloned Phase 2 primary weapons + item-slot special weapons + PaP variants for mod.csv.
     staged_weapons = stage_bz_element_weapons(tools_root=tools_root, stage_dir=stage_dir)
+    staged_weapons.extend(stage_bz_pap_variant_weapons(tools_root=tools_root, stage_dir=stage_dir))
     staged_weapons.extend(stage_bz_special_item_weapons(tools_root=tools_root, stage_dir=stage_dir))
     staged_weapons.extend(stage_bz_offhand_weapons(tools_root=tools_root, stage_dir=stage_dir))
     # Stage 3x maxAmmo stock weapon overrides into stage_dir/weapons/sp/ for waw_gauntlet.iwd ONLY

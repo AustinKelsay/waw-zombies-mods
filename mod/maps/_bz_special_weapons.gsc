@@ -1312,17 +1312,27 @@ bz_special_fire_blade_boomerang( player, weapon_name )
 	model_name = bz_special_get_boomerang_model();
 	round_num = bz_special_get_current_round();
 	zombie_hp = bz_special_get_round_zombie_health( round_num );
-	is_pap = bz_special_is_weapon_single_pap( player, "bz_blade_boomerang" );
-	is_dpap = bz_state_is_weapon_double_pap( player, "bz_blade_boomerang" );
+	owned_boom = bz_special_get_owned_boomerang_weapon( player );
+	query_boom = owned_boom;
+	if ( query_boom == "" )
+	{
+		query_boom = weapon_name;
+	}
+	if ( !IsDefined( query_boom ) || query_boom == "" )
+	{
+		query_boom = "bz_blade_boomerang";
+	}
+	is_pap = bz_special_is_weapon_single_pap( player, query_boom );
+	is_dpap = bz_state_is_weapon_double_pap( player, query_boom );
 	dmg = maps\_bz_rules::bz_calc_boomerang_damage( round_num, zombie_hp, is_dpap, is_pap );
 	max_pierce = maps\_bz_rules::bz_get_boomerang_max_pierce( is_pap, is_dpap );
 
 	// Track active in-flight boomerang for guaranteed infinite single-item return & failsafe recovery.
 	player.bz_boomerang_in_flight = true;
 	player.bz_boomerang_throw_time = GetTime();
-	if ( player HasWeapon( "bz_blade_boomerang" ) )
+	if ( owned_boom != "" )
 	{
-		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+		player SetWeaponAmmoStock( owned_boom, 0 );
 	}
 
 	// YZ-plane 3-wing boomerang (axis along +X) tilted -20 deg relative to throw pitch and spun via RotateRoll
@@ -1603,15 +1613,16 @@ bz_special_run_boomerang_flight( player, blade, start_pos, apex, dmg, max_pierce
 	{
 		player.bz_boomerang_in_flight = false;
 	}
-	caught_ok = still_live && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && player HasWeapon( "bz_blade_boomerang" );
+	owned_boom = bz_special_get_owned_boomerang_weapon( player );
+	caught_ok = still_live && IsDefined( player ) && IsAlive( player ) && !bz_special_player_is_downed( player ) && owned_boom != "";
 	refilled_clip = false;
 	if ( caught_ok )
 	{
 		player PlayLocalSound( "knife_pull_plr" );
-		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
-		if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) == 0 )
+		player SetWeaponAmmoStock( owned_boom, 0 );
+		if ( player GetWeaponAmmoClip( owned_boom ) == 0 )
 		{
-			player SetWeaponAmmoClip( "bz_blade_boomerang", 1 );
+			player SetWeaponAmmoClip( owned_boom, 1 );
 			refilled_clip = true;
 		}
 	}
@@ -2480,23 +2491,45 @@ bz_special_watch_portal_notify()
 	}
 }
 
+bz_special_get_owned_boomerang_weapon( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return "";
+	}
+	if ( player HasWeapon( "bz_blade_boomerang_pap2" ) )
+	{
+		return "bz_blade_boomerang_pap2";
+	}
+	if ( player HasWeapon( "bz_blade_boomerang_pap1" ) )
+	{
+		return "bz_blade_boomerang_pap1";
+	}
+	if ( player HasWeapon( "bz_blade_boomerang" ) )
+	{
+		return "bz_blade_boomerang";
+	}
+	return "";
+}
+
 bz_special_ensure_boomerang_recovered( player, force_restore )
 {
 	if ( !bz_elements_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_special_player_is_downed( player ) )
 	{
 		return false;
 	}
-	if ( !player HasWeapon( "bz_blade_boomerang" ) )
+	owned_boom = bz_special_get_owned_boomerang_weapon( player );
+	if ( owned_boom == "" )
 	{
 		player.bz_boomerang_in_flight = false;
 		return false;
 	}
 
-	if ( player GetWeaponAmmoStock( "bz_blade_boomerang" ) > 0 )
+	if ( player GetWeaponAmmoStock( owned_boom ) > 0 )
 	{
-		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+		player SetWeaponAmmoStock( owned_boom, 0 );
 	}
-	if ( player GetWeaponAmmoClip( "bz_blade_boomerang" ) >= 1 )
+	if ( player GetWeaponAmmoClip( owned_boom ) >= 1 )
 	{
 		return false;
 	}
@@ -2511,8 +2544,8 @@ bz_special_ensure_boomerang_recovered( player, force_restore )
 	if ( ( IsDefined( force_restore ) && force_restore ) || !in_flight || elapsed_ms >= 1350 )
 	{
 		player.bz_boomerang_in_flight = false;
-		player SetWeaponAmmoClip( "bz_blade_boomerang", 1 );
-		player SetWeaponAmmoStock( "bz_blade_boomerang", 0 );
+		player SetWeaponAmmoClip( owned_boom, 1 );
+		player SetWeaponAmmoStock( owned_boom, 0 );
 		return true;
 	}
 	return false;
@@ -2738,12 +2771,13 @@ bz_special_on_weapon_fired( player, weapon_name )
 	}
 
 	weap = bz_normalize_id( weapon_name );
-	if ( weap == "bz_multi_crossbow" )
+	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	if ( base_weap == "bz_multi_crossbow" )
 	{
 		bz_special_fire_multi_crossbow( player, weap );
 		return;
 	}
-	if ( weap == "bz_blade_boomerang" )
+	if ( base_weap == "bz_blade_boomerang" )
 	{
 		bz_special_fire_blade_boomerang( player, weap );
 		return;
