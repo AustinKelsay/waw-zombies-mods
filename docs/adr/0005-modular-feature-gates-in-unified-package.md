@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by ADR-0006
 ---
 
 # Modular Feature Gates Inside One Unified Mod Package

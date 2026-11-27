@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by ADR-0006
 ---
 
 # Single unified mod package with dvar mode gate

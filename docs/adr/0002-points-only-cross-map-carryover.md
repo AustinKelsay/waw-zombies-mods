@@ -1,5 +1,5 @@
 ---
-status: amended by ADR-0004
+status: amended by ADR-0004, ADR-0006
 ---
 
 # Points-only cross-map carryover with Points Floor and Prep Phase
