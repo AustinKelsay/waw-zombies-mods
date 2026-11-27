@@ -1022,7 +1022,7 @@ bz_medic_sync_revive_state( player )
 
 bz_medic_is_primary_ammo_weapon( weapon_name )
 {
-	w = bz_normalize_id( weapon_name );
+	w = maps\_bz_rules::bz_strip_pap_suffix( weapon_name );
 	if ( w == "" || w == "none" || w == "fraggrenade" || w == "stielhandgranate" ||
 		w == "zombie_knuckles" || w == "knife" || w == "bowie_knife" || w == "syrette" ||
 		w == "bz_blade_boomerang" || w == "bz_portal_grenade" || w == "bz_war_club" || w == "bz_pap_knife" || w == "bz_pap_bowie" ||

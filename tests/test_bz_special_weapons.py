@@ -1137,10 +1137,11 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         self.assertEqual(res_t2.get_field("damage"), 4200)
         self.assertEqual(res_t2.get_field("radius"), 176)
 
-        # 2. Tier 1 PaP boosts Blade Boomerang damage (1.50x -> 2250), pierce (6 -> 9), and flight speed
-        gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_blade_boomerang")
-        player.weapon_clips["bz_blade_boomerang"] = 0  # engine consumes the single boomerang from clip on throw
-        throw_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang")
+        # 2. Tier 1 PaP swaps to bz_blade_boomerang_pap1, boosts damage (1.50x -> 2250), pierce (6 -> 9), and keeps infinite catch/refill
+        upgraded_boom = gsc.call(BZ_PAP_MOD, "bz_pap_apply_single_pap", player, "bz_blade_boomerang")
+        self.assertEqual(upgraded_boom, "bz_blade_boomerang_pap1")
+        player.weapon_clips["bz_blade_boomerang_pap1"] = 0  # engine consumes the single boomerang from clip on throw
+        throw_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_fire_blade_boomerang", player, "bz_blade_boomerang_pap1")
         self.assertEqual(throw_res.get_field("damage"), 2250)  # 1500 * 1.50
         self.assertEqual(throw_res.get_field("max_pierce"), 9)
         self.assertTrue(player.get_field("bz_boomerang_in_flight"))
@@ -1160,19 +1161,19 @@ class TestBladeBoomerangSpecialWeapon(unittest.TestCase):
         )
         self.assertTrue(ret.get_field("caught"))
         self.assertTrue(ret.get_field("refilled_clip"))
-        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
-        self.assertEqual(player.weapon_stocks["bz_blade_boomerang"], 0)
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang_pap1"], 1)
+        self.assertEqual(player.weapon_stocks["bz_blade_boomerang_pap1"], 0)
         self.assertFalse(bool(player.get_field("bz_boomerang_in_flight")))
 
         # Failsafe recovery restores clip 0 -> 1 if flight ever aborted or exceeded 1350ms
-        player.weapon_clips["bz_blade_boomerang"] = 0
+        player.weapon_clips["bz_blade_boomerang_pap1"] = 0
         player.set_field("bz_boomerang_in_flight", True)
         player.set_field("bz_boomerang_throw_time", 5000)
         gsc.sim_time_ms = 5800
         self.assertFalse(gsc.call(BZ_SPECIAL_MOD, "bz_special_ensure_boomerang_recovered", player, False))
         gsc.sim_time_ms = 6500
         self.assertTrue(gsc.call(BZ_SPECIAL_MOD, "bz_special_ensure_boomerang_recovered", player, False))
-        self.assertEqual(player.weapon_clips["bz_blade_boomerang"], 1)
+        self.assertEqual(player.weapon_clips["bz_blade_boomerang_pap1"], 1)
         self.assertEqual(player.weapon_stocks["bz_blade_boomerang"], 0)
 
 

@@ -1069,11 +1069,42 @@ bz_stations_is_weapon_pap( player, weapon_name )
 	{
 		return true;
 	}
-	if ( IsDefined( player ) && IsDefined( player.bz_pap_weapons ) && IsDefined( player.bz_pap_weapons[norm] ) && player.bz_pap_weapons[norm] )
+	if ( bz_get_custom_pap_tier_from_weapon( norm ) >= 1 )
 	{
 		return true;
 	}
+	base = bz_strip_pap_suffix( norm );
+	if ( IsDefined( player ) && IsDefined( player.bz_pap_weapons ) )
+	{
+		if ( ( IsDefined( player.bz_pap_weapons[norm] ) && player.bz_pap_weapons[norm] ) ||
+			( base != "" && IsDefined( player.bz_pap_weapons[base] ) && player.bz_pap_weapons[base] ) )
+		{
+			return true;
+		}
+	}
 	return false;
+}
+
+bz_stations_find_owned_element_weapon( player, base_weap )
+{
+	if ( !IsDefined( player ) || !IsDefined( base_weap ) || base_weap == "" )
+	{
+		return "";
+	}
+	base = bz_strip_pap_suffix( base_weap );
+	if ( player HasWeapon( base + "_pap2" ) )
+	{
+		return base + "_pap2";
+	}
+	if ( player HasWeapon( base + "_pap1" ) )
+	{
+		return base + "_pap1";
+	}
+	if ( player HasWeapon( base ) )
+	{
+		return base;
+	}
+	return "";
 }
 
 bz_stations_player_has_bowie( player )
@@ -1167,21 +1198,32 @@ bz_stations_get_weapon_display_name( weapon_name )
 	{
 		return "NONE";
 	}
-	if ( w == "bz_acid_sprayer" )
+	pap_tier = bz_get_custom_pap_tier_from_weapon( w );
+	base_custom = bz_strip_pap_suffix( w );
+	pap_suffix = "";
+	if ( pap_tier == 1 )
 	{
-		return "Acid Sprayer";
+		pap_suffix = " (PaP)";
 	}
-	if ( w == "bz_cryo_cannon" )
+	else if ( pap_tier == 2 )
 	{
-		return "Cryo Cannon";
+		pap_suffix = " (PaP II)";
 	}
-	if ( w == "bz_multi_crossbow" )
+	if ( base_custom == "bz_acid_sprayer" )
 	{
-		return "Multi-Crossbow";
+		return "Acid Sprayer" + pap_suffix;
 	}
-	if ( w == "bz_blade_boomerang" )
+	if ( base_custom == "bz_cryo_cannon" )
 	{
-		return "Blade Boomerang";
+		return "Cryo Cannon" + pap_suffix;
+	}
+	if ( base_custom == "bz_multi_crossbow" )
+	{
+		return "Multi-Crossbow" + pap_suffix;
+	}
+	if ( base_custom == "bz_blade_boomerang" )
+	{
+		return "Blade Boomerang" + pap_suffix;
 	}
 
 	is_upg = IsSubStr( w, "_upgraded" );
@@ -1462,17 +1504,18 @@ bz_stations_sync_player_ui( player, feedback )
 		eid = elem_ids[i];
 		e_cost = [[ rules.bz_get_element_weapon_price ]]( eid );
 		e_weap = bz_get_element_weapon_name( eid );
+		owned_weap = bz_stations_find_owned_element_weapon( player, e_weap );
 		if ( !elements_on )
 		{
 			bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "DISABLED" );
 		}
-		else if ( IsDefined( e_weap ) && player HasWeapon( e_weap ) )
+		else if ( owned_weap != "" )
 		{
-			if ( bz_stations_is_infinite_item( e_weap ) )
+			if ( bz_stations_is_infinite_item( owned_weap ) )
 			{
 				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "OWNED" );
 			}
-			else if ( bz_stations_is_element_ammo_full( player, e_weap ) )
+			else if ( bz_stations_is_element_ammo_full( player, owned_weap ) )
 			{
 				bz_stations_set_client_dvar_cached( player, "ui_bz_elem_" + eid, "FULL" );
 			}
@@ -1789,6 +1832,11 @@ bz_stations_try_buy_single_pap( player, weapon_name )
 		player.bz_pap_weapons = [];
 	}
 	player.bz_pap_weapons[norm] = true;
+	base_norm = bz_strip_pap_suffix( norm );
+	if ( base_norm != "" )
+	{
+		player.bz_pap_weapons[base_norm] = true;
+	}
 	return bz_make_purchase_result( "ok", "single_pap", cost, player.score );
 }
 
@@ -2159,12 +2207,13 @@ bz_stations_on_menu_response( player, menu, response )
 	else if ( category == "element_weapon" )
 	{
 		target_weap = bz_get_element_weapon_name( item_id );
-		already_has = ( IsDefined( target_weap ) && target_weap != "" && player HasWeapon( target_weap ) );
+		owned_weap = bz_stations_find_owned_element_weapon( player, target_weap );
+		already_has = ( owned_weap != "" );
 		if ( already_has && norm_menu == "bz_station_arsenal" )
 		{
 			category = "element_ammo";
-			res = bz_stations_try_buy_element_ammo( player, item_id, target_weap );
-			weapon_name = target_weap;
+			res = bz_stations_try_buy_element_ammo( player, item_id, owned_weap );
+			weapon_name = owned_weap;
 		}
 		else
 		{
@@ -2270,6 +2319,18 @@ bz_normalize_id( raw_id )
 {
 	api = bz_stations_get_rules_api();
 	return [[ api.bz_normalize_id ]]( raw_id );
+}
+
+bz_strip_pap_suffix( weapon_name )
+{
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_strip_pap_suffix ]]( weapon_name );
+}
+
+bz_get_custom_pap_tier_from_weapon( weapon_name )
+{
+	api = bz_stations_get_rules_api();
+	return [[ api.bz_get_custom_pap_tier_from_weapon ]]( weapon_name );
 }
 
 bz_pap_enabled()

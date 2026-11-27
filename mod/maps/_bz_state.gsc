@@ -170,6 +170,11 @@ bz_state_get_class( player )
 	return player.bz_class;
 }
 
+bz_state_norm_weapon( weapon_name )
+{
+	return maps\_bz_rules::bz_strip_pap_suffix( weapon_name );
+}
+
 bz_state_mark_weapon_double_pap( player, weapon_name )
 {
 	if ( !bz_state_ensure_init( player ) )
@@ -177,7 +182,7 @@ bz_state_mark_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = bz_state_norm( weapon_name );
+	norm = bz_state_norm_weapon( weapon_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -194,7 +199,7 @@ bz_state_unmark_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = bz_state_norm( weapon_name );
+	norm = bz_state_norm_weapon( weapon_name );
 	if ( norm == "" )
 	{
 		return false;
@@ -216,7 +221,7 @@ bz_state_is_weapon_double_pap( player, weapon_name )
 		return false;
 	}
 
-	norm = bz_state_norm( weapon_name );
+	norm = bz_state_norm_weapon( weapon_name );
 	if ( norm == "" )
 	{
 		return false;

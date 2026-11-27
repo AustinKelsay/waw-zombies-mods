@@ -112,7 +112,7 @@ bz_perks_join_csv( arr )
 // Canonical WaW 1.7 weapon movement speed scales (supports base & _upgraded/_zm variants).
 bz_perks_get_weapon_move_scale( weapon_name )
 {
-	w = bz_normalize_id( weapon_name );
+	w = maps\_bz_rules::bz_strip_pap_suffix( weapon_name );
 	if ( w == "" || w == "none" )
 	{
 		return 1.0;

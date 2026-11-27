@@ -766,6 +766,11 @@ class GscRuntime:
             if val is UNDEFINED:
                 return True, ""
             return True, _waw_to_str(val).lower()
+        if name_lower == "getsubstr":
+            text = _waw_to_str(args[0]) if len(args) > 0 and args[0] is not UNDEFINED else ""
+            start = _waw_int(args[1]) if len(args) > 1 else 0
+            end = _waw_int(args[2]) if len(args) > 2 else len(text)
+            return True, text[start:end]
         if name_lower == "strtok":
             if len(args) < 2 or args[0] is UNDEFINED or args[1] is UNDEFINED:
                 return True, GscArray([])

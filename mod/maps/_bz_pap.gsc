@@ -128,17 +128,30 @@ bz_pap_is_scripted_single_pap( player, weapon_name )
 	{
 		return false;
 	}
+	if ( maps\_bz_rules::bz_get_custom_pap_tier_from_weapon( norm ) >= 1 )
+	{
+		return true;
+	}
 	if ( !IsDefined( player ) )
 	{
 		return false;
 	}
-	if ( IsDefined( player.bz_single_pap_weapons ) && IsDefined( player.bz_single_pap_weapons[norm] ) && player.bz_single_pap_weapons[norm] )
+	base = maps\_bz_rules::bz_strip_pap_suffix( norm );
+	if ( IsDefined( player.bz_single_pap_weapons ) )
 	{
-		return true;
+		if ( ( IsDefined( player.bz_single_pap_weapons[norm] ) && player.bz_single_pap_weapons[norm] ) ||
+			( base != "" && IsDefined( player.bz_single_pap_weapons[base] ) && player.bz_single_pap_weapons[base] ) )
+		{
+			return true;
+		}
 	}
-	if ( IsDefined( player.bz_pap_weapons ) && IsDefined( player.bz_pap_weapons[norm] ) && player.bz_pap_weapons[norm] )
+	if ( IsDefined( player.bz_pap_weapons ) )
 	{
-		return true;
+		if ( ( IsDefined( player.bz_pap_weapons[norm] ) && player.bz_pap_weapons[norm] ) ||
+			( base != "" && IsDefined( player.bz_pap_weapons[base] ) && player.bz_pap_weapons[base] ) )
+		{
+			return true;
+		}
 	}
 	return false;
 }
@@ -278,6 +291,75 @@ bz_pap_refresh_double_pap_ammo( player )
 // 4-Map Single PaP & Double PaP Application
 // ---------------------------------------------------------------------------
 
+bz_pap_swap_custom_variant_preserve_slot( player, old_weap, new_weap )
+{
+	if ( !IsDefined( player ) || !IsDefined( old_weap ) || !IsDefined( new_weap ) || old_weap == "" || new_weap == "" || old_weap == new_weap )
+	{
+		return false;
+	}
+	if ( !player HasWeapon( old_weap ) )
+	{
+		return false;
+	}
+
+	was_current = ( bz_normalize_id( player GetCurrentWeapon() ) == bz_normalize_id( old_weap ) );
+	prev_clip = Int( player GetWeaponAmmoClip( old_weap ) );
+	prev_stock = Int( player GetWeaponAmmoStock( old_weap ) );
+
+	player TakeWeapon( old_weap );
+	player GiveWeapon( new_weap );
+	if ( !player HasWeapon( new_weap ) )
+	{
+		// Safe rollback if variant weapon isn't loaded in a minimal runtime
+		player GiveWeapon( old_weap );
+		player SetWeaponAmmoClip( old_weap, prev_clip );
+		player SetWeaponAmmoStock( old_weap, prev_stock );
+		if ( was_current )
+		{
+			player SwitchToWeapon( old_weap );
+		}
+		return false;
+	}
+
+	if ( maps\_bz_rules::bz_is_infinite_single_item_weapon( new_weap ) )
+	{
+		player SetWeaponAmmoClip( new_weap, 1 );
+		player SetWeaponAmmoStock( new_weap, 0 );
+	}
+	else
+	{
+		clip_max = WeaponClipSize( new_weap );
+		if ( IsDefined( clip_max ) && Int( clip_max ) > 0 )
+		{
+			player SetWeaponAmmoClip( new_weap, Int( clip_max ) );
+		}
+		else if ( prev_clip > 0 )
+		{
+			player SetWeaponAmmoClip( new_weap, prev_clip );
+		}
+		player GiveMaxAmmo( new_weap );
+	}
+
+	if ( was_current )
+	{
+		player SwitchToWeapon( new_weap );
+	}
+
+	// Preserve Mule Kick acquisition slot order in-place.
+	if ( IsDefined( player.bz_primary_weapon_order ) )
+	{
+		old_norm = bz_normalize_id( old_weap );
+		for ( oi = 0; oi < player.bz_primary_weapon_order.size; oi++ )
+		{
+			if ( IsDefined( player.bz_primary_weapon_order[oi] ) && bz_normalize_id( player.bz_primary_weapon_order[oi] ) == old_norm )
+			{
+				player.bz_primary_weapon_order[oi] = new_weap;
+			}
+		}
+	}
+	return true;
+}
+
 bz_pap_apply_single_pap( player, weapon_name )
 {
 	return bz_pap_apply_single_pap_with_source( player, weapon_name, "" );
@@ -297,7 +379,9 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 	}
 
 	map_name = bz_get_map_name();
+	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
 	native_weap = bz_pap_resolve_native_upgrade( weap );
+	custom_pap1 = maps\_bz_rules::bz_get_custom_pap_variant( base_weap, 1 );
 	final_weap = weap;
 	mode = "scripted";
 
@@ -329,6 +413,22 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 			}
 		}
 		bz_pap_apply_reserve_ammo( player, native_weap );
+	}
+	else if ( custom_pap1 != "" )
+	{
+		player.bz_single_pap_weapons[base_weap] = true;
+		player.bz_pap_weapons[base_weap] = true;
+		player.bz_single_pap_weapons[custom_pap1] = true;
+		player.bz_pap_weapons[custom_pap1] = true;
+		if ( weap != custom_pap1 && bz_pap_swap_custom_variant_preserve_slot( player, weap, custom_pap1 ) )
+		{
+			final_weap = custom_pap1;
+		}
+		else
+		{
+			player GiveMaxAmmo( final_weap );
+		}
+		bz_pap_apply_reserve_ammo( player, final_weap );
 	}
 	else
 	{
@@ -372,7 +472,26 @@ bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 		return false;
 	}
 
-	maps\_bz_state::bz_state_mark_weapon_double_pap( player, weap );
+	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	maps\_bz_state::bz_state_mark_weapon_double_pap( player, base_weap );
+
+	custom_pap2 = maps\_bz_rules::bz_get_custom_pap_variant( base_weap, 2 );
+	if ( custom_pap2 != "" )
+	{
+		player.bz_single_pap_weapons[base_weap] = true;
+		player.bz_pap_weapons[base_weap] = true;
+		player.bz_single_pap_weapons[custom_pap2] = true;
+		player.bz_pap_weapons[custom_pap2] = true;
+		swap_from = weap;
+		if ( !player HasWeapon( swap_from ) && player HasWeapon( base_weap + "_pap1" ) )
+		{
+			swap_from = base_weap + "_pap1";
+		}
+		if ( swap_from != custom_pap2 && bz_pap_swap_custom_variant_preserve_slot( player, swap_from, custom_pap2 ) )
+		{
+			weap = custom_pap2;
+		}
+	}
 
 	has_double_ammo = maps\_bz_state::bz_state_has_apex( player, "double_ammo" );
 	ammo_mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, true );

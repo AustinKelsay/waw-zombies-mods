@@ -1586,6 +1586,14 @@ bz_run_gauntlet_seed()
 		{
 			p SwitchToWeapon( orig_weapon );
 		}
+		else if ( p HasWeapon( "bz_acid_sprayer_pap2" ) )
+		{
+			p SwitchToWeapon( "bz_acid_sprayer_pap2" );
+		}
+		else if ( p HasWeapon( "bz_acid_sprayer_pap1" ) )
+		{
+			p SwitchToWeapon( "bz_acid_sprayer_pap1" );
+		}
 		else if ( p HasWeapon( "bz_acid_sprayer" ) )
 		{
 			p SwitchToWeapon( "bz_acid_sprayer" );
@@ -1619,13 +1627,18 @@ bz_run_gauntlet_seed()
 
 	acid = "bz_acid_sprayer";
 	bz_test_double_pap_element( p, acid );
+	acid_live = acid;
+	if ( p HasWeapon( "bz_acid_sprayer_pap2" ) )
+	{
+		acid_live = "bz_acid_sprayer_pap2";
+	}
 	if ( !bz_has_perk_safe( p, "staminup" ) ||
 		!bz_has_perk_safe( p, "mule_kick" ) ||
 		bz_get_class_safe( p ) != "titan" ||
 		!bz_state_owns_war_club( p ) ||
 		!bz_state_has_pap_war_club( p ) ||
-		!p HasWeapon( acid ) || !p HasWeapon( "bz_cryo_cannon" ) ||
-		!bz_is_double_pap_safe( p, acid ) )
+		!p HasWeapon( acid_live ) || !p HasWeapon( "bz_cryo_cannon" ) ||
+		!bz_is_double_pap_safe( p, acid_live ) )
 	{
 		bz_log_emit( "GAUNTLET_BZ_SEED_FAIL", "reason=incomplete_seed" );
 		return;
@@ -1660,30 +1673,39 @@ bz_run_gauntlet_wipe()
 bz_test_arsenal_acid_ammo_refill( p )
 {
 	acid = "bz_acid_sprayer";
-	if ( !p HasWeapon( acid ) )
+	if ( !p HasWeapon( acid ) && !p HasWeapon( "bz_acid_sprayer_pap1" ) && !p HasWeapon( "bz_acid_sprayer_pap2" ) )
 	{
 		return false;
 	}
 
 	bz_test_double_pap_element( p, acid );
+	acid_live = acid;
+	if ( p HasWeapon( "bz_acid_sprayer_pap2" ) )
+	{
+		acid_live = "bz_acid_sprayer_pap2";
+	}
+	else if ( p HasWeapon( "bz_acid_sprayer_pap1" ) )
+	{
+		acid_live = "bz_acid_sprayer_pap1";
+	}
 	bz_on_menu_response( p, "bz_station_perks", "buy_apex:double_ammo" );
-	p SetWeaponAmmoStock( acid, 0 );
-	p SetWeaponAmmoClip( acid, 0 );
+	p SetWeaponAmmoStock( acid_live, 0 );
+	p SetWeaponAmmoClip( acid_live, 0 );
 	score_before = p.score;
 	handled = bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
 
 	// Acid Sprayer base reserve is 120 and its weaponfile maxAmmo is 360 (3x ceiling),
 	// so Double PaP (1.5x) + Double Ammo (2.0x) = 3.0x must deliver a real 360-round
 	// reserve read back from the WaW 1.7 engine, and reject a repeat click as already_full.
-	target_ok = IsDefined( p.bz_pap_target_stock ) && IsDefined( p.bz_pap_target_stock[acid] ) &&
-		p.bz_pap_target_stock[acid] == 360;
-	stock_ok = p GetWeaponAmmoStock( acid ) == 360 &&
-		p GetWeaponAmmoClip( acid ) == WeaponClipSize( acid );
+	target_ok = IsDefined( p.bz_pap_target_stock ) && IsDefined( p.bz_pap_target_stock[acid_live] ) &&
+		p.bz_pap_target_stock[acid_live] == 360;
+	stock_ok = p GetWeaponAmmoStock( acid_live ) == 360 &&
+		p GetWeaponAmmoClip( acid_live ) == WeaponClipSize( acid_live );
 	score_after_refill = p.score;
 	bz_on_menu_response( p, "bz_station_arsenal", "buy_element:acid_sprayer" );
 	repeat_blocked = ( p.score == score_after_refill );
 
-	return handled && bz_is_double_pap_safe( p, acid ) && bz_has_apex_safe( p, "double_ammo" ) &&
+	return handled && bz_is_double_pap_safe( p, acid_live ) && bz_has_apex_safe( p, "double_ammo" ) &&
 		score_after_refill == score_before - 2500 && target_ok && stock_ok && repeat_blocked;
 }
 

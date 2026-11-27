@@ -394,7 +394,7 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 		return false;
 	}
 
-	norm_weap = bz_normalize_id( ctx.weapon );
+	norm_weap = maps\_bz_rules::bz_strip_pap_suffix( ctx.weapon );
 	if ( norm_weap == "bz_acid_sprayer" )
 	{
 		return false;
@@ -412,7 +412,7 @@ bz_elem_stock_is_flamethrower_hit( ctx )
 	{
 		if ( IsDefined( ctx.attacker ) && IsPlayer( ctx.attacker ) )
 		{
-			cur_w = bz_normalize_id( ctx.attacker GetCurrentWeapon() );
+			cur_w = maps\_bz_rules::bz_strip_pap_suffix( ctx.attacker GetCurrentWeapon() );
 			if ( cur_w == "bz_acid_sprayer" )
 			{
 				return false;

@@ -311,7 +311,7 @@ class TestCouncilRound5Fixes(unittest.TestCase):
         runtime.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
         self.assertTrue(player.get_field("gauntlet_bz_restored"))
         self.assertFalse(player.get_field("gauntlet_bz_restore_pending"))
-        self.assertIn(ACID, player.weapons)
+        self.assertIn(f"{ACID}_pap2", player.weapons)
         self.assertTrue(runtime.call(BZ_STATE_MOD, "bz_state_has_perk", player, "staminup"))
 
     def test_a3_a4_g2_equipment_rejected_by_pap_and_preserved_by_arsenal(self) -> None:

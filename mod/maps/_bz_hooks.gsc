@@ -304,9 +304,15 @@ bz_precache_element_weapons()
 	level.bz_element_weapons_precached = true;
 
 	weaps = bz_get_element_primary_weapons();
+	pap_on = bz_pap_enabled();
 	for ( i = 0; i < weaps.size; i++ )
 	{
 		PrecacheItem( weaps[i] );
+		if ( pap_on )
+		{
+			PrecacheItem( weaps[i] + "_pap1" );
+			PrecacheItem( weaps[i] + "_pap2" );
+		}
 	}
 }
 

@@ -140,19 +140,20 @@ bz_gauntlet_code_to_apex( code )
 
 bz_gauntlet_weapon_to_code( weapon )
 {
-	if ( weapon == "bz_acid_sprayer" )
+	base = maps\_bz_rules::bz_strip_pap_suffix( weapon );
+	if ( base == "bz_acid_sprayer" )
 	{
 		return "ac";
 	}
-	if ( weapon == "bz_cryo_cannon" )
+	if ( base == "bz_cryo_cannon" )
 	{
 		return "cr";
 	}
-	if ( weapon == "bz_multi_crossbow" )
+	if ( base == "bz_multi_crossbow" )
 	{
 		return "xb";
 	}
-	if ( weapon == "bz_blade_boomerang" )
+	if ( base == "bz_blade_boomerang" )
 	{
 		return "bm";
 	}
@@ -521,13 +522,13 @@ encode_weapons_record( player )
 			continue;
 		}
 
-		tier = 0;
+		tier = maps\_bz_rules::bz_get_custom_pap_tier_from_weapon( weapon );
 		if ( bz_is_weapon_double_pap( player, weapon ) )
 		{
 			tier = 2;
 		}
-		else if ( maps\_bz_pap::bz_pap_is_scripted_single_pap( player, weapon ) ||
-			maps\_bz_stations::bz_stations_is_weapon_pap( player, weapon ) )
+		else if ( tier < 1 && ( maps\_bz_pap::bz_pap_is_scripted_single_pap( player, weapon ) ||
+			maps\_bz_stations::bz_stations_is_weapon_pap( player, weapon ) ) )
 		{
 			tier = 1;
 		}
@@ -858,7 +859,22 @@ restore_weapons_record( player, raw )
 	for ( i = 0; i < records.size; i++ )
 	{
 		rec = records[i];
-		weapon = rec.weapon_name;
+		base_weapon = rec.weapon_name;
+		weapon = base_weapon;
+		if ( pap_enabled && rec.pap_tier >= 1 )
+		{
+			variant = maps\_bz_rules::bz_get_custom_pap_variant( base_weapon, rec.pap_tier );
+			if ( variant != "" )
+			{
+				weapon = variant;
+			}
+		}
+
+		// Replace any lower/different variant of the same base weapon if already held
+		if ( weapon != base_weapon && player HasWeapon( base_weapon ) )
+		{
+			player TakeWeapon( base_weapon );
+		}
 		if ( !player HasWeapon( weapon ) )
 		{
 			if ( !bz_gauntlet_make_primary_room( player, max_primaries ) )
@@ -866,6 +882,11 @@ restore_weapons_record( player, raw )
 				continue;
 			}
 			player GiveWeapon( weapon );
+			if ( !player HasWeapon( weapon ) && weapon != base_weapon )
+			{
+				weapon = base_weapon;
+				player GiveWeapon( weapon );
+			}
 			if ( !player HasWeapon( weapon ) )
 			{
 				continue;
@@ -882,12 +903,14 @@ restore_weapons_record( player, raw )
 		{
 			if ( rec.pap_tier >= 1 )
 			{
+				player.bz_single_pap_weapons[base_weapon] = true;
+				player.bz_pap_weapons[base_weapon] = true;
 				player.bz_single_pap_weapons[weapon] = true;
 				player.bz_pap_weapons[weapon] = true;
 			}
 			if ( rec.pap_tier >= 2 )
 			{
-				maps\_bz_state::bz_state_mark_weapon_double_pap( player, weapon );
+				maps\_bz_state::bz_state_mark_weapon_double_pap( player, base_weapon );
 			}
 			if ( bz_is_weapon_double_pap( player, weapon ) )
 			{
