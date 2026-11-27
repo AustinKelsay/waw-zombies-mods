@@ -27,6 +27,7 @@ bz_perks_register()
 	}
 	level.bz_perks_registered = true;
 
+	bz_register_hook( "pre_init", ::bz_perks_pre_init, "perks" );
 	bz_register_hook( "init", ::bz_perks_init, "perks" );
 	bz_register_hook( "player_connect", ::bz_perks_on_player_connect, "perks" );
 	bz_register_hook( "player_spawned", ::bz_perks_on_player_spawned, "perks" );
@@ -1775,8 +1776,282 @@ bz_perks_sync_stock_perks( player )
 }
 
 // ---------------------------------------------------------------------------
-// Compact ASCII Right-Lane Perks HUD (Per-Player, Zero Leaks)
+// Pre-Wait Shader Precache (Wave 4 / Sheet 11 -- 14 Perk/T2/Apex 2D HUD Icons)
 // ---------------------------------------------------------------------------
+
+bz_perks_pre_init()
+{
+	if ( !bz_perks_enabled() )
+	{
+		return;
+	}
+	if ( IsDefined( level.bz_perks_precached ) && level.bz_perks_precached )
+	{
+		return;
+	}
+	level.bz_perks_precached = true;
+	PrecacheShader( "bz_icon_perk_staminup" );
+	PrecacheShader( "bz_icon_perk_mulekick" );
+	PrecacheShader( "bz_icon_perk_armorpiercing" );
+	PrecacheShader( "bz_icon_perk_jugg_t2" );
+	PrecacheShader( "bz_icon_perk_speed_t2" );
+	PrecacheShader( "bz_icon_perk_dtap_t2" );
+	PrecacheShader( "bz_icon_perk_revive_t2" );
+	PrecacheShader( "bz_icon_perk_staminup_t2" );
+	PrecacheShader( "bz_icon_perk_mulekick_t2" );
+	PrecacheShader( "bz_icon_perk_armorpiercing_t2" );
+	PrecacheShader( "bz_icon_apex_dblammo" );
+	PrecacheShader( "bz_icon_apex_lightheavy" );
+	PrecacheShader( "bz_icon_apex_secondchance" );
+	PrecacheShader( "bz_icon_apex_blastshield" );
+}
+
+// ---------------------------------------------------------------------------
+// Bottom-Left Perk/Tier-2/Apex Icons (shared player.perk_hud) + STATUS Lane y(50)
+// ---------------------------------------------------------------------------
+
+bz_perks_get_stock_perk_key( perk_id )
+{
+	if ( perk_id == "juggernog" ) { return "specialty_armorvest"; }
+	if ( perk_id == "speed_cola" ) { return "specialty_fastreload"; }
+	if ( perk_id == "double_tap" ) { return "specialty_rof"; }
+	if ( perk_id == "quick_revive" ) { return "specialty_quickrevive"; }
+	return "";
+}
+
+bz_perks_get_icon_shader( perk_id, is_t2 )
+{
+	if ( perk_id == "juggernog" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_jugg_t2"; }
+		return "specialty_juggernaut_zombies";
+	}
+	if ( perk_id == "speed_cola" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_speed_t2"; }
+		return "specialty_fastreload_zombies";
+	}
+	if ( perk_id == "double_tap" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_dtap_t2"; }
+		return "specialty_doubletap_zombies";
+	}
+	if ( perk_id == "quick_revive" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_revive_t2"; }
+		return "specialty_quickrevive_zombies";
+	}
+	if ( perk_id == "staminup" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_staminup_t2"; }
+		return "bz_icon_perk_staminup";
+	}
+	if ( perk_id == "mule_kick" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_mulekick_t2"; }
+		return "bz_icon_perk_mulekick";
+	}
+	if ( perk_id == "ap" )
+	{
+		if ( is_t2 ) { return "bz_icon_perk_armorpiercing_t2"; }
+		return "bz_icon_perk_armorpiercing";
+	}
+	return "";
+}
+
+bz_perks_get_apex_icon_shader( apex_id )
+{
+	if ( apex_id == "double_ammo" ) { return "bz_icon_apex_dblammo"; }
+	if ( apex_id == "lightweight_heavy" ) { return "bz_icon_apex_lightheavy"; }
+	if ( apex_id == "second_chance" ) { return "bz_icon_apex_secondchance"; }
+	if ( apex_id == "blast_shield" ) { return "bz_icon_apex_blastshield"; }
+	return "";
+}
+
+bz_perks_track_hud_elem( hud )
+{
+	if ( !IsDefined( hud ) )
+	{
+		return;
+	}
+	if ( !IsDefined( level.bz_perks_hud_elems ) )
+	{
+		level.bz_perks_hud_elems = [];
+	}
+	level.bz_perks_hud_elems[level.bz_perks_hud_elems.size] = hud;
+}
+
+bz_perks_untrack_hud_elem( hud )
+{
+	if ( !IsDefined( hud ) || !IsDefined( level.bz_perks_hud_elems ) )
+	{
+		return;
+	}
+	for ( i = 0; i < level.bz_perks_hud_elems.size; i++ )
+	{
+		if ( IsDefined( level.bz_perks_hud_elems[i] ) && level.bz_perks_hud_elems[i] == hud )
+		{
+			level.bz_perks_hud_elems[i] = undefined;
+		}
+	}
+}
+
+bz_perks_count_active_perk_hud_slots( player )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.perk_hud ) )
+	{
+		return 0;
+	}
+	keys = GetArrayKeys( player.perk_hud );
+	cnt = 0;
+	for ( i = 0; i < keys.size; i++ )
+	{
+		if ( IsDefined( player.perk_hud[keys[i]] ) )
+		{
+			cnt = cnt + 1;
+		}
+	}
+	return cnt;
+}
+
+bz_perks_ensure_perk_icon_slot( player, slot_key, shader )
+{
+	if ( !IsDefined( player ) || !IsDefined( slot_key ) || slot_key == "" || !IsDefined( shader ) || shader == "" )
+	{
+		return undefined;
+	}
+	if ( !IsDefined( player.perk_hud ) )
+	{
+		player.perk_hud = [];
+	}
+	if ( !IsDefined( player.bz_perk_icon_keys ) )
+	{
+		player.bz_perk_icon_keys = [];
+	}
+
+	if ( IsDefined( player.perk_hud[slot_key] ) )
+	{
+		existing = player.perk_hud[slot_key];
+		if ( !IsDefined( existing.bz_shader ) || existing.bz_shader != shader )
+		{
+			existing SetShader( shader, 24, 24 );
+			existing.bz_shader = shader;
+		}
+		return existing;
+	}
+
+	slot_idx = bz_perks_count_active_perk_hud_slots( player );
+	hud = NewClientHudElem( player );
+	hud.foreground = true;
+	hud.sort = 1;
+	hud.hidewheninmenu = false;
+	hud.alignX = "left";
+	hud.alignY = "bottom";
+	hud.horzAlign = "left";
+	hud.vertAlign = "bottom";
+	hud.x = slot_idx * 30;
+	hud.y = -70;
+	hud.alpha = 1;
+	hud SetShader( shader, 24, 24 );
+	hud.bz_shader = shader;
+
+	player.perk_hud[slot_key] = hud;
+	player.bz_perk_icon_keys[slot_key] = true;
+	bz_perks_track_hud_elem( hud );
+	return hud;
+}
+
+bz_perks_remove_owned_perk_icon( player, slot_key )
+{
+	if ( !IsDefined( player ) || !IsDefined( player.bz_perk_icon_keys ) )
+	{
+		return false;
+	}
+	if ( !IsDefined( player.bz_perk_icon_keys[slot_key] ) || !player.bz_perk_icon_keys[slot_key] )
+	{
+		return false;
+	}
+	player.bz_perk_icon_keys[slot_key] = false;
+	if ( IsDefined( player.perk_hud ) && IsDefined( player.perk_hud[slot_key] ) )
+	{
+		elem = player.perk_hud[slot_key];
+		player.perk_hud[slot_key] = undefined;
+		bz_perks_untrack_hud_elem( elem );
+		elem Destroy();
+		return true;
+	}
+	return false;
+}
+
+bz_perks_sync_perk_icons( player )
+{
+	if ( !bz_perks_enabled() || !IsDefined( player ) )
+	{
+		return;
+	}
+
+	// 1. Stock perks: upgrade existing player.perk_hud[stock_key] in-place on Tier 2 (0 extra elems!)
+	stock_ids = [];
+	stock_ids[0] = "juggernog";
+	stock_ids[1] = "speed_cola";
+	stock_ids[2] = "double_tap";
+	stock_ids[3] = "quick_revive";
+	for ( i = 0; i < stock_ids.size; i++ )
+	{
+		pid = stock_ids[i];
+		skey = bz_perks_get_stock_perk_key( pid );
+		has_p = bz_state_has_perk( player, pid );
+		has_t2 = has_p && bz_state_has_perk_t2( player, pid );
+		if ( has_t2 )
+		{
+			bz_perks_ensure_perk_icon_slot( player, skey, bz_perks_get_icon_shader( pid, true ) );
+		}
+		else if ( !has_p )
+		{
+			bz_perks_remove_owned_perk_icon( player, skey );
+		}
+	}
+
+	// 2. New Standard Perks (Beveled Steel Square -> Baked Gold T2 Square in-place)
+	new_ids = [];
+	new_ids[0] = "staminup";
+	new_ids[1] = "mule_kick";
+	new_ids[2] = "ap";
+	for ( i = 0; i < new_ids.size; i++ )
+	{
+		pid = new_ids[i];
+		skey = "bz_perk_" + pid;
+		if ( bz_state_has_perk( player, pid ) )
+		{
+			is_t2 = bz_state_has_perk_t2( player, pid );
+			bz_perks_ensure_perk_icon_slot( player, skey, bz_perks_get_icon_shader( pid, is_t2 ) );
+		}
+		else
+		{
+			bz_perks_remove_owned_perk_icon( player, skey );
+		}
+	}
+
+	// 3. Apex Perks (Circular Antique-Bronze Medallions)
+	apex_ids = [];
+	apex_ids[0] = "double_ammo";
+	apex_ids[1] = "lightweight_heavy";
+	apex_ids[2] = "second_chance";
+	apex_ids[3] = "blast_shield";
+	for ( i = 0; i < apex_ids.size; i++ )
+	{
+		aid = apex_ids[i];
+		skey = "bz_apex_" + aid;
+		if ( bz_state_has_apex( player, aid ) )
+		{
+			bz_perks_ensure_perk_icon_slot( player, skey, bz_perks_get_apex_icon_shader( aid ) );
+		}
+		else
+		{
+			bz_perks_remove_owned_perk_icon( player, skey );
+		}
+	}
+}
 
 bz_perks_collect_hud_tokens( player )
 {
@@ -1786,68 +2061,40 @@ bz_perks_collect_hud_tokens( player )
 		return tokens;
 	}
 
-	// Tier 2 upgrades on stock perks
-	if ( bz_state_has_perk_t2( player, "juggernog" ) )
+	// Consolidated live dynamic gameplay readouts ONLY (static perk/class badges moved to 2D icons):
+	// 1-3. Live Class combat readouts (GREN: clip+reserve, 2X DMG, BURST)
+	if ( GetDvarInt( "bz_classes_enabled" ) == 1 )
 	{
-		tokens[tokens.size] = "JUG II";
-	}
-	if ( bz_state_has_perk_t2( player, "speed_cola" ) )
-	{
-		tokens[tokens.size] = "SPD II";
-	}
-	if ( bz_state_has_perk_t2( player, "double_tap" ) )
-	{
-		tokens[tokens.size] = "DT II";
-	}
-	if ( bz_state_has_perk_t2( player, "quick_revive" ) )
-	{
-		tokens[tokens.size] = "QR II";
-	}
-
-	// Custom Standard Perks & their Tier 2 upgrades
-	if ( bz_state_has_perk( player, "staminup" ) )
-	{
-		if ( bz_state_has_perk_t2( player, "staminup" ) )
+		active_class = maps\_bz_state::bz_state_get_class( player );
+		if ( active_class == "sapper" && IsDefined( player.bz_sapper_grenade_reserve ) && Int( player.bz_sapper_grenade_reserve ) > 0 )
 		{
-			tokens[tokens.size] = "STAM II";
+			frag = "stielhandgranate";
+			if ( GetDvarInt( "bz_pap_enabled" ) == 1 && player HasWeapon( "bz_pap_cluster_grenade" ) )
+			{
+				frag = "bz_pap_cluster_grenade";
+			}
+			else if ( IsDefined( player.bz_frag_weapon ) && player.bz_frag_weapon != "" )
+			{
+				frag = player.bz_frag_weapon;
+			}
+			cur_clip = Int( player GetWeaponAmmoClip( frag ) );
+			if ( cur_clip < 0 )
+			{
+				cur_clip = 0;
+			}
+			tokens[tokens.size] = "GREN: " + cur_clip + "+" + Int( player.bz_sapper_grenade_reserve );
 		}
-		else
+		else if ( active_class == "titan" && IsDefined( player.bz_titan_is_stationary ) && player.bz_titan_is_stationary )
 		{
-			tokens[tokens.size] = "STAM";
+			tokens[tokens.size] = "2X DMG";
 		}
-	}
-	if ( bz_state_has_perk( player, "mule_kick" ) )
-	{
-		if ( bz_state_has_perk_t2( player, "mule_kick" ) )
+		else if ( active_class == "daredevil" && IsDefined( player.bz_daredevil_burst_active ) && player.bz_daredevil_burst_active )
 		{
-			tokens[tokens.size] = "MULE II";
-		}
-		else
-		{
-			tokens[tokens.size] = "MULE";
-		}
-	}
-	if ( bz_state_has_perk( player, "ap" ) )
-	{
-		if ( bz_state_has_perk_t2( player, "ap" ) )
-		{
-			tokens[tokens.size] = "AP II";
-		}
-		else
-		{
-			tokens[tokens.size] = "AP";
+			tokens[tokens.size] = "BURST";
 		}
 	}
 
-	// Apex Perks
-	if ( bz_state_has_apex( player, "double_ammo" ) )
-	{
-		tokens[tokens.size] = "2X AMMO";
-	}
-	if ( bz_state_has_apex( player, "lightweight_heavy" ) )
-	{
-		tokens[tokens.size] = "LW HVY";
-	}
+	// 4. Live Second Chance state (RDY/USED)
 	if ( bz_state_has_apex( player, "second_chance" ) )
 	{
 		if ( IsDefined( player.bz_second_chance_ready ) && player.bz_second_chance_ready )
@@ -1859,12 +2106,8 @@ bz_perks_collect_hud_tokens( player )
 			tokens[tokens.size] = "2ND CH[USED]";
 		}
 	}
-	if ( bz_state_has_apex( player, "blast_shield" ) )
-	{
-		tokens[tokens.size] = "BLAST";
-	}
 
-	// Compact live Solo QR charge & active invulnerability tags
+	// 5-6. Live Solo QR charge count & active post-revive invulnerability
 	if ( bz_perks_is_solo() && IsDefined( player.bz_extra_solo_revives ) && Int( player.bz_extra_solo_revives ) > 0 )
 	{
 		tokens[tokens.size] = "QRx" + Int( player.bz_extra_solo_revives );
@@ -1903,18 +2146,12 @@ bz_perks_format_hud_text( player )
 	{
 		return "";
 	}
-	// Cap row 1 at 5 tokens (~46 chars) so maxed perk loadouts never overflow a 640px virtual HUD
-	return bz_perks_format_hud_range( tokens, 0, 5, "PERKS: " );
+	return bz_perks_format_hud_range( tokens, 0, tokens.size, "STATUS: " );
 }
 
 bz_perks_format_hud_row2_text( player )
 {
-	tokens = bz_perks_collect_hud_tokens( player );
-	if ( tokens.size <= 5 )
-	{
-		return "";
-	}
-	return bz_perks_format_hud_range( tokens, 5, tokens.size, "PERKS+: " );
+	return "";
 }
 
 bz_perks_update_hud( player )
@@ -1924,19 +2161,15 @@ bz_perks_update_hud( player )
 		return false;
 	}
 
+	bz_perks_sync_perk_icons( player );
+
 	text = bz_perks_format_hud_text( player );
-	text2 = bz_perks_format_hud_row2_text( player );
 	if ( text == "" )
 	{
 		if ( IsDefined( player.bz_perks_hud ) )
 		{
 			player.bz_perks_hud.alpha = 0;
 			player.bz_perks_hud_text = "";
-		}
-		if ( IsDefined( player.bz_perks_hud_row2 ) )
-		{
-			player.bz_perks_hud_row2.alpha = 0;
-			player.bz_perks_hud_row2_text = "";
 		}
 		return true;
 	}
@@ -1949,7 +2182,7 @@ bz_perks_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 32 );
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 50 );
 		hud.foreground = true;
 		hud.sort = 5;
 		hud.hidewheninmenu = true;
@@ -1957,12 +2190,7 @@ bz_perks_update_hud( player )
 		hud.color = ( 0.65, 0.92, 1.0 );
 		hud.alpha = 0.92;
 		player.bz_perks_hud = hud;
-
-		if ( !IsDefined( level.bz_perks_hud_elems ) )
-		{
-			level.bz_perks_hud_elems = [];
-		}
-		level.bz_perks_hud_elems[level.bz_perks_hud_elems.size] = hud;
+		bz_perks_track_hud_elem( hud );
 	}
 
 	player.bz_perks_hud.alpha = 0.92;
@@ -1970,47 +2198,6 @@ bz_perks_update_hud( player )
 	{
 		player.bz_perks_hud SetText( text );
 		player.bz_perks_hud_text = text;
-	}
-
-	if ( text2 == "" )
-	{
-		if ( IsDefined( player.bz_perks_hud_row2 ) )
-		{
-			player.bz_perks_hud_row2.alpha = 0;
-			player.bz_perks_hud_row2_text = "";
-		}
-		return true;
-	}
-
-	if ( !IsDefined( player.bz_perks_hud_row2 ) )
-	{
-		hud2 = NewClientHudElem( player );
-		hud2.alignX = "right";
-		hud2.alignY = "top";
-		hud2.horzAlign = "right";
-		hud2.vertAlign = "top";
-		hud2.x = -12;
-		hud2.y = maps\_bz_hooks::bz_get_hud_lane_y( 84 );
-		hud2.foreground = true;
-		hud2.sort = 5;
-		hud2.hidewheninmenu = true;
-		hud2.fontScale = 1.05;
-		hud2.color = ( 0.95, 0.85, 0.45 );
-		hud2.alpha = 0.92;
-		player.bz_perks_hud_row2 = hud2;
-
-		if ( !IsDefined( level.bz_perks_hud_elems ) )
-		{
-			level.bz_perks_hud_elems = [];
-		}
-		level.bz_perks_hud_elems[level.bz_perks_hud_elems.size] = hud2;
-	}
-
-	player.bz_perks_hud_row2.alpha = 0.92;
-	if ( !IsDefined( player.bz_perks_hud_row2_text ) || player.bz_perks_hud_row2_text != text2 )
-	{
-		player.bz_perks_hud_row2 SetText( text2 );
-		player.bz_perks_hud_row2_text = text2;
 	}
 	return true;
 }
@@ -2023,20 +2210,24 @@ bz_perks_destroy_hud( player )
 	}
 
 	destroyed = false;
+	if ( IsDefined( player.bz_perk_icon_keys ) )
+	{
+		icon_keys = GetArrayKeys( player.bz_perk_icon_keys );
+		for ( i = 0; i < icon_keys.size; i++ )
+		{
+			if ( bz_perks_remove_owned_perk_icon( player, icon_keys[i] ) )
+			{
+				destroyed = true;
+			}
+		}
+		player.bz_perk_icon_keys = undefined;
+	}
+
 	if ( IsDefined( player.bz_perks_hud_row2 ) )
 	{
 		hud2 = player.bz_perks_hud_row2;
 		hud2 Destroy();
-		if ( IsDefined( level.bz_perks_hud_elems ) )
-		{
-			for ( i = 0; i < level.bz_perks_hud_elems.size; i++ )
-			{
-				if ( IsDefined( level.bz_perks_hud_elems[i] ) && level.bz_perks_hud_elems[i] == hud2 )
-				{
-					level.bz_perks_hud_elems[i] = undefined;
-				}
-			}
-		}
+		bz_perks_untrack_hud_elem( hud2 );
 		player.bz_perks_hud_row2 = undefined;
 		player.bz_perks_hud_row2_text = undefined;
 		destroyed = true;
@@ -2046,16 +2237,7 @@ bz_perks_destroy_hud( player )
 	{
 		hud = player.bz_perks_hud;
 		hud Destroy();
-		if ( IsDefined( level.bz_perks_hud_elems ) )
-		{
-			for ( i = 0; i < level.bz_perks_hud_elems.size; i++ )
-			{
-				if ( IsDefined( level.bz_perks_hud_elems[i] ) && level.bz_perks_hud_elems[i] == hud )
-				{
-					level.bz_perks_hud_elems[i] = undefined;
-				}
-			}
-		}
+		bz_perks_untrack_hud_elem( hud );
 		player.bz_perks_hud = undefined;
 		player.bz_perks_hud_text = undefined;
 		destroyed = true;

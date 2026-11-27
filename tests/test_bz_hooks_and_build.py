@@ -482,6 +482,12 @@ class BzGscRuntime(GscRuntime):
             elem.set_field("owner", args[0] if args else UNDEFINED)
             elem.set_field("destroyed", False)
             return True, elem
+        if name_lower == "precacheshader":
+            shader = _waw_to_str(args[0]) if args else ""
+            if not hasattr(self, "precached_shaders"):
+                self.precached_shaders = []
+            self.precached_shaders.append(shader)
+            return True, UNDEFINED
         if name_lower == "weaponmaxammo":
             return True, 160
         if name_lower == "weaponclipsize":
@@ -562,6 +568,15 @@ class BzGscRuntime(GscRuntime):
         if method == "setmodel":
             if isinstance(receiver, FakeEntity):
                 receiver.set_field("model", _waw_to_str(args[0]) if args else "")
+            return UNDEFINED
+        if method == "setshader":
+            if isinstance(receiver, GscStruct):
+                shader = _waw_to_str(args[0]) if len(args) > 0 else ""
+                w = int(args[1]) if len(args) > 1 else 0
+                h = int(args[2]) if len(args) > 2 else 0
+                receiver.set_field("shader", shader)
+                receiver.set_field("shader_w", w)
+                receiver.set_field("shader_h", h)
             return UNDEFINED
         if method == "moveto":
             if isinstance(receiver, FakeEntity) and args:

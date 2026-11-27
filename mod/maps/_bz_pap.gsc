@@ -63,6 +63,7 @@ bz_pap_on_pre_init()
 	PrecacheItem( "bz_pap_knife" );
 	PrecacheItem( "bz_pap_bowie" );
 	PrecacheModel( "bz_pap_cluster_sub" );
+	PrecacheShader( "bz_icon_pap2_badge" );
 }
 
 bz_pap_ensure_player_tables( player )
@@ -136,7 +137,7 @@ bz_pap_is_scripted_single_pap( player, weapon_name )
 	{
 		return false;
 	}
-	base = maps\_bz_rules::bz_strip_pap_suffix( norm );
+	base = bz_strip_pap_suffix( norm );
 	if ( IsDefined( player.bz_single_pap_weapons ) )
 	{
 		if ( ( IsDefined( player.bz_single_pap_weapons[norm] ) && player.bz_single_pap_weapons[norm] ) ||
@@ -236,7 +237,7 @@ bz_pap_apply_reserve_ammo( player, weapon_name )
 	}
 
 	has_double_ammo = maps\_bz_state::bz_state_has_apex( player, "double_ammo" );
-	is_dpap = maps\_bz_state::bz_state_is_weapon_double_pap( player, weap );
+	is_dpap = bz_state_is_weapon_double_pap( player, weap );
 	ammo_mult = maps\_bz_rules::bz_calc_reserve_ammo_mult( has_double_ammo, is_dpap );
 
 	base_max = maps\_bz_rules::bz_get_canonical_base_reserve( weap, WeaponMaxAmmo( weap ) );
@@ -279,7 +280,7 @@ bz_pap_refresh_double_pap_ammo( player )
 		for ( i = 0; i < primaries.size; i++ )
 		{
 			w = bz_normalize_id( primaries[i] );
-			if ( w != "" && maps\_bz_state::bz_state_is_weapon_double_pap( player, w ) )
+			if ( w != "" && bz_state_is_weapon_double_pap( player, w ) )
 			{
 				bz_pap_apply_reserve_ammo( player, w );
 			}
@@ -379,7 +380,7 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 	}
 
 	map_name = bz_get_map_name();
-	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	base_weap = bz_strip_pap_suffix( weap );
 	native_weap = bz_pap_resolve_native_upgrade( weap );
 	custom_pap1 = maps\_bz_rules::bz_get_custom_pap_variant( base_weap, 1 );
 	final_weap = weap;
@@ -439,7 +440,7 @@ bz_pap_apply_single_pap_with_source( player, weapon_name, console_source )
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "map", map_name );
 	fields[2] = bz_log_kv( "weapon", weap );
 	fields[3] = bz_log_kv( "upgraded", final_weap );
@@ -472,7 +473,7 @@ bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 		return false;
 	}
 
-	base_weap = maps\_bz_rules::bz_strip_pap_suffix( weap );
+	base_weap = bz_strip_pap_suffix( weap );
 	maps\_bz_state::bz_state_mark_weapon_double_pap( player, base_weap );
 
 	custom_pap2 = maps\_bz_rules::bz_get_custom_pap_variant( base_weap, 2 );
@@ -500,7 +501,7 @@ bz_pap_apply_double_pap_effect( player, weapon_name, console_source )
 	dmg_mult = maps\_bz_rules::bz_calc_bullet_damage_mult( false, false, false, true, "", false, false );
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "map", bz_get_map_name() );
 	fields[2] = bz_log_kv( "weapon", weap );
 	fields[3] = bz_log_kv( "dmg_mult", dmg_mult );
@@ -715,7 +716,7 @@ bz_pap_try_native_console_upgrade( trigger, player, current_weapon, perk_machine
 	}
 
 	// Case D: Already Double Pack-a-Punched weapon -> play deny sound and consume cleanly.
-	if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weap ) )
+	if ( bz_state_is_weapon_double_pap( player, weap ) )
 	{
 		player.bz_pap_console_next_ms = now + 750;
 		bz_pap_play_console_deny( trigger );
@@ -933,7 +934,7 @@ bz_pap_is_bowie_melee( player, weapon_name )
 	{
 		return true;
 	}
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
+	if ( bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
 	{
 		return true;
 	}
@@ -974,7 +975,7 @@ bz_pap_apply_melee_upgrade( player, upgrade_id )
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "upgrade", id );
 	fields[2] = bz_log_kv( "effect", effect );
 	bz_log_emit( "PAP_MELEE_UPGRADE", bz_log_join( fields ) );
@@ -1060,7 +1061,7 @@ bz_pap_apply_cluster_upgrade( player )
 
 	max_nades = maps\_bz_state::bz_state_get_max_grenades( player );
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "max_grenades", max_nades );
 	bz_log_emit( "PAP_CLUSTER_UPGRADE", bz_log_join( fields ) );
 
@@ -1241,7 +1242,7 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 	}
 
 	fields = [];
-	fields[0] = bz_log_kv( "player", maps\_bz_hooks::bz_get_player_label( player ) );
+	fields[0] = bz_log_kv( "player", bz_get_player_label( player ) );
 	fields[1] = bz_log_kv( "round", round_num );
 	fields[2] = bz_log_kv( "primary_dmg", spec.primary_damage );
 	fields[3] = bz_log_kv( "mini_dmg", spec.mini_damage );
@@ -1278,27 +1279,24 @@ bz_pap_format_hud_text( player, weapon_name )
 	weap = bz_pap_get_weapon_safe( player, weapon_name );
 	parts = [];
 
+	// Mutually exclusive with Double-PaP "II" diamond badge (y=68): emit "PAP I" text only for single PaP.
 	if ( weap != "" )
 	{
-		if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weap ) )
-		{
-			parts[parts.size] = "PAP II";
-		}
-		else if ( bz_pap_is_scripted_single_pap( player, weap ) )
+		if ( !bz_state_is_weapon_double_pap( player, weap ) && bz_pap_is_scripted_single_pap( player, weap ) )
 		{
 			parts[parts.size] = "PAP I";
 		}
 	}
 
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
+	if ( bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
 	{
 		parts[parts.size] = "KNIFE+";
 	}
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
+	if ( bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
 	{
 		parts[parts.size] = "BOWIE+";
 	}
-	if ( maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_cluster", "" ) )
+	if ( bz_state_has_pap_upgrade( player, "pap_cluster", "" ) )
 	{
 		parts[parts.size] = "CLUSTER";
 	}
@@ -1336,6 +1334,41 @@ bz_pap_update_hud( player )
 		return;
 	}
 
+	// 1. Brushed-steel #ffdc82 Double-PaP "II" Diamond icon at x=-12, y=bz_get_hud_lane_y(68)
+	cur_weap = bz_pap_get_weapon_safe( player, "" );
+	is_dpap = cur_weap != "" && bz_state_is_weapon_double_pap( player, cur_weap );
+	if ( is_dpap )
+	{
+		if ( !IsDefined( player.bz_pap2_icon_hud ) )
+		{
+			icon = NewClientHudElem( player );
+			icon.alignX = "right";
+			icon.alignY = "top";
+			icon.horzAlign = "right";
+			icon.vertAlign = "top";
+			icon.x = -12;
+			icon.y = maps\_bz_hooks::bz_get_hud_lane_y( 68 );
+			icon.foreground = true;
+			icon.sort = 6;
+			icon.hidewheninmenu = true;
+			icon.alpha = 0.95;
+			icon SetShader( "bz_icon_pap2_badge", 28, 28 );
+			player.bz_pap2_icon_hud = icon;
+			bz_pap_track_hud_elem( icon );
+		}
+		player.bz_pap2_icon_hud.alpha = 0.95;
+		player.bz_pap2_badge_visible = true;
+	}
+	else
+	{
+		if ( IsDefined( player.bz_pap2_icon_hud ) )
+		{
+			player.bz_pap2_icon_hud.alpha = 0;
+		}
+		player.bz_pap2_badge_visible = false;
+	}
+
+	// 2. UPGRADES lane at y=bz_get_hud_lane_y(14) (PAP I / KNIFE+ / BOWIE+ / CLUSTER)
 	text = bz_pap_format_hud_text( player, "" );
 	if ( text == "" )
 	{
@@ -1355,7 +1388,7 @@ bz_pap_update_hud( player )
 		hud.horzAlign = "right";
 		hud.vertAlign = "top";
 		hud.x = -12;
-		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 50 );
+		hud.y = maps\_bz_hooks::bz_get_hud_lane_y( 14 );
 		hud.foreground = true;
 		hud.sort = 6;
 		hud.hidewheninmenu = true;
@@ -1446,7 +1479,7 @@ bz_pap_format_native_prompt_text( player, weapon_name )
 		return "";
 	}
 
-	if ( maps\_bz_state::bz_state_is_weapon_double_pap( player, weap ) )
+	if ( bz_state_is_weapon_double_pap( player, weap ) )
 	{
 		return "Weapon Already Double Pack-a-Punched (PAP II)";
 	}
@@ -1607,6 +1640,16 @@ bz_pap_destroy_player_hud( player )
 	}
 
 	destroyed = false;
+	if ( IsDefined( player.bz_pap2_icon_hud ) )
+	{
+		icon = player.bz_pap2_icon_hud;
+		player.bz_pap2_icon_hud = undefined;
+		bz_pap_untrack_hud_elem( icon );
+		icon Destroy();
+		destroyed = true;
+	}
+	player.bz_pap2_badge_visible = false;
+
 	if ( IsDefined( player.bz_pap_hud ) )
 	{
 		hud = player.bz_pap_hud;
@@ -1795,11 +1838,11 @@ bz_pap_resolve_melee_viewmodel( player )
 	{
 		return "";
 	}
-	if ( ( slot == "bowie" || player HasPerk( "specialty_altmelee" ) ) && maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
+	if ( ( slot == "bowie" || player HasPerk( "specialty_altmelee" ) ) && bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
 	{
 		return "bz_pap_bowie";
 	}
-	if ( slot != "bowie" && !player HasPerk( "specialty_altmelee" ) && maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
+	if ( slot != "bowie" && !player HasPerk( "specialty_altmelee" ) && bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
 	{
 		return "bz_pap_knife";
 	}
@@ -1900,7 +1943,7 @@ bz_pap_watch_grenade_throws()
 		{
 			continue;
 		}
-		if ( !maps\_bz_state::bz_state_has_pap_upgrade( self, "pap_cluster", "" ) )
+		if ( !bz_state_has_pap_upgrade( self, "pap_cluster", "" ) )
 		{
 			continue;
 		}
@@ -2233,8 +2276,8 @@ bz_pap_on_actor_damage( zombie, ctx )
 			return;
 		}
 
-		has_pap_knife = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_knife", "" );
-		has_pap_bowie = maps\_bz_state::bz_state_has_pap_upgrade( attacker, "pap_bowie", "" );
+		has_pap_knife = bz_state_has_pap_upgrade( attacker, "pap_knife", "" );
+		has_pap_bowie = bz_state_has_pap_upgrade( attacker, "pap_bowie", "" );
 		if ( !has_pap_knife && !has_pap_bowie )
 		{
 			return;
@@ -2307,7 +2350,7 @@ bz_pap_on_actor_damage( zombie, ctx )
 	}
 
 	// Double Pack-a-Punch grants +75% bullet damage (strictly independent of Elemental Weapons).
-	if ( maps\_bz_state::bz_state_is_weapon_double_pap( attacker, weap ) )
+	if ( bz_state_is_weapon_double_pap( attacker, weap ) )
 	{
 		dpap_mult = maps\_bz_rules::bz_calc_bullet_damage_mult( false, false, false, true, "", false, false );
 		ctx.damage_mult = ctx.damage_mult * dpap_mult;
@@ -2351,6 +2394,26 @@ bz_log_kv( key, value )
 bz_normalize_id( raw_id )
 {
 	return maps\_bz_rules::bz_normalize_id( raw_id );
+}
+
+bz_strip_pap_suffix( weapon_name )
+{
+	return maps\_bz_rules::bz_strip_pap_suffix( weapon_name );
+}
+
+bz_state_has_pap_upgrade( player, upgrade_id, weapon_name )
+{
+	return maps\_bz_state::bz_state_has_pap_upgrade( player, upgrade_id, weapon_name );
+}
+
+bz_state_is_weapon_double_pap( player, weapon_name )
+{
+	return maps\_bz_state::bz_state_is_weapon_double_pap( player, weapon_name );
+}
+
+bz_get_player_label( player )
+{
+	return maps\_bz_hooks::bz_get_player_label( player );
 }
 
 // Local function pointers used by the gated live selftests.

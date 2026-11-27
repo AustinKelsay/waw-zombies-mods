@@ -53,6 +53,8 @@ class FakeHudElem(GscStruct):
         self.owner = owner
         self.text: str = ""
         self.set_text_calls: list[str] = []
+        self.shader: str = ""
+        self.shader_history: list[tuple[str, int, int]] = []
         self.destroyed: bool = False
 
 
@@ -129,6 +131,13 @@ class BzClassesRuntime(BzGscRuntime):
                 txt = _waw_to_str(args[0]) if args else ""
                 receiver.text = txt
                 receiver.set_text_calls.append(txt)
+                return UNDEFINED
+            if method == "setshader":
+                sh = _waw_to_str(args[0]) if len(args) > 0 else ""
+                w = int(args[1]) if len(args) > 1 else 0
+                h = int(args[2]) if len(args) > 2 else 0
+                receiver.shader = sh
+                receiver.shader_history.append((sh, w, h))
                 return UNDEFINED
             if method == "destroy":
                 receiver.destroyed = True
@@ -271,17 +280,18 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
         self.assertEqual(self.p1.get_field("maxhealth"), 200)
         self.assertAlmostEqual(self.p1.get_field("bz_aggro_weight"), 2.0)
 
-        # HUD badge created on top-right lane with ASCII text
+        # Wave 4 (Sheet 11): Bottom-left Class Heraldic Shield icon (28x28u at x=12, y=-118) replaces static text spam
         self.assertEqual(len(self.gsc.hud_elems), 1)
-        hud = self.gsc.hud_elems[0]
-        self.assertIs(hud.owner, self.p1)
-        self.assertEqual(hud.get_field("alignX"), "right")
-        self.assertEqual(hud.get_field("horzAlign"), "right")
-        self.assertEqual(hud.get_field("x"), -12)
-        self.assertEqual(hud.get_field("y"), 14)
-        self.assertEqual(hud.text, "CLASS: TITAN")
-        self.assertTrue(all(32 <= ord(ch) <= 126 for ch in hud.text))
-        self.assertFalse(hud.destroyed)
+        icon = self.gsc.hud_elems[0]
+        self.assertIs(icon.owner, self.p1)
+        self.assertEqual(icon.get_field("alignX"), "left")
+        self.assertEqual(icon.get_field("horzAlign"), "left")
+        self.assertEqual(icon.get_field("vertAlign"), "bottom")
+        self.assertEqual(icon.get_field("x"), 12)
+        self.assertEqual(icon.get_field("y"), -118)
+        self.assertEqual(icon.shader, "bz_icon_class_titan")
+        self.assertEqual(icon.shader_history[-1], ("bz_icon_class_titan", 28, 28))
+        self.assertFalse(icon.destroyed)
 
         # Emitted CLASS_EQUIPPED telemetry
         self.assertIn(
@@ -289,7 +299,7 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
             self.gsc.emitted_events,
         )
 
-        # Swap Titan -> Sapper: tears down Titan 2x HP & aggro, equips Sapper 10 grenades, reuses same HUD elem
+        # Swap Titan -> Sapper: tears down Titan 2x HP & aggro, equips Sapper 10 grenades, reuses same icon elem
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:sapper")
         )
@@ -297,43 +307,45 @@ class TestBzClassesLifecycleHudAndCompliance(unittest.TestCase):
         self.assertEqual(self.p1.get_field("maxhealth"), 100)
         self.assertAlmostEqual(self.p1.get_field("bz_aggro_weight"), 1.0)
         self.assertEqual(self.p1.ammo_clip["stielhandgranate"], 10)
-        self.assertEqual(len(self.gsc.hud_elems), 1, "HUD elem must be reused on swap, not leaked")
-        self.assertEqual(hud.text, "CLASS: SAPPER")
+        self.assertEqual(len(self.gsc.hud_elems), 1, "Class icon HUD elem must be reused on swap, not leaked")
+        self.assertEqual(icon.shader, "bz_icon_class_sapper")
 
-        # When WaW clamps clip to 4 and banks 6 extra grenades in bz_sapper_grenade_reserve, HUD displays GREN: 4+6 -> 4+5
+        # When WaW clamps clip to 4 and banks 6 extra grenades in bz_sapper_grenade_reserve, consolidated STATUS lane (y=50) displays GREN: 4+6 -> 5+5
         self.p1.ammo_clip["stielhandgranate"] = 4
         self.p1.set_field("bz_sapper_grenade_reserve", 6)
         self.gsc.call(BZ_CLASSES_MOD, "bz_class_update_hud", self.p1)
-        self.assertEqual(hud.text, "CLASS: SAPPER | GREN: 4+6")
+        hud = self.p1.get_field("bz_perks_hud")
+        self.assertEqual(hud.get_field("y"), 50)
+        self.assertEqual(hud.text, "STATUS: GREN: 4+6")
         self.gsc.call(BZ_CLASSES_MOD, "bz_sapper_on_grenade_thrown", self.p1, "stielhandgranate")
-        self.assertEqual(hud.text, "CLASS: SAPPER | GREN: 5+5")
+        self.assertEqual(hud.text, "STATUS: GREN: 5+5")
         self.p1.set_field("bz_sapper_grenade_reserve", 0)
         self.p1.ammo_clip["stielhandgranate"] = 10
         self.gsc.call(BZ_CLASSES_MOD, "bz_class_update_hud", self.p1)
-        self.assertEqual(hud.text, "CLASS: SAPPER")
+        self.assertEqual(hud.get_field("alpha"), 0)
         self.assertIn(
             "BZ_EVENT|CLASS_EQUIPPED|player=PlayerOne;class=sapper;previous=titan;swapped=1",
             self.gsc.emitted_events,
         )
 
-        # Swap Sapper -> Field Medic: clamps grenades back to 4, updates HUD to ASCII "CLASS: FIELD MEDIC"
+        # Swap Sapper -> Field Medic: clamps grenades back to 4, updates Class Shield icon to bz_icon_class_medic
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p1, "bz_station_class", "buy_class:medic")
         )
         self.assertEqual(self.p1.ammo_clip["stielhandgranate"], 4)
-        self.assertEqual(hud.text, "CLASS: FIELD MEDIC")
+        self.assertEqual(icon.shader, "bz_icon_class_medic")
 
-        # Co-op p2 buys Broker -> p2 gets its own HUD, p1 unaffected
+        # Co-op p2 buys Broker -> p2 gets its own Class Shield icon, p1 unaffected
         self.assertTrue(
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", self.p2, "bz_station_class", "buy_class:broker")
         )
-        self.assertEqual(len(self.gsc.hud_elems), 2)
-        self.assertEqual(self.gsc.hud_elems[1].text, "CLASS: BROKER")
+        p2_icon = self.p2.get_field("bz_class_icon_hud")
+        self.assertEqual(p2_icon.shader, "bz_icon_class_broker")
 
         # Disconnect p2 destroys ONLY p2's HUD
         self.gsc.call(BZ_CLASSES_MOD, "bz_class_on_disconnect", self.p2)
-        self.assertTrue(self.gsc.hud_elems[1].destroyed)
-        self.assertFalse(self.gsc.hud_elems[0].destroyed)
+        self.assertTrue(p2_icon.destroyed)
+        self.assertFalse(icon.destroyed)
 
         # end_game destroys remaining p1 HUD with zero leaks
         self.gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")

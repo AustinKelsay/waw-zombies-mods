@@ -616,6 +616,16 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             )
             with self.assertRaises(ValueError):
                 build_mod.stage_custom_weapon_images(tools, root / "stage_mixed_tokens")
+            # Long material stems truncated by WaW converter.exe at 29 chars before ~<8-hex> must be accepted
+            self.assertTrue(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_steel_s-rgb&b~8cf4e876.iwi", "bz_pap_cluster_steel_s")
+            )
+            self.assertTrue(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_wood_s-rgb&bz~0bc33d5a.iwi", "bz_pap_cluster_wood_s")
+            )
+            self.assertFalse(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_steel_s-rgb&x~8cf4e876.iwi", "bz_pap_cluster_steel_s")
+            )
 
     def test_northstar_wave3_pap_finishes_and_weapon_staging(self) -> None:
         """Verify ADR-0007 / NORTHSTAR_EXPANSION_SPEC.md Wave 3: +8 PaP variants / +16 XMODELs, <=4 slots, zero violet."""
@@ -637,7 +647,11 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             self.assertLessEqual(len(wm.materials), 4, f"{wm_name} exceeded 4 materials: {wm.materials}")
 
         # Verify zero violet/magenta bleed on any Wave 3 material spec
-        w3_specs = [s for s in bz_models.MATERIAL_SPECS if "_pap1" in s.name or "_pap2" in s.name]
+        w3_specs = [
+            s
+            for s in bz_models.MATERIAL_SPECS
+            if ("_pap1" in s.name or "_pap2" in s.name) and s.material_type != "2d"
+        ]
         self.assertEqual(len(w3_specs), 12)
         for spec in w3_specs:
             r, g, b = spec.base_rgb
@@ -659,6 +673,43 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
                 text = (root / "stage" / "weapons" / "sp" / weap_name).read_text(encoding="latin1")
                 self.assertIn(f"\\gunModel\\{vm_name}", text)
                 self.assertIn(f"\\worldModel\\{bz_models.CUSTOM_PAP_WEAPON_WORLDMODELS[weap_name]}", text)
+
+    def test_northstar_wave4_21_hud_icon_materials_gdt_and_mod_csv(self) -> None:
+        """Verify ADR-0007 / NORTHSTAR_EXPANSION_SPEC.md Wave 4: 21 linked 64x64 2D HUD icons, valid GDT, 0 violet on PaP II."""
+        self.assertEqual(len(bz_models.HUD_ICON_MATERIALS), 21)
+        for mat in bz_models.HUD_ICON_MATERIALS:
+            self.assertIn(mat, bz_models.ALL_CUSTOM_MATERIALS)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tools_root = Path(tmp) / "tools"
+            summary = bz_models.generate_all_assets(tools_root, tex_size=64)
+            gdt_text = (tools_root / "source_data" / bz_models.GDT_FILENAME).read_text(encoding="ascii")
+            for mat in bz_models.HUD_ICON_MATERIALS:
+                self.assertIn(f'"{mat}" ( "material.gdf" )', gdt_text)
+                tga_path = tools_root / "texture_assets" / bz_models.ASSET_SUBDIR / f"{mat}_c.tga"
+                self.assertTrue(tga_path.is_file(), f"Missing 2D HUD TGA: {tga_path}")
+                raw = tga_path.read_bytes()
+                self.assertEqual(len(raw), 18 + 64 * 64 * 4, f"Expected 64x64 32-bit TGA for {mat}")
+                # Must have transparent corners (non-square silhouette framing) and opaque interior!
+                alphas = raw[18 + 3 :: 4]
+                self.assertEqual(alphas[0], 0, f"{mat} top-left corner should be transparent")
+                self.assertGreater(sum(1 for a in alphas if a > 200), 900, f"{mat} icon too sparse")
+
+            # Verify valid WaW 1.7 material.gdf 2D enum strings (no stray asterisks!)
+            self.assertIn('"materialType" "2d"', gdt_text)
+            self.assertIn('"cullFace" "None"', gdt_text)
+            self.assertIn('"depthTest" "Always"', gdt_text)
+            self.assertIn('"depthWrite" "Off"', gdt_text)
+            self.assertIn('"nopicmipColor" "1"', gdt_text)
+
+            # Verify mod.csv links all 21 2D HUD materials
+            csv = build_mod.generate_staged_mod_csv(
+                "rawfile,maps/_bz_hooks.gsc\n",
+                [],
+                extra_materials=list(bz_models.HUD_ICON_MATERIALS),
+            )
+            for mat in bz_models.HUD_ICON_MATERIALS:
+                self.assertIn(f"material,{mat}", csv)
 
 
 if __name__ == "__main__":

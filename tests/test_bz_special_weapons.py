@@ -1507,7 +1507,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         # Default gear -> zero HUD elements created
         self.assertEqual(gsc.hud_elems, [])
 
-        # Purchase War Club -> creates top-right badge at x=-12, y=68
+        # Purchase War Club -> creates top-right SPECIAL badge at x=-12, y=32 (Wave 4 Sheet 11 lane shift)
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:war_club")
         self.assertEqual(len(gsc.hud_elems), 1)
         hud1 = gsc.hud_elems[0]
@@ -1515,7 +1515,7 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(hud1.get_field("alignX"), "right")
         self.assertEqual(hud1.get_field("horzAlign"), "right")
         self.assertEqual(hud1.get_field("x"), -12)
-        self.assertEqual(hud1.get_field("y"), 68)
+        self.assertEqual(hud1.get_field("y"), 32)
         self.assertEqual(hud1.current_text, "MELEE: WAR CLUB")
 
         # Upgrade to PaP War Club + buy Portal Grenade -> "MELEE: WAR CLUB+ | PORTAL: 2"
@@ -1549,13 +1549,13 @@ class TestSpecialWeaponsHudAndWaw17Compliance(unittest.TestCase):
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:equip_bowie")
         self.assertEqual(hud1.current_text, "PORTAL: 2")
 
-        # Player 2 gets independent HUD element; Gauntlet HUD active shifts y from 68 -> 86
+        # Player 2 gets independent HUD element; Gauntlet HUD active shifts y from 32 -> 50
         gsc.dvars.set("gauntlet_enabled", "1")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p2, "bz_station_arsenal", "buy_gear:war_club")
         self.assertEqual(len(gsc.hud_elems), 2)
         hud2 = gsc.hud_elems[1]
         self.assertIs(hud2.owner, p2)
-        self.assertEqual(hud2.get_field("y"), 86)
+        self.assertEqual(hud2.get_field("y"), 50)
         self.assertEqual(hud2.current_text, "MELEE: WAR CLUB")
 
         # Disconnect destroys p1's HUD without touching p2's HUD, and compacts level.bz_special_hud_elems

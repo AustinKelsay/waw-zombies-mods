@@ -54,6 +54,8 @@ class FakeHudElem(GscStruct):
         super().__init__()
         self.owner = owner
         self.text_history: list[str] = []
+        self.shader: str = ""
+        self.shader_history: list[tuple[str, int, int]] = []
         self.destroyed: bool = False
         self.destroy_count: int = 0
 
@@ -150,6 +152,13 @@ class PapGscRuntime(BzGscRuntime):
             if method == "settext":
                 txt = _waw_to_str(args[0]) if args else ""
                 receiver.text_history.append(txt)
+                return UNDEFINED
+            if method == "setshader":
+                sh = _waw_to_str(args[0]) if len(args) > 0 else ""
+                w = int(args[1]) if len(args) > 1 else 0
+                h = int(args[2]) if len(args) > 2 else 0
+                receiver.shader = sh
+                receiver.shader_history.append((sh, w, h))
                 return UNDEFINED
             if method == "destroy":
                 receiver.destroyed = True
@@ -880,7 +889,7 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
         # No upgrades yet -> no HUD clutter created
         self.assertEqual(gsc.hud_elems, [])
 
-        # Single PaP scripted on Nacht -> creates top-right badge showing "PAP I"
+        # Single PaP scripted on Nacht -> creates UPGRADES badge at y=14 showing "PAP I"
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_pap", "buy_pap:single_pap")
         self.assertEqual(len(gsc.hud_elems), 1)
         hud1 = gsc.hud_elems[0]
@@ -888,39 +897,47 @@ class TestBzPapHudAndWaw17Compliance(unittest.TestCase):
         self.assertEqual(hud1.get_field("alignX"), "right")
         self.assertEqual(hud1.get_field("horzAlign"), "right")
         self.assertEqual(hud1.get_field("x"), -12)
-        self.assertEqual(hud1.get_field("y"), 50)
+        self.assertEqual(hud1.get_field("y"), 14)
         self.assertEqual(hud1.current_text, "PAP I")
 
-        # Double PaP + PaP Knife + PaP Bowie + PaP Cluster -> shows "PAP II" and all concise flags
+        # Double PaP + PaP Knife + PaP Bowie + PaP Cluster -> Double-PaP shows 28x28u "II" Diamond at y=68
+        # (mutually exclusive with "PAP I" text!) while UPGRADES lane shows concise melee/cluster flags
         p1.give_perk("specialty_altmelee")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_pap", "buy_pap:double_pap")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_knife")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_bowie")
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_pap:pap_cluster")
 
-        self.assertEqual(hud1.current_text, "PAP II | KNIFE+ | BOWIE+ | CLUSTER")
+        self.assertEqual(hud1.current_text, "KNIFE+ | BOWIE+ | CLUSTER")
         self.assertTrue(all(32 <= ord(ch) <= 126 for ch in hud1.current_text))
+        pap2_icon = p1.get_field("bz_pap2_icon_hud")
+        self.assertIsInstance(pap2_icon, FakeHudElem)
+        self.assertEqual(pap2_icon.get_field("x"), -12)
+        self.assertEqual(pap2_icon.get_field("y"), 68)
+        self.assertEqual(pap2_icon.shader, "bz_icon_pap2_badge")
+        self.assertGreater(float(pap2_icon.get_field("alpha")), 0.0)
 
         # Redundant HUD refresh with same state skips SetText() to protect configstrings
         prev_writes = len(hud1.text_history)
         gsc.call(BZ_PAP_MOD, "bz_pap_update_hud", p1)
         self.assertEqual(len(hud1.text_history), prev_writes)
 
-        # Switching to un-upgraded secondary weapon drops "PAP II" while keeping melee/cluster flags
+        # Switching to un-upgraded secondary weapon hides "II" diamond while keeping melee/cluster flags
         p1.give_weapon("colt", make_current=True)
         gsc.call(BZ_PAP_MOD, "bz_pap_update_hud", p1)
         self.assertEqual(hud1.current_text, "KNIFE+ | BOWIE+ | CLUSTER")
+        self.assertEqual(pap2_icon.get_field("alpha"), 0)
 
         # Player 2 gets their own independent HUD element
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p2, "bz_station_pap", "buy_pap:single_pap")
-        self.assertEqual(len(gsc.hud_elems), 2)
-        hud2 = gsc.hud_elems[1]
+        hud2 = p2.get_field("bz_pap_hud")
         self.assertIs(hud2.owner, p2)
         self.assertEqual(hud2.current_text, "PAP I")
 
-        # Disconnect destroys p1's HUD without affecting p2
+        # Disconnect destroys p1's HUD & diamond icon without affecting p2
         gsc.call(BZ_PAP_MOD, "bz_pap_destroy_player_hud", p1)
         self.assertTrue(hud1.destroyed)
+        self.assertTrue(pap2_icon.destroyed)
         self.assertFalse(hud2.destroyed)
 
         # end_game destroys all remaining HUD elements with zero leaks and zero double-destroys
@@ -1392,6 +1409,63 @@ class TestBzNativePapConsoleIntegration(unittest.TestCase):
         gsc.call(BZ_HOOKS_MOD, "bz_on_end_game")
         self.assertTrue(all(h.destroyed for h in gsc.hud_elems))
         self.assertTrue(all(h.destroy_count == 1 for h in gsc.hud_elems))
+
+    def test_disabled_feature_gates_never_call_hasweapon_on_unprecached_custom_variants(self) -> None:
+        """WaW 1.7 throws script runtime error if HasWeapon() queries an unprecached custom weapon."""
+        dvars, gsc, player = _setup_pap_env(map_name="nazi_zombie_factory")
+        unprecached_elem = {
+            "bz_acid_sprayer", "bz_acid_sprayer_pap1", "bz_acid_sprayer_pap2",
+            "bz_cryo_cannon", "bz_cryo_cannon_pap1", "bz_cryo_cannon_pap2",
+            "bz_multi_crossbow", "bz_multi_crossbow_pap1", "bz_multi_crossbow_pap2",
+            "bz_blade_boomerang", "bz_blade_boomerang_pap1", "bz_blade_boomerang_pap2",
+        }
+        orig_exec_method = gsc._exec_method
+
+        def strict_exec_method(receiver, method, args, line):
+            if method == "hasweapon" and args:
+                wname = str(args[0]).lower()
+                if dvars.get_int("bz_elements_enabled") != 1 and wname in unprecached_elem:
+                    raise AssertionError(
+                        f"HasWeapon queried unprecached element weapon {wname!r} with bz_elements_enabled=0"
+                    )
+                if dvars.get_int("bz_pap_enabled") != 1 and (
+                    wname.endswith("_pap1") or wname.endswith("_pap2") or wname == "bz_pap_cluster_grenade"
+                ):
+                    raise AssertionError(
+                        f"HasWeapon queried unprecached PaP weapon {wname!r} with bz_pap_enabled=0"
+                    )
+            return orig_exec_method(receiver, method, args, line)
+
+        gsc._exec_method = strict_exec_method
+
+        # Phase 1 mode (bz_elements_enabled=0, bz_pap_enabled=1): station sync + boomerang lookup must be clean
+        gsc.call("maps/_bz_stations.gsc", "bz_stations_sync_player_ui", player, "test")
+        self.assertEqual(
+            gsc.call("maps/_bz_stations.gsc", "bz_stations_find_owned_element_weapon", player, "bz_acid_sprayer"),
+            "",
+        )
+        self.assertEqual(
+            gsc.call("maps/_bz_special_weapons.gsc", "bz_special_get_owned_boomerang_weapon", player),
+            "",
+        )
+        self.assertEqual(player.client_dvars.get("ui_bz_elem_acid_sprayer"), "DISABLED")
+
+        # Elements enabled, PaP disabled (bz_elements_enabled=1, bz_pap_enabled=0): must skip _pap1/_pap2 & cluster
+        dvars.set("bz_elements_enabled", "1")
+        dvars.set("bz_pap_enabled", "0")
+        self.assertEqual(
+            gsc.call("maps/_bz_stations.gsc", "bz_stations_find_owned_element_weapon", player, "bz_acid_sprayer"),
+            "",
+        )
+        self.assertEqual(
+            gsc.call("maps/_bz_special_weapons.gsc", "bz_special_get_owned_boomerang_weapon", player),
+            "",
+        )
+        self.assertEqual(gsc.call("maps/_bz_classes.gsc", "bz_class_get_frag_weapon", player), "stielhandgranate")
+        player.set_field("bz_class", "sapper")
+        player.set_field("bz_sapper_grenade_reserve", 4)
+        tokens = gsc.call("maps/_bz_perks.gsc", "bz_perks_collect_hud_tokens", player)
+        self.assertTrue(any("GREN:" in str(tokens[i]) for i in range(tokens.size)))
 
 
 if __name__ == "__main__":
