@@ -616,6 +616,16 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             )
             with self.assertRaises(ValueError):
                 build_mod.stage_custom_weapon_images(tools, root / "stage_mixed_tokens")
+            # Long material stems truncated by WaW converter.exe at 29 chars before ~<8-hex> must be accepted
+            self.assertTrue(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_steel_s-rgb&b~8cf4e876.iwi", "bz_pap_cluster_steel_s")
+            )
+            self.assertTrue(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_wood_s-rgb&bz~0bc33d5a.iwi", "bz_pap_cluster_wood_s")
+            )
+            self.assertFalse(
+                build_mod._is_owned_spec_iwi_name("~bz_pap_cluster_steel_s-rgb&x~8cf4e876.iwi", "bz_pap_cluster_steel_s")
+            )
 
     def test_northstar_wave3_pap_finishes_and_weapon_staging(self) -> None:
         """Verify ADR-0007 / NORTHSTAR_EXPANSION_SPEC.md Wave 3: +8 PaP variants / +16 XMODELs, <=4 slots, zero violet."""

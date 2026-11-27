@@ -2708,7 +2708,11 @@ def _is_owned_spec_iwi_name(filename: str, spec_stem: str) -> bool:
     if m is None:
         return False
     gloss_frag = m.group(1)
-    return len(gloss_frag) >= 3 and gloss_stem.startswith(gloss_frag)
+    # WaW 1.7 converter.exe truncates `~<spec_stem>-rgb&<gloss_stem>` at 29 chars before `~<8-hex>`.
+    # Long stems (e.g. bz_pap_cluster_steel_s, 22 chars) leave 1-2 chars for gloss_frag.
+    max_frag = max(1, 29 - (len(spec_stem) + 6))
+    min_frag = min(3, max_frag)
+    return len(gloss_frag) >= min_frag and gloss_stem.startswith(gloss_frag)
 
 
 def _find_spec_iwis(img_dir: Path, spec_stem: str) -> list[Path]:
