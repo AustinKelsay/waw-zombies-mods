@@ -720,15 +720,20 @@ class TestSapperAndBrokerClasses(unittest.TestCase):
             UNDEFINED,
         )
 
-        # 1. First wall-buy at thompson_wall -> Fire DOT trap
+        # 1. First wall-buy at thompson_wall -> Fire DOT trap pushed ~18u toward player and floor-snapped (ADR-0007 / NSV-W2)
         trap1 = self.gsc.call(
             BZ_CLASSES_MOD, "bz_sapper_on_wall_buy", self.p1, "thompson_wall", GscArray([100, 50, 64])
         )
         self.assertIsNot(trap1, UNDEFINED)
         self.assertEqual(trap1.get_field("trap_type"), "fire")
-        self.assertIn(
-            "BZ_EVENT|SAPPER_TRAP_PLANTED|player=PlayerOne;wall=thompson_wall;type=fire;x=100;y=50;z=64",
-            self.gsc.emitted_events,
+        self.assertEqual(trap1.get_field("model_name"), "bz_sapper_trap_fire")
+        self.assertIsNot(trap1.get_field("model_ent"), UNDEFINED)
+        self.assertIs(trap1.get_field("fx_ent"), UNDEFINED)
+        self.assertTrue(
+            any(
+                e.startswith("BZ_EVENT|SAPPER_TRAP_PLANTED|player=PlayerOne;wall=thompson_wall;type=fire;")
+                for e in self.gsc.emitted_events
+            )
         )
 
         # 2. Re-buy same wall within 10s (5s elapsed) -> blocked by per-wall cooldown
@@ -738,15 +743,18 @@ class TestSapperAndBrokerClasses(unittest.TestCase):
         )
         self.assertIs(blocked, UNDEFINED)
 
-        # 3. Different wall (kar98k_wall) at same timestamp -> allowed & alternates to Bouncing Betty!
+        # 3. Different wall (kar98k_wall) at same timestamp -> allowed & alternates to S-Mine 35 Blast Mine!
         trap2 = self.gsc.call(
             BZ_CLASSES_MOD, "bz_sapper_on_wall_buy", self.p1, "kar98k_wall", GscArray([300, 50, 64])
         )
         self.assertIsNot(trap2, UNDEFINED)
         self.assertEqual(trap2.get_field("trap_type"), "betty")
-        self.assertIn(
-            "BZ_EVENT|SAPPER_TRAP_PLANTED|player=PlayerOne;wall=kar98k_wall;type=betty;x=300;y=50;z=64",
-            self.gsc.emitted_events,
+        self.assertEqual(trap2.get_field("model_name"), "bz_sapper_trap_betty")
+        self.assertTrue(
+            any(
+                e.startswith("BZ_EVENT|SAPPER_TRAP_PLANTED|player=PlayerOne;wall=kar98k_wall;type=betty;")
+                for e in self.gsc.emitted_events
+            )
         )
 
         # 4. After 10s on thompson_wall (t=20000) -> cooldown expired, alternates back to Fire DOT

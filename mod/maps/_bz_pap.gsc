@@ -33,6 +33,7 @@ bz_pap_register()
 	}
 	level.bz_pap_registered = true;
 
+	bz_register_hook( "pre_init", ::bz_pap_on_pre_init, "pap" );
 	bz_register_hook( "init", ::bz_pap_on_init, "pap" );
 	bz_register_hook( "player_connect", ::bz_pap_on_player_connect, "pap" );
 	bz_register_hook( "player_spawned", ::bz_pap_on_player_spawned, "pap" );
@@ -46,6 +47,23 @@ bz_pap_register()
 // ---------------------------------------------------------------------------
 // State & Weapon Classification Helpers
 // ---------------------------------------------------------------------------
+
+bz_pap_on_pre_init()
+{
+	if ( !bz_pap_enabled() )
+	{
+		return;
+	}
+	if ( IsDefined( level.bz_pap_precached ) && level.bz_pap_precached )
+	{
+		return;
+	}
+	level.bz_pap_precached = true;
+	PrecacheItem( "bz_pap_cluster_grenade" );
+	PrecacheItem( "bz_pap_knife" );
+	PrecacheItem( "bz_pap_bowie" );
+	PrecacheModel( "bz_pap_cluster_sub" );
+}
 
 bz_pap_ensure_player_tables( player )
 {
@@ -74,7 +92,7 @@ bz_pap_ensure_player_tables( player )
 bz_pap_get_weapon_safe( player, weapon_name )
 {
 	norm = bz_normalize_id( weapon_name );
-	if ( norm == "bz_portal_grenade" || norm == "bz_war_club" )
+	if ( norm == "bz_portal_grenade" || norm == "bz_war_club" || norm == "bz_pap_knife" || norm == "bz_pap_bowie" )
 	{
 		return "";
 	}
@@ -85,7 +103,7 @@ bz_pap_get_weapon_safe( player, weapon_name )
 	if ( IsDefined( player ) )
 	{
 		cur = bz_normalize_id( player GetCurrentWeapon() );
-		if ( cur != "" && cur != "none" && cur != "bz_portal_grenade" && cur != "bz_war_club" )
+		if ( cur != "" && cur != "none" && cur != "bz_portal_grenade" && cur != "bz_war_club" && cur != "bz_pap_knife" && cur != "bz_pap_bowie" )
 		{
 			return cur;
 		}
@@ -861,11 +879,11 @@ bz_pap_is_frag_grenade( weapon_name )
 	{
 		return false;
 	}
-	if ( norm == "stielhandgranate" || norm == "fraggrenade" || norm == "frag_grenade" )
+	if ( norm == "stielhandgranate" || norm == "fraggrenade" || norm == "frag_grenade" || norm == "bz_pap_cluster_grenade" )
 	{
 		return true;
 	}
-	if ( IsSubStr( norm, "frag" ) || IsSubStr( norm, "stielhandgranate" ) )
+	if ( IsSubStr( norm, "frag" ) || IsSubStr( norm, "stielhandgranate" ) || IsSubStr( norm, "pap_cluster" ) )
 	{
 		return true;
 	}
@@ -906,6 +924,19 @@ bz_pap_apply_cluster_upgrade( player )
 	}
 
 	player.bz_pap_cluster = true;
+	// Swap stock offhand frag to custom 3D PaP Cluster Grenade when held (preserving clip count)
+	if ( player HasWeapon( "stielhandgranate" ) && !player HasWeapon( "bz_pap_cluster_grenade" ) )
+	{
+		prev_clip = Int( player GetWeaponAmmoClip( "stielhandgranate" ) );
+		if ( prev_clip < 1 )
+		{
+			prev_clip = 4;
+		}
+		player TakeWeapon( "stielhandgranate" );
+		player GiveWeapon( "bz_pap_cluster_grenade" );
+		player SetWeaponAmmoClip( "bz_pap_cluster_grenade", prev_clip );
+		player.bz_frag_weapon = "bz_pap_cluster_grenade";
+	}
 	bz_pap_ensure_player_watchers( player );
 
 	max_nades = maps\_bz_state::bz_state_get_max_grenades( player );
@@ -1048,11 +1079,6 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 	orig_trace = ( ox, oy, oz + 16 );
 	for ( i = 0; i < count; i++ )
 	{
-		wait( 0.12 );
-		if ( !IsDefined( player ) )
-		{
-			break;
-		}
 		m_pos = offsets[i];
 		mtr = BulletTrace( orig_trace, m_pos, false, player );
 		if ( IsDefined( mtr ) && IsDefined( mtr["fraction"] ) && mtr["fraction"] < 1.0 )
@@ -1067,6 +1093,24 @@ bz_pap_detonate_cluster( player, origin, weapon_name )
 				orig_trace[1] + ( ( m_pos[1] - orig_trace[1] ) * sfrac ),
 				orig_trace[2] + ( ( m_pos[2] - orig_trace[2] ) * sfrac )
 			);
+		}
+		// Spawn non-solid 3D submunition canister arcing outward to m_pos, deleting cleanly on blast (0 FX!)
+		sub_ent = Spawn( "script_model", orig_trace );
+		if ( IsDefined( sub_ent ) )
+		{
+			sub_ent SetModel( "bz_pap_cluster_sub" );
+			sub_ent SetContents( 0 );
+			sub_ent NotSolid();
+			sub_ent MoveTo( m_pos, 0.12 );
+		}
+		wait( 0.12 );
+		if ( IsDefined( sub_ent ) )
+		{
+			sub_ent Delete();
+		}
+		if ( !IsDefined( player ) )
+		{
+			break;
 		}
 		if ( IsDefined( cluster_fx ) )
 		{
@@ -1511,6 +1555,7 @@ bz_pap_ensure_player_watchers( player )
 	player.bz_pap_watchers_started = true;
 
 	player thread bz_pap_watch_grenade_throws();
+	player thread bz_pap_watch_melee_visuals();
 	player thread bz_pap_watch_weapon_switch();
 	player thread bz_pap_watch_max_ammo();
 	player thread bz_pap_watch_overflow_reserve();
@@ -1617,6 +1662,110 @@ bz_pap_watch_native_console_prompt()
 			continue;
 		}
 		bz_pap_update_native_prompt_hud( self );
+	}
+}
+
+bz_pap_resolve_melee_viewmodel( player )
+{
+	if ( !bz_pap_enabled() || !IsDefined( player ) )
+	{
+		return "";
+	}
+	slot = maps\_bz_state::bz_state_get_melee_slot( player );
+	if ( slot == "war_club" )
+	{
+		return "";
+	}
+	if ( ( slot == "bowie" || player HasPerk( "specialty_altmelee" ) ) && maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_bowie", "" ) )
+	{
+		return "bz_pap_bowie";
+	}
+	if ( slot != "bowie" && !player HasPerk( "specialty_altmelee" ) && maps\_bz_state::bz_state_has_pap_upgrade( player, "pap_knife", "" ) )
+	{
+		return "bz_pap_knife";
+	}
+	return "";
+}
+
+bz_pap_restore_melee_viewmodel( swap_weap, prev_weap )
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	wait( 0.38 );
+	if ( !IsDefined( self ) )
+	{
+		return;
+	}
+	if ( self HasWeapon( swap_weap ) )
+	{
+		cur = self GetCurrentWeapon();
+		if ( IsDefined( prev_weap ) && prev_weap != "" && prev_weap != "none" && prev_weap != swap_weap && prev_weap != "bz_war_club" && prev_weap != "bz_portal_grenade" && self HasWeapon( prev_weap ) )
+		{
+			if ( !IsDefined( cur ) || cur == swap_weap )
+			{
+				self SwitchToWeapon( prev_weap );
+			}
+		}
+		self TakeWeapon( swap_weap );
+	}
+	self.bz_pap_melee_swinging = false;
+}
+
+bz_pap_trigger_melee_viewmodel( player )
+{
+	if ( !bz_pap_enabled() || !IsDefined( player ) || !IsAlive( player ) || bz_pap_player_is_downed( player ) )
+	{
+		return "";
+	}
+	swap_weap = bz_pap_resolve_melee_viewmodel( player );
+	if ( swap_weap == "" )
+	{
+		return "";
+	}
+	now = GetTime();
+	if ( IsDefined( player.bz_pap_melee_last_ms ) && ( now - Int( player.bz_pap_melee_last_ms ) ) < 600 )
+	{
+		return "";
+	}
+	if ( IsDefined( player.bz_pap_melee_swinging ) && player.bz_pap_melee_swinging )
+	{
+		return "";
+	}
+	player.bz_pap_melee_last_ms = now;
+	player.bz_pap_melee_swinging = true;
+	prev_weap = player GetCurrentWeapon();
+	if ( !player HasWeapon( swap_weap ) )
+	{
+		player GiveWeapon( swap_weap );
+	}
+	player SetWeaponAmmoClip( swap_weap, 1 );
+	player SetWeaponAmmoStock( swap_weap, 0 );
+	player SwitchToWeapon( swap_weap );
+	player thread bz_pap_restore_melee_viewmodel( swap_weap, prev_weap );
+	return swap_weap;
+}
+
+bz_pap_watch_melee_visuals()
+{
+	self endon( "disconnect" );
+	level endon( "end_game" );
+
+	was_pressed = false;
+	for ( ;; )
+	{
+		wait( 0.05 );
+		if ( !bz_pap_enabled() || !IsAlive( self ) || bz_pap_player_is_downed( self ) )
+		{
+			was_pressed = false;
+			continue;
+		}
+		pressed = self MeleeButtonPressed();
+		if ( pressed && !was_pressed )
+		{
+			bz_pap_trigger_melee_viewmodel( self );
+		}
+		was_pressed = pressed;
 	}
 }
 
