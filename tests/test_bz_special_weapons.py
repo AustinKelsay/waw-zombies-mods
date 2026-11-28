@@ -757,6 +757,36 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertEqual(dmg_after_bowie_wallbuy, 1000)
         self.assertEqual(gsc.earthquakes, [])
 
+    def _equip_war_club(self, gsc, player, pap=False):
+        for item in ("war_club", "pap_war_club") if pap else ("war_club",):
+            self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", f"buy_gear:{item}"))
+
+    def test_war_club_button_swing_primary_hit_ignores_zombie_behind_player(self) -> None:
+        _, gsc, p1 = _setup_special_env()
+        self._equip_war_club(gsc, p1, pap=True)
+        gsc.level.set_field("zombie_health", 2500)
+        rear = SpecialFakeEntity("Rear", ent_num=20, is_player=False)
+        rear.set_pos(-30, 0, 0)
+        rear.set_field("health", 2500)
+        front = SpecialFakeEntity("Front", ent_num=21, is_player=False)
+        front.set_pos(48, 0, 0)
+        front.set_field("health", 2500)
+        gsc.ai_enemies.extend((rear, front))
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_trigger_war_club_swing", p1)
+        # Full primary damage goes to the zombie in the crosshairs, cleave damage to the one behind.
+        self.assertLess(int(front.get_field("health")), int(rear.get_field("health")))
+
+    def test_war_club_lock_hands_melee_to_wall_bowie_bought_while_club_equipped(self) -> None:
+        _, gsc, p1 = _setup_special_env()
+        self._equip_war_club(gsc, p1)
+        self.assertFalse(p1.get_field("allow_melee"))
+        p1.give_perk("specialty_altmelee")
+        p1.set_field("has_altmelee", True)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_sync_war_club_melee_lock", p1)
+        self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
+        self.assertTrue(p1.get_field("allow_melee"))
+        self.assertTrue(p1.has_perk("specialty_altmelee"))
+
 
 class TestMultiCrossbowSpecialWeapon(unittest.TestCase):
     """Seam 2: Multi-Crossbow 3-bolt sticky explosive spread, Double PaP, Blast Shield & cleanup."""

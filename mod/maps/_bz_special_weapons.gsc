@@ -299,6 +299,15 @@ bz_special_sync_war_club_melee_lock( player )
 	{
 		return;
 	}
+	// Stock wall Bowie bought while the club is equipped: hand melee to Bowie here, since the
+	// suppressed native melee can no longer reach the MOD_MELEE handoff in bz_special_on_actor_damage.
+	if ( bz_elements_enabled() && maps\_bz_state::bz_state_get_melee_slot( player ) == "war_club" && player HasPerk( "specialty_altmelee" ) )
+	{
+		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+		player.bz_melee_slot = "bowie";
+		player.has_altmelee = true;
+		bz_special_update_hud( player );
+	}
 	should_suppress = bz_elements_enabled() &&
 		IsAlive( player ) &&
 		!bz_special_player_is_downed( player ) &&
@@ -564,7 +573,7 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 			{
 				cdot = ( ( ( cand.origin[0] - p_org[0] ) / chdist ) * fx ) + ( ( ( cand.origin[1] - p_org[1] ) / chdist ) * fy );
 			}
-			if ( cdist <= 40.0 || cdot >= 0.45 )
+			if ( cdot >= 0.45 )
 			{
 				best_pdist = cdist;
 				direct_primary = cand;
