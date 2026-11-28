@@ -550,10 +550,15 @@ def run_waw_scenario(
         init_stall_retry = False
         init_stall_seen_at: float | None = None
         last_event_count = 0
+        last_log_len = 0
+        last_log_growth_at = attempt_t0
         try:
             while True:
                 now = time.monotonic()
                 log_text, _ = smoke_verify.read_console_logs(appdata)
+                if len(log_text) != last_log_len:
+                    last_log_len = len(log_text)
+                    last_log_growth_at = now
                 parsed = verify_cycle1.parse_gauntlet_events(log_text)
                 if len(parsed) > last_event_count:
                     for ev in parsed[last_event_count:]:
@@ -568,17 +573,25 @@ def run_waw_scenario(
                     log_text, _ = smoke_verify.read_console_logs(appdata)
                     break
 
-                # Detect transient Proton/Wine DB-thread startup deadlock on $init
-                # ("Waiting for $init to finish.") and retry once cleanly.
-                if (
-                    attempt == 0
-                    and "Waiting for $init to finish." in log_text
-                    and "end $init" not in log_text
-                ):
-                    if init_stall_seen_at is None:
-                        init_stall_seen_at = now
-                    elif now - init_stall_seen_at >= 10.0:
-                        print("    [WARN] Transient Wine $init startup stall detected; retrying once...")
+                # Detect transient Proton/Wine pre-map startup deadlock ($init or early
+                # sys_configSum hang before common.ff loads) and retry once cleanly.
+                if attempt == 0 and "Loading fastfile 'common'" not in log_text:
+                    if (
+                        "Waiting for $init to finish." in log_text
+                        and "end $init" not in log_text
+                    ):
+                        if init_stall_seen_at is None:
+                            init_stall_seen_at = now
+                        elif now - init_stall_seen_at >= 10.0:
+                            print("    [WARN] Transient Wine $init startup stall detected; retrying once...")
+                            init_stall_retry = True
+                            break
+                    elif (
+                        last_log_len > 0
+                        and "sys_configSum" in log_text
+                        and (now - last_log_growth_at) >= 12.0
+                    ):
+                        print("    [WARN] Transient Wine early startup stall detected; retrying once...")
                         init_stall_retry = True
                         break
 
