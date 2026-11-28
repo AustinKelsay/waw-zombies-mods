@@ -1194,12 +1194,115 @@ bz_test_visual_phase( name )
 	bz_log_emit( "VISUAL_TOUR_PHASE", "phase=" + name + ";t=" + GetTime() );
 }
 
+bz_test_clear_nearby_zombies()
+{
+	zlist = GetAiSpeciesArray( "axis", "all" );
+	if ( !IsDefined( zlist ) )
+	{
+		return;
+	}
+	for ( zi = 0; zi < zlist.size; zi++ )
+	{
+		z = zlist[zi];
+		if ( IsDefined( z ) && IsAlive( z ) )
+		{
+			z DoDamage( z.health + 1000, z.origin );
+		}
+	}
+}
+
+bz_test_visual_audit_station( prefix, id, station )
+{
+	fwd = AnglesToForward( station.angles );
+	right = AnglesToRight( station.angles );
+	org = station.origin;
+	// Measure back wall gap via BulletTrace backward from chest height (z+36)
+	back_start = ( org[0] + fwd[0] * 4, org[1] + fwd[1] * 4, org[2] + 36 );
+	back_end = ( org[0] - fwd[0] * 40, org[1] - fwd[1] * 40, org[2] + 36 );
+	bt = BulletTrace( back_start, back_end, false, undefined );
+	back_dist = 40;
+	if ( IsDefined( bt ) && IsDefined( bt["position"] ) )
+	{
+		back_dist = Int( Distance( ( org[0], org[1], org[2] + 36 ), bt["position"] ) );
+	}
+	// Trace the actual rotated 4 plinth corners for each kiosk model (A4/S4/O22/F5).
+	half_d = 11;
+	half_w = 13;
+	if ( id == "class" )
+	{
+		half_d = 13;
+		half_w = 16;
+	}
+	else if ( id == "arsenal" )
+	{
+		half_d = 14;
+		half_w = 27;
+	}
+	else if ( id == "pap" )
+	{
+		half_d = 15;
+		half_w = 19;
+	}
+	// Sample 4 points inset 2u inside rotated plinth corners so rear points stay in room space rather than inside wall brushes.
+	sd = half_d - 2;
+	sw = half_w - 2;
+	sx_arr = [];
+	sy_arr = [];
+	sx_arr[0] = -1;
+	sy_arr[0] = -1;
+	sx_arr[1] = 1;
+	sy_arr[1] = -1;
+	sx_arr[2] = -1;
+	sy_arr[2] = 1;
+	sx_arr[3] = 1;
+	sy_arr[3] = 1;
+	min_z = 99999;
+	max_z = -99999;
+	hits = 0;
+	misses = 0;
+	for ( k = 0; k < 4; k++ )
+	{
+		cx = org[0] + fwd[0] * ( sx_arr[k] * sd ) + right[0] * ( sy_arr[k] * sw );
+		cy = org[1] + fwd[1] * ( sx_arr[k] * sd ) + right[1] * ( sy_arr[k] * sw );
+		ft = BulletTrace( ( cx, cy, org[2] + 32 ), ( cx, cy, org[2] - 48 ), false, undefined );
+		if ( IsDefined( ft ) && IsDefined( ft["fraction"] ) && ft["fraction"] < 1.0 && IsDefined( ft["position"] ) )
+		{
+			fz = ft["position"][2];
+			hits++;
+			if ( fz < min_z )
+			{
+				min_z = fz;
+			}
+			if ( fz > max_z )
+			{
+				max_z = fz;
+			}
+		}
+		else
+		{
+			misses++;
+		}
+	}
+	floor_delta = 0;
+	skirt_gap = 0;
+	if ( hits > 0 )
+	{
+		floor_delta = Int( max_z - min_z );
+		skirt_gap = Int( org[2] - min_z );
+		if ( skirt_gap < 0 )
+		{
+			skirt_gap = 0;
+		}
+	}
+	bz_log_emit( "STATION_AUDIT", "station=" + prefix + "_" + id + ";x=" + Int( org[0] ) + ";y=" + Int( org[1] ) + ";z=" + Int( org[2] ) + ";back_dist=" + back_dist + ";floor_delta=" + floor_delta + ";skirt_gap=" + skirt_gap + ";misses=" + misses );
+}
+
 bz_test_visual_pose( p, pos, station )
 {
 	p SetOrigin( pos );
 	eye = p GetEye();
 	org = station.origin;
-	look_dir = ( org[0] - eye[0], org[1] - eye[1], org[2] + 24 - eye[2] );
+	look_dir = ( org[0] - eye[0], org[1] - eye[1], org[2] + 34 - eye[2] );
 	p SetPlayerAngles( VectorToAngles( look_dir ) );
 }
 
@@ -1224,24 +1327,30 @@ bz_run_visual_tour()
 	}
 
 	p endon( "disconnect" );
-	// Let WaW's level intro black fade-in (1.25s starting ~3-5s) and first WineD3D frame settle before capturing.
-	wait( 6.0 );
+	// Pin consistent FOV across all 4 Stock Maps and wait for intro text + Shi No Numa client fade-in to clear completely (F5/F18/F32/O7).
+	p SetClientDvar( "cg_fov", "75" );
+	if ( bz_get_map_name() == "nazi_zombie_sumpf" )
+	{
+		wait( 23.0 );
+	}
+	else
+	{
+		wait( 16.0 );
+	}
 	p.maxhealth = 99999;
 	p.health = 99999;
 	p.score = 50000;
+	p.ignoreme = true;
 	map_name = bz_get_map_name();
 	slug = "";
 	ids = [];
-	poses = [];
+	inspect_extra = ( GetDvarInt( "bz_test_visual_inspect" ) == 1 );
 	if ( map_name == "nazi_zombie_factory" )
 	{
 		slug = "factory";
 		ids[0] = "perks";
 		ids[1] = "class";
 		ids[2] = "arsenal";
-		poses[0] = ( -254, -240, 20 );
-		poses[1] = ( 174, -200, 20 );
-		poses[2] = ( 140, 80, 20 );
 	}
 	else
 	{
@@ -1291,19 +1400,13 @@ bz_run_visual_tour()
 		}
 
 		station = level.bz_station_list[i];
-		if ( slug == "factory" )
-		{
-			bz_test_visual_pose( p, poses[i], station );
-			wait( 0.6 );
-		}
-		else
-		{
-			fwd = AnglesToForward( station.angles );
-			org = station.origin;
-			pos = ( org[0] + fwd[0] * 58, org[1] + fwd[1] * 58, org[2] );
-			bz_test_visual_pose( p, pos, station );
-			wait( 0.8 );
-		}
+		bz_test_visual_audit_station( prefix, id, station );
+		fwd = AnglesToForward( station.angles );
+		right = AnglesToRight( station.angles );
+		org = station.origin;
+		pos = ( org[0] + fwd[0] * 60, org[1] + fwd[1] * 60, org[2] );
+		bz_test_visual_pose( p, pos, station );
+		wait( 0.85 );
 
 		prompt = bz_stations_format_prompt_text( id, station.display_name );
 		if ( !IsDefined( p.bz_station_prompt_hud ) || p.bz_station_prompt_hud.alpha != 1 ||
@@ -1314,7 +1417,44 @@ bz_run_visual_tour()
 		}
 		bz_test_visual_phase( prefix + "_" + id + "_prompt" );
 		phase_count++;
-		wait( 0.6 );
+		wait( 0.95 );
+
+		// Opt-in wide 35-deg oblique capture (~100u, prompt hidden) showing full plinth, wall joint, PaP flue & room context (F5/O7/A4/S4)
+		if ( inspect_extra )
+		{
+			ob_r = ( org[0] + fwd[0] * 86 + right[0] * 56, org[1] + fwd[1] * 86 + right[1] * 56, org[2] );
+			ob_l = ( org[0] + fwd[0] * 86 - right[0] * 56, org[1] + fwd[1] * 86 - right[1] * 56, org[2] );
+			// Check chest-height LOS + low/high 20u lateral wall buffer around camera (catches window sills & jambs; A4/S4/F30).
+			tr_r = BulletTrace( ( org[0] + fwd[0] * 22, org[1] + fwd[1] * 22, org[2] + 38 ), ( ob_r[0], ob_r[1], org[2] + 38 ), false, undefined );
+			tr_r_edge = BulletTrace( ( org[0] + fwd[0] * 14 + right[0] * 16, org[1] + fwd[1] * 14 + right[1] * 16, org[2] + 42 ), ( ob_r[0], ob_r[1], org[2] + 42 ), false, undefined );
+			tr_r_lat = BulletTrace( ( ob_r[0], ob_r[1], org[2] + 44 ), ( ob_r[0] + right[0] * 20, ob_r[1] + right[1] * 20, org[2] + 44 ), false, undefined );
+			tr_r_sill = BulletTrace( ( ob_r[0], ob_r[1], org[2] + 20 ), ( ob_r[0] + right[0] * 20, ob_r[1] + right[1] * 20, org[2] + 20 ), false, undefined );
+			r_clear = ( !IsDefined( tr_r ) || !IsDefined( tr_r["fraction"] ) || tr_r["fraction"] >= 0.95 ) &&
+				( !IsDefined( tr_r_edge ) || !IsDefined( tr_r_edge["fraction"] ) || tr_r_edge["fraction"] >= 0.95 ) &&
+				( !IsDefined( tr_r_lat ) || !IsDefined( tr_r_lat["fraction"] ) || tr_r_lat["fraction"] >= 0.95 ) &&
+				( !IsDefined( tr_r_sill ) || !IsDefined( tr_r_sill["fraction"] ) || tr_r_sill["fraction"] >= 0.95 );
+			ob_cand = ob_r;
+			if ( !r_clear )
+			{
+				tr_l = BulletTrace( ( org[0] + fwd[0] * 22, org[1] + fwd[1] * 22, org[2] + 38 ), ( ob_l[0], ob_l[1], org[2] + 38 ), false, undefined );
+				tr_l_lat = BulletTrace( ( ob_l[0], ob_l[1], org[2] + 44 ), ( ob_l[0] - right[0] * 20, ob_l[1] - right[1] * 20, org[2] + 44 ), false, undefined );
+				l_clear = ( !IsDefined( tr_l ) || !IsDefined( tr_l["fraction"] ) || tr_l["fraction"] >= 0.95 ) &&
+					( !IsDefined( tr_l_lat ) || !IsDefined( tr_l_lat["fraction"] ) || tr_l_lat["fraction"] >= 0.95 );
+				if ( l_clear || ( !IsDefined( tr_r ) || !IsDefined( tr_r["fraction"] ) || tr_r["fraction"] < 0.95 ) )
+				{
+					ob_cand = ob_l;
+					if ( IsDefined( tr_l ) && IsDefined( tr_l["fraction"] ) && tr_l["fraction"] < 0.95 && IsDefined( tr_l["position"] ) )
+					{
+						hit = tr_l["position"];
+						ob_cand = ( org[0] + ( hit[0] - org[0] ) * 0.78, org[1] + ( hit[1] - org[1] ) * 0.78, org[2] );
+					}
+				}
+			}
+			bz_test_visual_pose( p, ob_cand, station );
+			wait( 0.75 );
+			bz_test_visual_phase( prefix + "_" + id + "_oblique" );
+			wait( 0.85 );
+		}
 	}
 
 	if ( slug == "factory" )
@@ -1352,6 +1492,7 @@ bz_run_visual_tour()
 
 		for ( i = 0; i < items.size; i++ )
 		{
+			bz_test_clear_nearby_zombies();
 			weap = maps\_bz_rules::bz_get_element_weapon_name( items[i] );
 			if ( !p HasWeapon( weap ) )
 			{
@@ -1434,15 +1575,91 @@ bz_run_visual_tour()
 			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=missing_pap_war_club" );
 			return;
 		}
+		bz_test_clear_nearby_zombies();
 		p SetOrigin( ( -40, -140, 10 ) );
 		p SetPlayerAngles( ( 12, 90, 0 ) );
-		bz_test_pap_war_club_smash( p, ( -40, 0, 10 ) );
-		bz_special_trigger_war_club_swing( p );
-		wait( 0.2 );
+		// Step 1: Exercise the real gameplay War Club swing cycle (raise -> PaP smash -> timed auto-restore to zombie_colt_upgraded; A12/S12).
+		p.bz_war_club_last_swing_ms = undefined;
+		p.bz_war_club_last_smash_ms = undefined;
+		smash_res = maps\_bz_special_weapons::bz_special_trigger_war_club_swing( p );
+		raised_ok = false;
+		for ( sw_t = 0; sw_t < 24; sw_t++ )
+		{
+			if ( ( p GetCurrentWeapon() ) == "bz_war_club" )
+			{
+				raised_ok = true;
+			}
+			if ( !p HasWeapon( "bz_war_club" ) && ( !IsDefined( p.bz_war_club_swinging ) || !p.bz_war_club_swinging ) )
+			{
+				break;
+			}
+			wait( 0.05 );
+		}
+		for ( rs_t = 0; rs_t < 32 && ( p HasWeapon( "bz_war_club" ) || ( IsDefined( p.bz_war_club_swinging ) && p.bz_war_club_swinging ) || ( p GetCurrentWeapon() ) != "zombie_colt_upgraded" ); rs_t++ )
+		{
+			wait( 0.05 );
+		}
+		smash_ok = IsDefined( smash_res ) && smash_res.pap;
+		restored_ok = !p HasWeapon( "bz_war_club" ) && ( !IsDefined( p.bz_war_club_swinging ) || !p.bz_war_club_swinging ) && ( p GetCurrentWeapon() ) == "zombie_colt_upgraded";
+		bz_log_emit( "WAR_CLUB_MELEE_CYCLE", "raised=" + bz_bool_int( raised_ok ) + ";smash_ok=" + bz_bool_int( smash_ok ) + ";restored=" + bz_bool_int( restored_ok ) );
+		// Step 2: Hold the War Club viewmodel steady for X11 screenshot capture (avoids racing the 0.38s gameplay auto-restore timer).
+		if ( !p HasWeapon( "bz_war_club" ) )
+		{
+			p GiveWeapon( "bz_war_club" );
+		}
+		p SetWeaponAmmoClip( "bz_war_club", 1 );
+		p SetWeaponAmmoStock( "bz_war_club", 0 );
+		p SwitchToWeapon( "bz_war_club" );
+		for ( wc_tries = 0; wc_tries < 50 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != "bz_war_club" ); wc_tries++ )
+		{
+			wait( 0.05 );
+		}
+		if ( ( p GetCurrentWeapon() ) != "bz_war_club" )
+		{
+			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=war_club_not_equipped" );
+			return;
+		}
+		wait( 0.35 );
 		bz_test_visual_phase( "war_club_active" );
-		wait( 0.6 );
+		wait( 0.95 );
+		p SwitchToWeapon( "zombie_colt_upgraded" );
+		p TakeWeapon( "bz_war_club" );
+		wait( 0.35 );
 
 		bz_on_menu_response( p, "bz_station_arsenal", "buy_gear:portal_grenade" );
+		if ( inspect_extra )
+		{
+			bz_test_clear_nearby_zombies();
+			// Capture held Portal Grenade viewmodel + completely unobstructed tip-to-tip close-up of deployed Portal Orb (A12/S11/G11/F15)
+			p SwitchToWeapon( "bz_portal_grenade" );
+			for ( pg_tries = 0; pg_tries < 50 && ( p IsSwitchingWeapons() || ( p GetCurrentWeapon() ) != "bz_portal_grenade" ); pg_tries++ )
+			{
+				wait( 0.05 );
+			}
+			wait( 0.35 );
+			bz_test_visual_phase( "portal_held" );
+			wait( 1.25 );
+			bz_test_clear_nearby_zombies();
+			// Switch off held grenade so the deployed anchor floats 100% unobstructed from top spire to bottom spire!
+			p SwitchToWeapon( "zombie_colt_upgraded" );
+			p SetOrigin( ( -40, -195, 10 ) );
+			p SetPlayerAngles( ( 0, 90, 0 ) );
+			wait( 0.45 );
+			eye_pos = p GetEye();
+			clean_orb = Spawn( "script_model", ( eye_pos[0], eye_pos[1] + 54, eye_pos[2] + 2 ) );
+			clean_orb.angles = ( 0, 125, 0 );
+			clean_orb SetModel( "bz_portal_orb_air" );
+			clean_orb SetContents( 0 );
+			clean_orb NotSolid();
+			wait( 0.45 );
+			bz_test_visual_phase( "portal_orb_clean" );
+			wait( 1.85 );
+			clean_orb Delete();
+			p SetOrigin( ( -40, -195, 10 ) );
+			p SetPlayerAngles( ( 4, 90, 0 ) );
+			wait( 0.35 );
+		}
+		bz_test_clear_nearby_zombies();
 		portal = bz_special_try_activate_portal( p );
 		if ( !IsDefined( portal ) || !IsDefined( portal.bz_fx_ent ) )
 		{
@@ -1463,6 +1680,9 @@ bz_run_visual_tour()
 			bz_log_emit( "VISUAL_TOUR_FAIL", "reason=portal_still_active" );
 			return;
 		}
+		p SetOrigin( ( -40, -195, 10 ) );
+		p SetPlayerAngles( ( 4, 90, 0 ) );
+		wait( 0.15 );
 		bz_test_visual_phase( "portal_post" );
 		wait( 0.6 );
 		phase_count = phase_count + 3;

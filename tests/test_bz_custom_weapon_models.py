@@ -711,6 +711,144 @@ class TestCustomWeaponModelGenerator(unittest.TestCase):
             for mat in bz_models.HUD_ICON_MATERIALS:
                 self.assertIn(f"material,{mat}", csv)
 
+    def test_kiosk_front_panels_and_935_plates_face_outward_and_read_left_to_right(self) -> None:
+        """Guard ADR-0007 per-kiosk vert/tri budgets, outward +X displays, non-mirrored '935', & specular pixel caps."""
+        meshes = {m.name: m for m in bz_models.build_all_meshes()}
+        # Exact Sheet 08 / NORTHSTAR_SPEC.md per-kiosk (max_verts, max_tris) ceilings (A7/S7/F11/O18)
+        kiosk_checks = (
+            ("bz_station_perks_kiosk", 1450, 1100, {"mtl_bz_kiosk_perks_glow"}),
+            ("bz_station_class_kiosk", 1350, 1000, {"mtl_bz_kiosk_class_glow", "mtl_bz_kiosk_935"}),
+            ("bz_station_arsenal_kiosk", 1450, 1100, {"mtl_bz_kiosk_arsenal_glow"}),
+            ("bz_station_pap_kiosk", 1500, 1150, {"mtl_bz_kiosk_pap_glow", "mtl_bz_kiosk_935"}),
+        )
+        for kiosk_name, max_verts, max_tris, front_mats in kiosk_checks:
+            mesh = meshes[kiosk_name]
+            self.assertLessEqual(len(mesh.materials), 4, f"{kiosk_name} exceeds 4 materials")
+            self.assertLessEqual(len(mesh.verts), max_verts, f"{kiosk_name} exceeds {max_verts} verts: {len(mesh.verts)}")
+            self.assertLessEqual(len(mesh.faces), max_tris, f"{kiosk_name} exceeds {max_tris} tris: {len(mesh.faces)}")
+            front_quad_faces = 0
+            for face in mesh.faces:
+                mat = mesh.materials[face.mat_idx]
+                if mat not in front_mats:
+                    continue
+                p0, p1, p2 = (mesh.verts[i][0] for i in (face.v0, face.v1, face.v2))
+                geo_n = bz_models.v_cross(bz_models.v_sub(p1, p0), bz_models.v_sub(p2, p0))
+                # Skip the cylindrical PaP right-side sight tube (y > 16) and thin shield back/rim edges
+                cx = (p0[0] + p1[0] + p2[0]) / 3.0
+                cy = (p0[1] + p1[1] + p2[1]) / 3.0
+                if kiosk_name == "bz_station_pap_kiosk" and mat == "mtl_bz_kiosk_pap_glow" and cy > 16.0:
+                    continue
+                if mat == "mtl_bz_kiosk_935" and kiosk_name == "bz_station_class_kiosk" and cx < -6.8:
+                    continue
+                if abs(geo_n[0]) < 1e-4:
+                    continue
+                front_quad_faces += 1
+                self.assertGreater(
+                    geo_n[0],
+                    0.0,
+                    f"{kiosk_name} {mat} front face at ({cx:.1f},{cy:.1f}) faces -X (backface-culled!)",
+                )
+                # For +X facing plates, increasing Y (viewer left->right) must map to increasing U (0->1)
+                if mat == "mtl_bz_kiosk_935":
+                    pts_uvs = ((p0[1], face.uv0[0]), (p1[1], face.uv1[0]), (p2[1], face.uv2[0]))
+                    for a_idx in range(3):
+                        for b_idx in range(a_idx + 1, 3):
+                            dy = pts_uvs[b_idx][0] - pts_uvs[a_idx][0]
+                            du = pts_uvs[b_idx][1] - pts_uvs[a_idx][1]
+                            if abs(dy) > 0.5:
+                                self.assertGreater(
+                                    dy * du,
+                                    0.0,
+                                    f"{kiosk_name} {mat} has horizontally mirrored UVs (dy={dy:.2f}, du={du:.2f})",
+                                )
+            self.assertGreater(front_quad_faces, 0, f"{kiosk_name} had no checked front display faces")
+
+        # Verify actual emitted specular-map RGB pixels obey calibrated WaW caps (<=76 PaP, <=80 general! A13/S13)
+        # AND Cryo Wintertarnung whitewash has visible coverage (>=12% texels w/ B>120! A9)
+        with tempfile.TemporaryDirectory() as tmp:
+            tools_root = Path(tmp) / "tools"
+            bz_models.generate_all_assets(tools_root, tex_size=64)
+            tex_dir = tools_root / "texture_assets" / bz_models.ASSET_SUBDIR
+            for spec_tga in sorted(tex_dir.glob("*_s.tga")):
+                px = spec_tga.read_bytes()[18:]
+                max_rgb = max(max(px[0::4]), max(px[1::4]), max(px[2::4]))
+                cap = 76 if ("_pap1" in spec_tga.name or "_pap2" in spec_tga.name) else 80
+                self.assertLessEqual(max_rgb, cap, f"{spec_tga.name} specular pixel {max_rgb} exceeds cap {cap}")
+            cryo_px = (tex_dir / "bz_cryo_hull_c.tga").read_bytes()[18:]
+            wt_ratio = sum(1 for b in cryo_px[0::4] if b > 120) / (len(cryo_px) // 4)
+            self.assertGreaterEqual(wt_ratio, 0.12, f"Cryo Wintertarnung whitewash coverage too low: {wt_ratio:.3f}")
+            cryo_max_rgb = max(max(cryo_px[0::4]), max(cryo_px[1::4]), max(cryo_px[2::4]))
+            self.assertLessEqual(cryo_max_rgb, 185, f"Cryo emitted diffuse pixel {cryo_max_rgb} exceeds 185 cap (S16)")
+
+        # Verify projectile, weapon & kiosk geometric contracts (A7/A11/S7/S8/S9/S10/S15/O24/F24/F27/F31)
+        air_boom = meshes["bz_boomerang_blade_air"]
+        self.assertLessEqual(len(air_boom.faces), 500, f"bz_boomerang_blade_air exceeds 500 tris: {len(air_boom.faces)}")
+        # Verify circular lightening holes (all 3 verts per hole tri!) sit strictly between actual wrap & pellet extents (A11)
+        hole_faces = [
+            f for f in air_boom.faces
+            if air_boom.materials[f.mat_idx] == "mtl_bz_blade_leather"
+            and abs(abs(air_boom.verts[f.v0][0][0]) - 0.28) < 0.02
+            and abs(air_boom.verts[f.v1][0][0] - air_boom.verts[f.v0][0][0]) < 1e-4
+            and abs(air_boom.verts[f.v2][0][0] - air_boom.verts[f.v0][0][0]) < 1e-4
+        ]
+        self.assertEqual(len(hole_faces), 72, "Expected 3 blades x 3 circular 6-gon holes x 2 faces x 4 tris = 72 hole tris")
+        hole_rs = [
+            math.hypot(air_boom.verts[vi][0][1], air_boom.verts[vi][0][2])
+            for f in hole_faces
+            for vi in (f.v0, f.v1, f.v2)
+        ]
+        wrap_rs = [
+            math.hypot(air_boom.verts[vi][0][1], air_boom.verts[vi][0][2])
+            for f in air_boom.faces
+            if air_boom.materials[f.mat_idx] in ("mtl_bz_blade_leather", "mtl_bz_blade_brass")
+            and f not in hole_faces
+            for vi in (f.v0, f.v1, f.v2)
+            if math.hypot(air_boom.verts[vi][0][1], air_boom.verts[vi][0][2]) > 2.05
+        ]
+        pellet_rs = [
+            math.hypot(air_boom.verts[vi][0][1], air_boom.verts[vi][0][2])
+            for f in air_boom.faces
+            if air_boom.materials[f.mat_idx] == "mtl_bz_blade_glow"
+            for vi in (f.v0, f.v1, f.v2)
+            if math.hypot(air_boom.verts[vi][0][1], air_boom.verts[vi][0][2]) > 2.05
+        ]
+        self.assertTrue(wrap_rs and pellet_rs)
+        self.assertGreater(min(hole_rs), max(wrap_rs) + 0.5, f"Holes ({min(hole_rs):.2f}) overlap Arm-0 wrap ({max(wrap_rs):.2f})")
+        self.assertLess(max(hole_rs), min(pellet_rs) - 0.5, f"Holes ({max(hole_rs):.2f}) overlap tip pellets ({min(pellet_rs):.2f})")
+
+        # Verify Acid Sprayer exact 23.3u spec length (-5.6..17.71), tag_flash=(17.71,0,-0.29) alignment & 2.4-2.9u bell OD (O24/A8/S8)
+        for acid_name in ("viewmodel_bz_acid_sprayer", "world_bz_acid_sprayer"):
+            acid_m = meshes[acid_name]
+            xs = [v[0][0] for v in acid_m.verts]
+            self.assertLessEqual(abs(min(xs) - (-5.60)), 0.10, f"{acid_name} rear {min(xs):.2f} deviates from spec x=-5.60")
+            self.assertLessEqual(abs(max(xs) - 17.71), 0.10, f"{acid_name} muzzle {max(xs):.2f} deviates from tag_flash x=17.71")
+            total_len = max(xs) - min(xs)
+            self.assertTrue(23.15 <= total_len <= 23.45, f"{acid_name} total length {total_len:.2f}u deviates from 23.3u spec")
+            bell_verts = [v[0] for v in acid_m.verts if v[0][0] >= 17.2]
+            bell_od_y = max(p[1] for p in bell_verts) - min(p[1] for p in bell_verts)
+            bell_od_z = max(p[2] for p in bell_verts) - min(p[2] for p in bell_verts)
+            self.assertTrue(2.4 <= bell_od_y <= 2.9 and 2.4 <= bell_od_z <= 2.9, f"{acid_name} bell OD ({bell_od_y:.2f},{bell_od_z:.2f}) outside 2.4-2.9u")
+
+        # Verify Multi-Crossbow cassette bolts include matching amber tail witness nocks in BOTH VM & WM (S9)
+        for xbow_name in ("viewmodel_bz_multi_crossbow", "world_bz_multi_crossbow"):
+            xm = meshes[xbow_name]
+            nock_faces = [
+                f for f in xm.faces
+                if xm.materials[f.mat_idx] == "mtl_bz_xbow_glow"
+                and xm.verts[f.v0][0][0] < 9.0
+                and xm.verts[f.v0][0][1] > 1.8
+            ]
+            self.assertGreaterEqual(len(nock_faces), 24, f"{xbow_name} missing glowing tail witness nocks on cassette bolts")
+
+        pap_mesh = meshes["bz_station_pap_kiosk"]
+        self.assertGreaterEqual(len(pap_mesh.faces), 600, f"bz_station_pap_kiosk under 600 tris: {len(pap_mesh.faces)}")
+        pap_ys = [v[0][1] for v in pap_mesh.verts]
+        self.assertLessEqual(max(pap_ys) - min(pap_ys), 42.0, f"bz_station_pap_kiosk width {max(pap_ys)-min(pap_ys):.1f}u > 42u")
+        # Detached right exhaust flue top & cap (z>=65.0) sit strictly outside crown y=18.0 (F31)
+        flue_ys = [v[0][1] for v in pap_mesh.verts if v[0][2] >= 65.0]
+        self.assertTrue(flue_ys, "Expected PaP exhaust flue vertices above z=65.0")
+        self.assertGreater(min(flue_ys), 18.0, f"PaP exhaust flue intersects crown y=18.0 (min_y={min(flue_ys):.2f})")
+
 
 if __name__ == "__main__":
     unittest.main()

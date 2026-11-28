@@ -537,6 +537,11 @@ bz_special_restore_war_club_viewmodel( prev_weap )
 	self endon( "disconnect" );
 	level endon( "end_game" );
 
+	// Wait for the temporary War Club viewmodel raise to complete before holding the swing and restoring prev_weap (A12/S12).
+	for ( raise_t = 0; raise_t < 16 && IsDefined( self ) && self HasWeapon( "bz_war_club" ) && ( self GetCurrentWeapon() ) != "bz_war_club"; raise_t++ )
+	{
+		wait( 0.05 );
+	}
 	wait( 0.38 );
 	if ( !IsDefined( self ) )
 	{

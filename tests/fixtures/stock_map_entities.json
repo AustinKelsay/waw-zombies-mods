@@ -1,0 +1,2309 @@
+{
+  "nazi_zombie_factory": [
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        982.0,
+        -2462.0,
+        80.0
+      ]
+    },
+    {
+      "classname": "info_player_start",
+      "targetname": "",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -35.0,
+        -300.0,
+        23.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        23.0,
+        99.0,
+        120.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        27.0,
+        344.0,
+        124.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -140.0,
+        103.0,
+        121.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -137.0,
+        343.0,
+        124.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_east_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        440.0,
+        -107.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        228.0,
+        705.0,
+        23.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -380.0,
+        705.0,
+        23.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_south_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        439.0,
+        -639.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_south_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        63.0,
+        -1133.0,
+        94.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_west_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -690.0,
+        30.0,
+        89.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -793.0,
+        157.0,
+        32.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "m1carbine",
+      "zombie_weapon_upgrade": "zombie_m1carbine",
+      "origin": [
+        480.0,
+        31.0,
+        129.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "doublebarrel",
+      "zombie_weapon_upgrade": "zombie_doublebarrel",
+      "origin": [
+        -945.0,
+        -181.0,
+        125.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "warehouse_bottom_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -331.0,
+        -1176.0,
+        95.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -1534.5,
+        -1541.0,
+        226.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -551.6,
+        -2197.9,
+        183.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_sleight",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -366.5,
+        -794.0,
+        63.8
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_revive",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -489.0,
+        -2066.5,
+        155.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_jugg",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        671.0,
+        -1420.5,
+        133.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        82.0,
+        -1391.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "gewehr43",
+      "zombie_weapon_upgrade": "zombie_gewehr43",
+      "origin": [
+        61.0,
+        521.0,
+        65.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -219.5,
+        -2516.0,
+        65.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_west_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -813.0,
+        31.0,
+        94.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_doubletap",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -367.0,
+        -1079.5,
+        191.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1654.0,
+        821.0,
+        191.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        819.0,
+        1209.0,
+        191.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        665.5,
+        -2231.0,
+        305.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -1210.0,
+        -373.5,
+        226.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stg44",
+      "zombie_weapon_upgrade": "zombie_stg44",
+      "origin": [
+        598.0,
+        -3021.0,
+        210.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "fg42_bipod",
+      "zombie_weapon_upgrade": "zombie_fg42",
+      "origin": [
+        -52.0,
+        -937.0,
+        122.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "type100_smg",
+      "zombie_weapon_upgrade": "zombie_type100_smg",
+      "origin": [
+        -1467.0,
+        -754.0,
+        257.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -1175.5,
+        -860.0,
+        96.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stielhandgranate",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        1593.0,
+        984.0,
+        239.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -172.0,
+        -706.0,
+        -123.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "wnuen_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1138.3,
+        -5.7,
+        100.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "thompson",
+      "zombie_weapon_upgrade": "zombie_thompson",
+      "origin": [
+        -771.0,
+        -1021.0,
+        131.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "shotgun",
+      "zombie_weapon_upgrade": "zombie_shotgun",
+      "origin": [
+        1075.0,
+        -176.0,
+        115.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "wnuen_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        533.0,
+        -677.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "wnuen_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1073.0,
+        -661.0,
+        92.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1534.0,
+        -1423.0,
+        161.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        752.0,
+        -1309.0,
+        162.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "bridge_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -246.0,
+        -1534.0,
+        218.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "bridge_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -297.0,
+        -891.0,
+        219.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "warehouse_top_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -665.0,
+        -1538.0,
+        218.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stielhandgranate",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        -35.0,
+        -2423.0,
+        109.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stielhandgranate",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        -1389.0,
+        -474.0,
+        246.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "mp40",
+      "zombie_weapon_upgrade": "zombie_mp40",
+      "origin": [
+        727.0,
+        1041.0,
+        228.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        265.0,
+        -1970.0,
+        143.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "electric_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        315.0,
+        -234.0,
+        115.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -443.0,
+        -98.0,
+        123.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        359.0,
+        304.0,
+        94.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -790.0,
+        -364.0,
+        126.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        756.0,
+        348.0,
+        121.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1145.0,
+        326.0,
+        121.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -877.0,
+        -1200.0,
+        250.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1050.0,
+        -1007.0,
+        194.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -422.0,
+        -1043.0,
+        241.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "electric_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -353.0,
+        -412.0,
+        110.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        356.0,
+        304.0,
+        119.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "outside_east_zone_barriers",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        792.0,
+        756.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_vending_upgrade",
+      "script_noteworthy": "specialty_weapupgrade",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -61.0,
+        577.0,
+        153.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_pack_a_punch",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -61.0,
+        591.5,
+        114.5
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "kar98k",
+      "zombie_weapon_upgrade": "zombie_kar98k",
+      "origin": [
+        -104.0,
+        -531.0,
+        77.0
+      ]
+    }
+  ],
+  "nazi_zombie_prototype": [
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        167.0,
+        42.0,
+        144.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -266.0,
+        -191.0,
+        22.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        288.0,
+        -257.0,
+        20.1
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        908.0,
+        1077.0,
+        174.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        236.0,
+        1188.0,
+        174.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -266.0,
+        -751.0,
+        22.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        281.0,
+        525.0,
+        167.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        178.0,
+        574.0,
+        51.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        172.0,
+        147.0,
+        194.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        5.0,
+        1060.0,
+        132.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -119.0,
+        1057.0,
+        194.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        176.0,
+        607.0,
+        51.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "kar98k",
+      "origin": [
+        -206.0,
+        242.0,
+        60.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "thompson",
+      "origin": [
+        943.0,
+        1008.0,
+        60.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "bar",
+      "origin": [
+        -224.0,
+        1045.0,
+        196.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "m1carbine",
+      "origin": [
+        -94.0,
+        -412.0,
+        59.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "doublebarrel",
+      "origin": [
+        1035.0,
+        771.0,
+        59.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "shotgun",
+      "origin": [
+        736.0,
+        1008.0,
+        219.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "doublebarrel_sawed_grip",
+      "origin": [
+        213.0,
+        463.0,
+        196.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        0.0,
+        424.0,
+        17.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        72.0,
+        496.0,
+        17.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        0.0,
+        304.0,
+        17.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        72.0,
+        240.0,
+        17.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        177.0,
+        -944.0,
+        30.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        279.0,
+        250.0,
+        158.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        633.0,
+        560.0,
+        21.0
+      ]
+    },
+    {
+      "classname": "info_player_start",
+      "targetname": "",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -37.0,
+        202.0,
+        57.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -268.0,
+        487.0,
+        21.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        -134.0,
+        -119.0,
+        199.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        450.0,
+        1062.0,
+        18.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1105.0,
+        895.0,
+        25.0
+      ]
+    }
+  ],
+  "nazi_zombie_asylum": [
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        623.5,
+        927.0,
+        77.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        705.0,
+        754.0,
+        242.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1119.0,
+        -482.5,
+        239.5
+      ]
+    },
+    {
+      "classname": "info_player_start",
+      "targetname": "",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1160.0,
+        176.0,
+        264.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "north_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1097.0,
+        302.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "north_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1098.0,
+        237.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "south_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1081.0,
+        -53.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "south_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1082.0,
+        -124.0,
+        91.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "m1garand",
+      "origin": [
+        867.0,
+        296.0,
+        112.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1009.0,
+        492.0,
+        104.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        8.0,
+        636.0,
+        167.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "gewehr43",
+      "origin": [
+        1088.0,
+        -605.0,
+        120.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1257.0,
+        349.0,
+        104.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "bar_bipod",
+      "origin": [
+        1188.0,
+        497.0,
+        116.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "south_upstairs_debris",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1017.0,
+        -678.0,
+        188.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        917.0,
+        -633.0,
+        109.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        445.0,
+        692.0,
+        111.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "thompson",
+      "origin": [
+        192.0,
+        786.0,
+        110.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        798.5,
+        417.5,
+        86.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        567.5,
+        438.0,
+        71.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        609.0,
+        -64.0,
+        86.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1612.5,
+        177.5,
+        104.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "south_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1612.5,
+        -137.5,
+        93.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1206.5,
+        -850.0,
+        92.5
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "springfield",
+      "origin": [
+        1238.0,
+        63.0,
+        130.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        145.0,
+        -683.0,
+        266.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        145.0,
+        -671.0,
+        266.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -671.0,
+        1048.0,
+        246.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -772.0,
+        487.0,
+        271.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "magic_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -437.0,
+        -409.0,
+        271.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "electric_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1010.0,
+        78.0,
+        108.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "kar98k",
+      "origin": [
+        868.0,
+        -235.0,
+        115.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "doublebarrel",
+      "origin": [
+        845.0,
+        -242.0,
+        281.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "mp40",
+      "origin": [
+        683.0,
+        -595.0,
+        279.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "shotgun",
+      "origin": [
+        74.0,
+        912.0,
+        276.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "bar_bipod",
+      "origin": [
+        -288.0,
+        866.0,
+        279.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "doublebarrel",
+      "origin": [
+        1101.0,
+        689.0,
+        112.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "doublebarrel_sawed_grip",
+      "origin": [
+        -471.0,
+        983.0,
+        279.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        -824.0,
+        725.0,
+        277.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        257.0,
+        -607.0,
+        284.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "stg44",
+      "origin": [
+        -332.0,
+        -682.0,
+        276.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "south_upstairs_volume_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -24.2,
+        -252.0,
+        248.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -692.0,
+        -766.0,
+        242.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "south_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        620.8,
+        -438.9,
+        88.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "magic_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -345.0,
+        -30.0,
+        266.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "magic_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -713.0,
+        -253.5,
+        92.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "shotgun",
+      "origin": [
+        -577.0,
+        -425.0,
+        277.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "north_upper_door1",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -287.0,
+        641.0,
+        269.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "north_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1076.5,
+        394.5,
+        97.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "north_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1137.5,
+        121.5,
+        88.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "south_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1098.3,
+        19.8,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "south_spawn",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1125.3,
+        -194.3,
+        91.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -967.5,
+        389.4,
+        254.5
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_jugg",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1326.0,
+        -415.5,
+        64.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_revive",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1151.5,
+        402.0,
+        63.5
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1012.0,
+        484.0,
+        104.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "north_upper_door1",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -300.0,
+        639.0,
+        269.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -773.0,
+        476.0,
+        271.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "magic_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -345.0,
+        -36.0,
+        266.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "magic_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -437.0,
+        -420.0,
+        271.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_upstairs_volume_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -111.4,
+        416.3,
+        253.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -5.0,
+        740.0,
+        181.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "electric_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        1010.0,
+        68.0,
+        108.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_sleight",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        -572.5,
+        711.5,
+        224.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_doubletap",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        436.5,
+        -588.0,
+        227.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "south_upstairs_debris",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        955.0,
+        -731.0,
+        172.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        772.0,
+        199.5,
+        255.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "south_init_goal",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        797.8,
+        -346.9,
+        92.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        125.0,
+        -981.5,
+        247.5
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "north_lower_door",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        238.0,
+        435.5,
+        78.0
+      ]
+    }
+  ],
+  "nazi_zombie_sumpf": [
+    {
+      "classname": "info_player_start",
+      "targetname": "",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9566.0,
+        309.0,
+        -621.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10589.0,
+        392.0,
+        -500.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9903.0,
+        652.0,
+        -500.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10124.0,
+        373.0,
+        -478.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_debris",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9952.0,
+        372.0,
+        -601.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "center_upstairs_barrier",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10448.0,
+        838.0,
+        -448.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "zombie_door",
+      "script_noteworthy": "center_upstairs_barrier",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10448.0,
+        856.0,
+        -448.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9478.4,
+        517.9,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10732.5,
+        916.5,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        12746.0,
+        -1063.8,
+        -625.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        12563.9,
+        -1630.6,
+        -625.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9500.5,
+        974.5,
+        -650.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9415.5,
+        656.0,
+        -639.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10249.5,
+        1462.0,
+        -639.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10361.5,
+        140.5,
+        -639.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10724.4,
+        515.4,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10340.2,
+        215.0,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        9778.2,
+        215.0,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10042.5,
+        1155.5,
+        -507.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        11733.4,
+        2971.9,
+        -634.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        11392.0,
+        3803.7,
+        -634.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        8578.1,
+        3649.0,
+        -643.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        8803.6,
+        3423.5,
+        -643.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        8065.6,
+        3684.7,
+        -643.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        7893.6,
+        -1633.2,
+        -658.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "exterior_goal",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        7221.7,
+        -1405.5,
+        -658.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10130.0,
+        659.0,
+        -500.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_sleight",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        12380.0,
+        -1199.9,
+        -647.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_revive",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        11679.1,
+        3607.9,
+        -661.5
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_jugg",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        8522.7,
+        3199.0,
+        -668.0
+      ]
+    },
+    {
+      "classname": "script_model",
+      "targetname": "vending_doubletap",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        7841.2,
+        -1196.0,
+        -680.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "m1garand",
+      "zombie_weapon_upgrade": "zombie_m1garand",
+      "origin": [
+        10625.0,
+        856.0,
+        -607.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "type99_rifle",
+      "zombie_weapon_upgrade": "zombie_type99_rifle",
+      "origin": [
+        10661.0,
+        395.0,
+        -477.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "gewehr43",
+      "zombie_weapon_upgrade": "zombie_gewehr43",
+      "origin": [
+        9542.0,
+        697.0,
+        -475.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stielhandgranate",
+      "zombie_weapon_upgrade": "stielhandgranate",
+      "origin": [
+        10609.0,
+        1334.0,
+        -472.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "m1carbine",
+      "zombie_weapon_upgrade": "zombie_m1carbine",
+      "origin": [
+        10202.0,
+        1334.0,
+        -477.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "shotgun",
+      "zombie_weapon_upgrade": "zombie_shotgun",
+      "origin": [
+        10514.0,
+        200.0,
+        -608.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "thompson",
+      "zombie_weapon_upgrade": "zombie_thompson",
+      "origin": [
+        10148.0,
+        486.0,
+        -608.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "mp40",
+      "zombie_weapon_upgrade": "zombie_mp40",
+      "origin": [
+        8480.0,
+        3260.0,
+        -614.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "type100_smg",
+      "zombie_weapon_upgrade": "zombie_type100_smg",
+      "origin": [
+        12614.0,
+        -1164.0,
+        -585.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "stg44",
+      "zombie_weapon_upgrade": "zombie_stg44",
+      "origin": [
+        7719.0,
+        -1094.0,
+        -627.0
+      ]
+    },
+    {
+      "classname": "trigger_use",
+      "targetname": "weapon_upgrade",
+      "script_noteworthy": "bar",
+      "zombie_weapon_upgrade": "zombie_bar",
+      "origin": [
+        11531.0,
+        3788.0,
+        -607.0
+      ]
+    },
+    {
+      "classname": "script_struct",
+      "targetname": "initial_spawn_points",
+      "script_noteworthy": "",
+      "zombie_weapon_upgrade": "",
+      "origin": [
+        10193.0,
+        344.0,
+        -500.0
+      ]
+    }
+  ]
+}

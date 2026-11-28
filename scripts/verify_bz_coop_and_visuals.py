@@ -281,6 +281,9 @@ STATION_IDS = ("perks", "class", "arsenal", "pap")
 STATION_MENU_PHASES = ("menu_perks", "menu_class", "menu_arsenal", "menu_pap")
 
 
+KIOSK_BACK_DEPTH_U = {"perks": 11, "class": 13, "arsenal": 14, "pap": 15}
+
+
 def expected_visual_phases(slug: str) -> tuple[str, ...]:
     if slug != "factory":
         prefixes = ("asylum", "asylum_south") if slug == "asylum" else (slug,)
@@ -293,7 +296,134 @@ def expected_visual_phases(slug: str) -> tuple[str, ...]:
     )
 
 
+def expected_inspect_extra_phases(slug: str) -> tuple[str, ...]:
+    """Return the extra oblique and Portal close-up phases required when --inspect-extra is enabled."""
+    if slug == "factory":
+        return (
+            "factory_perks_oblique",
+            "factory_class_oblique",
+            "factory_arsenal_oblique",
+            "portal_held",
+            "portal_orb_clean",
+        )
+    prefixes = ("asylum", "asylum_south") if slug == "asylum" else (slug,)
+    return tuple(f"{prefix}_{station}_oblique" for prefix in prefixes for station in STATION_IDS)
+
+
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _is_blank_or_uniform_png(contents: bytes) -> bool:
+    """Return True if a PNG image (>=8x8) is solid/uniform or near-black (catches fade-in/X11 capture blanks; F32/A/O/S)."""
+    if not contents.startswith(_PNG_SIGNATURE):
+        return False
+    offset = len(_PNG_SIGNATURE)
+    length = len(contents)
+    width = height = bit_depth = color_type = 0
+    idat_parts: list[bytes] = []
+    while offset + 12 <= length:
+        chunk_len = struct.unpack(">I", contents[offset : offset + 4])[0]
+        chunk_type = contents[offset + 4 : offset + 8]
+        data_start = offset + 8
+        data_end = data_start + chunk_len
+        if data_end + 4 > length:
+            return False
+        data = contents[data_start:data_end]
+        offset = data_end + 4
+        if chunk_type == b"IHDR" and len(data) == 13:
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", data[:10])
+        elif chunk_type == b"IDAT":
+            idat_parts.append(data)
+        elif chunk_type == b"IEND":
+            break
+    if width < 8 or height < 8 or not idat_parts:
+        return False
+    try:
+        raw = zlib.decompress(b"".join(idat_parts))
+    except zlib.error:
+        return False
+    # Fast exact check across all bit depths (incl. ImageMagick 1-bit bilevel all-black captures; F32/A/O/S).
+    if not any(raw):
+        return True
+    if bit_depth != 8:
+        # Handle packed 1/2/4-bit grayscale or indexed uniform captures (e.g. solid-white or solid-color bilevel).
+        packed_stride = (width * bit_depth + 7) // 8
+        packed_row = packed_stride + 1
+        if len(raw) >= height * packed_row:
+            first_row = raw[1 : 1 + packed_stride]
+            if len(set(first_row)) <= 1 and all(
+                raw[y * packed_row + 1 : y * packed_row + 1 + packed_stride] == first_row
+                for y in range(1, min(height, 64))
+            ):
+                return True
+        return False
+    channels_by_type = {0: 1, 2: 3, 4: 2, 6: 4}
+    bpp = channels_by_type.get(color_type)
+    if bpp is None:
+        return False
+    stride = width * bpp
+    row_len = stride + 1
+    if len(raw) < height * row_len:
+        return False
+
+    # Reconstruct ALL scanlines and check 100% of decoded RGB pixels on every row (no column striding),
+    # exiting immediately as soon as both visible brightness (>10/255) and pixel variation are observed.
+    prev = bytearray(stride)
+    first_pixel: bytes | None = None
+    uniform_row: bytes | None = None
+    uniform_channels: tuple[bytes, ...] | None = None
+    all_uniform = True
+    max_channel = 0
+    rgb_ch = 1 if color_type in (0, 4) else 3
+    for y in range(height):
+        base = y * row_len
+        ftype = raw[base]
+        cur = bytearray(raw[base + 1 : base + 1 + stride])
+        if ftype == 1:  # Sub
+            for i in range(bpp, stride):
+                cur[i] = (cur[i] + cur[i - bpp]) & 0xFF
+        elif ftype == 2:  # Up
+            for i in range(stride):
+                cur[i] = (cur[i] + prev[i]) & 0xFF
+        elif ftype == 3:  # Average
+            for i in range(stride):
+                left = cur[i - bpp] if i >= bpp else 0
+                cur[i] = (cur[i] + ((left + prev[i]) >> 1)) & 0xFF
+        elif ftype == 4:  # Paeth
+            for i in range(stride):
+                a = cur[i - bpp] if i >= bpp else 0
+                b = prev[i]
+                c = prev[i - bpp] if i >= bpp else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                cur[i] = (cur[i] + pr) & 0xFF
+        if first_pixel is None:
+            first_pixel = bytes(cur[:rgb_ch])
+            if bpp == rgb_ch:
+                uniform_row = first_pixel * width
+            else:
+                uniform_channels = tuple(bytes((first_pixel[c],)) * width for c in range(rgb_ch))
+        if bpp == rgb_ch:
+            row_max = max(cur)
+            if all_uniform and cur != uniform_row:
+                all_uniform = False
+        else:
+            row_max = 0
+            for c in range(rgb_ch):
+                ch_slice = cur[c::bpp]
+                ch_m = max(ch_slice)
+                if ch_m > row_max:
+                    row_max = ch_m
+                if all_uniform and ch_slice != uniform_channels[c]:
+                    all_uniform = False
+        if row_max > max_channel:
+            max_channel = row_max
+        prev = cur
+        if not all_uniform and max_channel > 10:
+            return False
+
+    return all_uniform or max_channel <= 10
 
 
 def _png_content_digest(contents: bytes) -> str:
@@ -345,9 +475,9 @@ class CapturedFrame:
 
 
 def analyze_visual_tour_result(
-    log_text: str, captured_frames: Sequence[CapturedFrame],
+    log_text: str, captured_frames: Sequence[CapturedFrame], inspect_extra: bool = False,
 ) -> tuple[list[bz.BzEvent], list[str]]:
-    """Check phase telemetry, frame files, and screenshot diversity for one Stock Map."""
+    """Check phase telemetry, frame files, placement audit telemetry, and screenshot diversity for one Stock Map."""
     events = bz.parse_bz_events(log_text)
     errors = engine_errors(log_text)
     done = [e for e in events if e.event_type == "VISUAL_TOUR_DONE"]
@@ -361,6 +491,8 @@ def analyze_visual_tour_result(
         errors.append(f"Unexpected Stock Map in {done[-1].raw}")
         return events, errors
     expected = expected_visual_phases(slug)
+    extra_expected = expected_inspect_extra_phases(slug) if inspect_extra else ()
+    all_expected = (*expected, *extra_expected)
     if done[-1].fields.get("phases") != str(len(expected)):
         errors.append(f"Expected {len(expected)} phases in {done[-1].raw}")
 
@@ -369,7 +501,7 @@ def analyze_visual_tour_result(
     }
     frames = {frame.phase: frame for frame in captured_frames}
     content_hashes: dict[str, str] = {}
-    for phase in expected:
+    for phase in all_expected:
         if phase not in phase_times:
             errors.append(f"Missing VISUAL_TOUR_PHASE for {phase}")
         if phase not in frames:
@@ -389,45 +521,108 @@ def analyze_visual_tour_result(
         file_sha256 = hashlib.sha256(contents).hexdigest()
         if file_sha256 != frame.sha256:
             errors.append(f"PNG SHA-256 does not match capture for {phase}")
+        if _is_blank_or_uniform_png(contents):
+            errors.append(f"Captured frame for {phase} is blank/uniform (possible fade-in or X11 capture failure)")
         content_hashes[phase] = _png_content_digest(contents)
+
+    # Validate live STATION_AUDIT floor-flatness, skirt seating, and wall-gap telemetry whenever emitted or --inspect-extra is active (A4/S4/O22/F5).
+    audit_by_station = {
+        e.fields.get("station", ""): e.fields for e in events if e.event_type == "STATION_AUDIT"
+    }
+    if inspect_extra or audit_by_station:
+        expected_station_keys = [
+            phase.removesuffix("_prompt")
+            for phase in expected
+            if phase.endswith("_prompt") and phase != "native_pap_prompt"
+        ]
+        for st_key in expected_station_keys:
+            audit = audit_by_station.get(st_key)
+            if audit is None:
+                errors.append(f"Missing STATION_AUDIT telemetry for {st_key}")
+                continue
+            kind = st_key.rsplit("_", 1)[-1]
+            back_depth = KIOSK_BACK_DEPTH_U.get(kind, 12)
+            missing_keys = [k for k in ("back_dist", "floor_delta", "skirt_gap", "misses") if k not in audit]
+            if missing_keys:
+                errors.append(
+                    f"Missing required STATION_AUDIT field(s) {', '.join(missing_keys)} for {st_key}"
+                )
+                continue
+            try:
+                back_dist = int(audit["back_dist"])
+                floor_delta = int(audit["floor_delta"])
+                skirt_gap = int(audit["skirt_gap"])
+                misses = int(audit["misses"])
+            except ValueError:
+                errors.append(f"Malformed STATION_AUDIT fields for {st_key}: {audit}")
+                continue
+            if misses > 0:
+                errors.append(f"STATION_AUDIT {st_key} has {misses} missed floor-corner trace(s)")
+            if floor_delta > 2:
+                errors.append(f"STATION_AUDIT {st_key} floor_delta={floor_delta} exceeds 2u cap")
+            if skirt_gap > 3:
+                errors.append(f"STATION_AUDIT {st_key} skirt_gap={skirt_gap} exceeds 3u burial-skirt margin")
+            if back_dist < back_depth - 1 or back_dist > back_depth + 4:
+                errors.append(
+                    f"STATION_AUDIT {st_key} back_dist={back_dist} outside flush range [{back_depth - 1}, {back_depth + 4}]"
+                )
+
+    # Validate real gameplay War Club swing cycle (raise -> PaP smash -> auto-restore) whenever emitted or --inspect-extra on factory (A12/S12).
+    wc_events = [e for e in events if e.event_type == "WAR_CLUB_MELEE_CYCLE"]
+    if wc_events or (slug == "factory" and inspect_extra):
+        if not wc_events:
+            errors.append("Missing WAR_CLUB_MELEE_CYCLE telemetry on factory visual tour")
+        else:
+            wc = wc_events[-1].fields
+            for req_field in ("raised", "smash_ok", "restored"):
+                if wc.get(req_field) != "1":
+                    errors.append(
+                        f"WAR_CLUB_MELEE_CYCLE failed check {req_field}={wc.get(req_field, '<missing>')} (expected 1)"
+                    )
 
     if len(content_hashes) > 1 and len(set(content_hashes.values())) == 1:
         errors.append("Visual tour appears frozen: all captured frames have identical image content")
-    elif slug == "asylum":
-        north = expected[:len(STATION_IDS)]
-        south = expected[len(STATION_IDS):]
-        for wing, phases in (("north", north), ("south", south)):
-            group = [content_hashes.get(phase) for phase in phases]
-            if all(group) and len(set(group)) == 1:
-                errors.append(f"Visual tour appears frozen in the {wing} wing of Verruckt")
-        asylum_by_hash: dict[str, list[str]] = {}
-        for phase in expected:
-            digest = content_hashes.get(phase)
-            if digest:
-                asylum_by_hash.setdefault(digest, []).append(phase)
-        for duplicate_phases in asylum_by_hash.values():
-            if len(duplicate_phases) > 1:
-                errors.append(
-                    f"Visual tour appears frozen: duplicate Verruckt station frames ({', '.join(duplicate_phases)})"
-                )
-    elif slug == "factory":
-        for weapon in WEAPON_SLUGS:
-            group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
-            if all(group) and len(set(group)) == 1:
-                errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
-        portal_group = [content_hashes.get(phase) for phase in PORTAL_PHASES]
-        if all(portal_group) and len(set(portal_group)) == 1:
-            errors.append(f"Visual tour appears frozen: {', '.join(PORTAL_PHASES)} match")
+    else:
+        # Check duplicate station frames on EVERY stock map (prototype, sumpf, asylum, factory; F32/O/S).
+        station_phases = [
+            phase for phase in all_expected
+            if (phase.endswith("_prompt") and phase != "native_pap_prompt") or phase.endswith("_oblique")
+        ]
         station_by_hash: dict[str, list[str]] = {}
-        for phase in STATION_MENU_PHASES:
+        for phase in station_phases:
             digest = content_hashes.get(phase)
             if digest:
                 station_by_hash.setdefault(digest, []).append(phase)
         for duplicate_phases in station_by_hash.values():
             if len(duplicate_phases) > 1:
                 errors.append(
-                    f"Visual tour appears frozen: duplicate station menu frames ({', '.join(duplicate_phases)})"
+                    f"Visual tour appears frozen: duplicate {slug} station frames ({', '.join(duplicate_phases)})"
                 )
+        if slug == "asylum":
+            north = expected[:len(STATION_IDS)]
+            south = expected[len(STATION_IDS):]
+            for wing, phases in (("north", north), ("south", south)):
+                group = [content_hashes.get(phase) for phase in phases]
+                if all(group) and len(set(group)) == 1:
+                    errors.append(f"Visual tour appears frozen in the {wing} wing of Verruckt")
+        elif slug == "factory":
+            for weapon in WEAPON_SLUGS:
+                group = [content_hashes.get(f"{weapon}_{state}") for state in ("idle", "active", "post")]
+                if all(group) and len(set(group)) == 1:
+                    errors.append(f"Visual tour appears frozen during {weapon}: idle, active, and post match")
+            portal_group = [content_hashes.get(phase) for phase in PORTAL_PHASES]
+            if all(portal_group) and len(set(portal_group)) == 1:
+                errors.append(f"Visual tour appears frozen: {', '.join(PORTAL_PHASES)} match")
+            menu_by_hash: dict[str, list[str]] = {}
+            for phase in STATION_MENU_PHASES:
+                digest = content_hashes.get(phase)
+                if digest:
+                    menu_by_hash.setdefault(digest, []).append(phase)
+            for duplicate_phases in menu_by_hash.values():
+                if len(duplicate_phases) > 1:
+                    errors.append(
+                        f"Visual tour appears frozen: duplicate station menu frames ({', '.join(duplicate_phases)})"
+                    )
     return events, errors
 
 
@@ -518,13 +713,15 @@ def dismiss_optimal_settings(display_name: str, stop: Event) -> None:
 class VisualCapture:
     """Take a root-window PNG as each complete, expected phase line is appended."""
 
-    def __init__(self, slug: str, out_dir: Path, display_num: int) -> None:
+    def __init__(self, slug: str, out_dir: Path, display_num: int, capture_extra: bool = False) -> None:
         self.expected = expected_visual_phases(slug)
+        self.capture_extra = capture_extra
         self.out_dir = out_dir
         self.env = dict(os.environ, DISPLAY=f":{display_num}")
         self.offset = 0
         self.seen: set[str] = set()
         self.frames: list[CapturedFrame] = []
+        self.extra_frames: list[CapturedFrame] = []
         self.errors: list[str] = []
 
     def __call__(self, log_text: str) -> None:
@@ -538,7 +735,9 @@ class VisualCapture:
         for event in events:
             phase = event.fields.get("phase", "")
             timestamp = event.fields.get("t", "")
-            if (event.event_type != "VISUAL_TOUR_PHASE" or phase not in self.expected
+            is_expected = phase in self.expected
+            is_extra = self.capture_extra and (phase.endswith("_oblique") or phase in ("portal_held", "portal_orb_clean"))
+            if (event.event_type != "VISUAL_TOUR_PHASE" or not (is_expected or is_extra)
                     or phase in self.seen or not timestamp.isdecimal()):
                 continue
             self.seen.add(phase)
@@ -553,8 +752,22 @@ class VisualCapture:
             except (OSError, subprocess.SubprocessError) as exc:
                 self.errors.append(f"Failed to capture {phase} at {timestamp}ms: {exc}")
                 continue
-            self.frames.append(CapturedFrame(phase, path, checksum, int(timestamp)))
+            frame = CapturedFrame(phase, path, checksum, int(timestamp))
+            if is_expected:
+                self.frames.append(frame)
+            else:
+                self.extra_frames.append(frame)
             print(f"    Captured {phase} at {timestamp}ms", flush=True)
+
+
+def _default_scenario_timeout(mode: str, slug: str, inspect_extra: bool = False) -> float:
+    if mode == "enhanced-gauntlet":
+        return 240.0
+    if mode == "visual-tour" and slug == "factory":
+        return 210.0 if inspect_extra else 180.0
+    if mode == "visual-tour" and inspect_extra:
+        return 150.0
+    return 120.0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -567,8 +780,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--maps", nargs="+", choices=MAP_SLUGS, default=MAP_SLUGS,
                         help="Stock Maps for visual-tour (Co-op runs on factory; Gauntlet starts on prototype).")
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--inspect-extra", action="store_true",
+                        help="Also capture 35-deg wide oblique station frames and held/clean Portal close-ups.")
     parser.add_argument(
-        "--timeout", type=float, help="Per-scenario timeout in seconds (default: 240 for Gauntlet, 120 elsewhere).",
+        "--timeout", type=float, help="Per-scenario timeout in seconds (default: 240 for Gauntlet, 180 for Factory tour, 120 elsewhere).",
     )
     parser.add_argument("--tools-root", type=Path, default=build_mod.DEFAULT_TOOLS_ROOT)
     parser.add_argument("--steam-root", type=Path, default=build_mod.DEFAULT_STEAM_ROOT)
@@ -633,6 +848,8 @@ def main(argv: list[str] | None = None) -> int:
         ]
         for key in ("bz_test_coop_selftest", "bz_test_visual_tour", "bz_test_gauntlet_seed"):
             dvars.append((key, str(int(key == test_dvar))))
+        if mode == "visual-tour":
+            dvars.append(("bz_test_visual_inspect", str(int(args.inspect_extra))))
         if gauntlet:
             dvars.extend([
                 ("gauntlet_active", "0"),
@@ -653,7 +870,7 @@ def main(argv: list[str] | None = None) -> int:
             analyzer=analyzer, display_num=display_num, xdg_config_home=xdg_tmp.name,
             proton=args.proton, steam_root=args.steam_root, steam_game=args.steam_game,
             playtest_prefix=args.playtest_prefix,
-            timeout_s=args.timeout if args.timeout is not None else (240.0 if gauntlet else 120.0),
+            timeout_s=args.timeout if args.timeout is not None else _default_scenario_timeout(mode, slug, args.inspect_extra),
             settle_s=0.8,
             log_dir=out_dir, observe_log=capture,
             launch_cmd="+map" if gauntlet else "+devmap",
@@ -683,14 +900,20 @@ def main(argv: list[str] | None = None) -> int:
                 analyze_enhanced_gauntlet_log, gauntlet_finished)
         if has_visual_tour:
             for slug in dict.fromkeys(args.maps):
-                capture = VisualCapture(slug, out_dir, display_num)
+                capture = VisualCapture(slug, out_dir, display_num, capture_extra=args.inspect_extra)
                 try:
                     run("visual-tour", slug, "bz_test_visual_tour",
-                        lambda log: analyze_visual_tour_result(log, capture.frames),
+                        lambda log: analyze_visual_tour_result(
+                            log,
+                            (*capture.frames, *capture.extra_frames) if args.inspect_extra else capture.frames,
+                            inspect_extra=args.inspect_extra,
+                        ),
                         lambda log: "BZ_EVENT|VISUAL_TOUR_DONE|" in log or "BZ_EVENT|VISUAL_TOUR_FAIL|" in log,
                         capture=capture)
                 finally:
                     frames.extend(capture.frames)
+                    if args.inspect_extra:
+                        frames.extend(capture.extra_frames)
     finally:
         stop.set()
         try:

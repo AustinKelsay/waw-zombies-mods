@@ -138,14 +138,14 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_factory" )
 	{
-		// Der Riese: 3 BSP-verified courtyard perimeter stations out of the center training lane.
+		// Der Riese: 3 BSP-verified courtyard wall-hugging stations (floor z=-2, west wall x=-306, east riveted-iron wall x=+236).
 		// No duplicate 4th standalone PaP station: Double PaP & scripted bz_* Tier 1 live inside
 		// Der Riese's real native Pack-a-Punch console (vending_pack_a_punch).
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( -310, -240, 20 ),
+			( -293, -140, 20 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -154,8 +154,8 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( 230, -200, 20 ),
-			( 0, 180, 0 ),
+			( -291, -48, 20 ),
+			( 0, 0, 0 ),
 			false,
 			false
 		);
@@ -163,8 +163,8 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 180, 120, 20 ),
-			( 0, 225, 0 ),
+			( 220, -155, 20 ),
+			( 0, 180, 0 ),
 			false,
 			false
 		);
@@ -173,12 +173,13 @@ bz_stations_get_map_specs( map_name )
 
 	if ( norm == "nazi_zombie_prototype" )
 	{
-		// Nacht der Untoten: ground-floor spawn room (z ~ 17, x in [-200..+180], y in [220..500])
+		// Nacht der Untoten: BSP-verified flat-floor (z=1) solid wall placements (west pilaster x=-201, west bay x=-207, north wall y=578).
+		// Clears Kar98k (-206,242), HELP door (178,574), west barricade (-220,487), east sandbags, and all 4 spawns.
 		specs[0] = bz_make_station_spec(
 			"perks",
 			"Specialty Perk Station",
 			"Press &&1 to open Specialty Perk Station",
-			( -140, 460, 24 ),
+			( -188, 330, 24 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -187,7 +188,7 @@ bz_stations_get_map_specs( map_name )
 			"class",
 			"Class Altar",
 			"Press &&1 to open Class Altar",
-			( -140, 320, 24 ),
+			( -192, 92, 24 ),
 			( 0, 0, 0 ),
 			false,
 			false
@@ -196,128 +197,7 @@ bz_stations_get_map_specs( map_name )
 			"arsenal",
 			"Arsenal & Squad Station",
 			"Press &&1 to open Arsenal & Squad Station",
-			( 150, 460, 24 ),
-			( 0, 180, 0 ),
-			false,
-			false
-		);
-		specs[3] = bz_make_station_spec(
-			"pap",
-			"Pack-a-Punch Station",
-			"Press &&1 to open Pack-a-Punch Station",
-			( 150, 320, 24 ),
-			( 0, 180, 0 ),
-			false,
-			false
-		);
-		return specs;
-	}
-
-	if ( norm == "nazi_zombie_asylum" )
-	{
-		// Verruckt: north starting wing floor (z ~ 91, M1 Garand at x=867, spawns at x~1097, y in [121..394])
-		specs[0] = bz_make_station_spec(
-			"perks",
-			"Specialty Perk Station",
-			"Press &&1 to open Specialty Perk Station",
-			( 920, 370, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[1] = bz_make_station_spec(
-			"class",
-			"Class Altar",
-			"Press &&1 to open Class Altar",
-			( 920, 180, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[2] = bz_make_station_spec(
-			"arsenal",
-			"Arsenal & Squad Station",
-			"Press &&1 to open Arsenal & Squad Station",
-			( 985, 295, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[3] = bz_make_station_spec(
-			"pap",
-			"Pack-a-Punch Station",
-			"Press &&1 to open Pack-a-Punch Station",
-			( 1060, 180, 96 ),
-			( 0, 180, 0 ),
-			false,
-			false
-		);
-		// Verruckt: south co-op starting wing, across the electric divider.
-		specs[4] = bz_make_station_spec(
-			"perks",
-			"Specialty Perk Station",
-			"Press &&1 to open Specialty Perk Station",
-			( 940, -15, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[5] = bz_make_station_spec(
-			"class",
-			"Class Altar",
-			"Press &&1 to open Class Altar",
-			( 940, -155, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[6] = bz_make_station_spec(
-			"arsenal",
-			"Arsenal & Squad Station",
-			"Press &&1 to open Arsenal & Squad Station",
-			( 940, -300, 96 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[7] = bz_make_station_spec(
-			"pap",
-			"Pack-a-Punch Station",
-			"Press &&1 to open Pack-a-Punch Station",
-			( 1060, -85, 96 ),
-			( 0, 180, 0 ),
-			false,
-			false
-		);
-		return specs;
-	}
-
-	if ( norm == "nazi_zombie_sumpf" )
-	{
-		// Shi No Numa: upstairs central starting hut floor (z ~ -500, x in [9903..10589], y in [344..659])
-		specs[0] = bz_make_station_spec(
-			"perks",
-			"Specialty Perk Station",
-			"Press &&1 to open Specialty Perk Station",
-			( 10020, 610, -492 ),
-			( 0, 0, 0 ),
-			false,
-			false
-		);
-		specs[1] = bz_make_station_spec(
-			"class",
-			"Class Altar",
-			"Press &&1 to open Class Altar",
-			( 10280, 610, -492 ),
-			( 0, 180, 0 ),
-			false,
-			false
-		);
-		specs[2] = bz_make_station_spec(
-			"arsenal",
-			"Arsenal & Squad Station",
-			"Press &&1 to open Arsenal & Squad Station",
-			( 10150, 610, -492 ),
+			( 66, 562, 24 ),
 			( 0, 270, 0 ),
 			false,
 			false
@@ -326,8 +206,133 @@ bz_stations_get_map_specs( map_name )
 			"pap",
 			"Pack-a-Punch Station",
 			"Press &&1 to open Pack-a-Punch Station",
-			( 10280, 410, -492 ),
+			( -144, 561, 24 ),
+			( 0, 270, 0 ),
+			false,
+			false
+		);
+		return specs;
+	}
+
+	if ( norm == "nazi_zombie_asylum" )
+	{
+		// Verruckt North: BSP-verified solid masonry walls (floor z=64, north y=479, west x=864 south bay, east x=1167).
+		// Every kiosk is >=82u center (>=52u edge) from M1 Garand (867,296), Quick Revive (1151.5,402), north door (1009,492),
+		// electric door (1010,78), and NW barricade wall (864,417).
+		specs[0] = bz_make_station_spec(
+			"perks",
+			"Specialty Perk Station",
+			"Press &&1 to open Specialty Perk Station",
+			( 1100, 466, 72 ),
+			( 0, 270, 0 ),
+			false,
+			false
+		);
+		specs[1] = bz_make_station_spec(
+			"class",
+			"Class Altar",
+			"Press &&1 to open Class Altar",
+			( 1152, 320, 72 ),
 			( 0, 180, 0 ),
+			false,
+			false
+		);
+		specs[2] = bz_make_station_spec(
+			"arsenal",
+			"Arsenal & Squad Station",
+			"Press &&1 to open Arsenal & Squad Station",
+			( 916, 464, 72 ),
+			( 0, 270, 0 ),
+			false,
+			false
+		);
+		specs[3] = bz_make_station_spec(
+			"pap",
+			"Pack-a-Punch Station",
+			"Press &&1 to open Pack-a-Punch Station",
+			( 880, 114, 72 ),
+			( 0, 0, 0 ),
+			false,
+			false
+		);
+		// Verruckt South: BSP-verified solid masonry walls (floor z=64, north divider y=63, south wall y=-279, west x=864, east x=1167).
+		// Clears boarded west window (y=-80..-20), east chair (y=+40..+60), east doorway (y=-220..-120), Kar98k (868,-235), & all south spawns.
+		specs[4] = bz_make_station_spec(
+			"perks",
+			"Specialty Perk Station",
+			"Press &&1 to open Specialty Perk Station",
+			( 1142, -266, 72 ),
+			( 0, 90, 0 ),
+			false,
+			false
+		);
+		specs[5] = bz_make_station_spec(
+			"class",
+			"Class Altar",
+			"Press &&1 to open Class Altar",
+			( 879, -142, 72 ),
+			( 0, 0, 0 ),
+			false,
+			false
+		);
+		specs[6] = bz_make_station_spec(
+			"arsenal",
+			"Arsenal & Squad Station",
+			"Press &&1 to open Arsenal & Squad Station",
+			( 1151, -40, 72 ),
+			( 0, 180, 0 ),
+			false,
+			false
+		);
+		specs[7] = bz_make_station_spec(
+			"pap",
+			"Pack-a-Punch Station",
+			"Press &&1 to open Pack-a-Punch Station",
+			( 924, 46, 72 ),
+			( 0, 270, 0 ),
+			false,
+			false
+		);
+		return specs;
+	}
+
+	if ( norm == "nazi_zombie_sumpf" )
+	{
+		// Shi No Numa: BSP-verified level-floor (z=-528) solid wall bays (NW plank y=768, south wall y=267, east plank x=10663).
+		// Clears straw mound (x=9980..10080), slatted divider, south/east barricades, Type 99 (10661,395), and stair debris (10124,373).
+		specs[0] = bz_make_station_spec(
+			"perks",
+			"Specialty Perk Station",
+			"Press &&1 to open Specialty Perk Station",
+			( 9924, 754, -520 ),
+			( 0, 270, 0 ),
+			false,
+			false
+		);
+		specs[1] = bz_make_station_spec(
+			"class",
+			"Class Altar",
+			"Press &&1 to open Class Altar",
+			( 10240, 282, -520 ),
+			( 0, 90, 0 ),
+			false,
+			false
+		);
+		specs[2] = bz_make_station_spec(
+			"arsenal",
+			"Arsenal & Squad Station",
+			"Press &&1 to open Arsenal & Squad Station",
+			( 10647, 650, -520 ),
+			( 0, 180, 0 ),
+			false,
+			false
+		);
+		specs[3] = bz_make_station_spec(
+			"pap",
+			"Pack-a-Punch Station",
+			"Press &&1 to open Pack-a-Punch Station",
+			( 10505, 284, -520 ),
+			( 0, 90, 0 ),
 			false,
 			false
 		);
@@ -502,7 +507,7 @@ bz_stations_spawn_one( map_name, spec )
 
 	trig = Spawn( "trigger_radius", pos, 0, 64, 72 );
 	trig SetCursorHint( "HINT_NOICON" );
-	trig SetHintString( spec.hint_string );
+	// Omit engine SetHintString so only the facing+LOS-gated custom HUD prompt renders (no doubled ungated prompt! F26/O23).
 	trig.bz_station_id = spec.id;
 
 	model_name = bz_stations_get_model_for_station( map_name, spec.id );
@@ -660,6 +665,59 @@ bz_stations_set_client_dvar_cached( player, key, val )
 	player SetClientDvar( key, str_val );
 }
 
+bz_stations_player_facing_station( player, station )
+{
+	if ( !IsDefined( player ) || !IsDefined( station ) || !IsDefined( player.origin ) || !IsDefined( station.origin ) )
+	{
+		return true;
+	}
+	dx = station.origin[0] - player.origin[0];
+	dy = station.origin[1] - player.origin[1];
+	dist_xy = Distance( ( player.origin[0], player.origin[1], 0 ), ( station.origin[0], station.origin[1], 0 ) );
+	// Touching the kiosk face directly always interacts cleanly.
+	if ( dist_xy <= 24 )
+	{
+		return true;
+	}
+	ang = player GetPlayerAngles();
+	if ( !IsDefined( ang ) )
+	{
+		ang = player.angles;
+	}
+	if ( !IsDefined( ang ) )
+	{
+		return true;
+	}
+	fwd = AnglesToForward( ( 0, ang[1], 0 ) );
+	dot = ( fwd[0] * ( dx / dist_xy ) ) + ( fwd[1] * ( dy / dist_xy ) );
+	return dot >= 0.40;
+}
+
+bz_stations_has_line_of_sight( player, station )
+{
+	if ( !IsDefined( player ) || !IsDefined( station ) || !IsDefined( player.origin ) || !IsDefined( station.origin ) )
+	{
+		return true;
+	}
+	// Verify no solid room divider wall (e.g. Verruckt N/S electric wall) separates player from station (F23).
+	p_eye = ( player.origin[0], player.origin[1], player.origin[2] + 44 );
+	s_mid = ( station.origin[0], station.origin[1], station.origin[2] + 36 );
+	if ( Distance( p_eye, s_mid ) <= 20 )
+	{
+		return true;
+	}
+	tr = BulletTrace( p_eye, s_mid, false, player );
+	if ( !IsDefined( tr ) || !IsDefined( tr["fraction"] ) || tr["fraction"] >= 0.90 )
+	{
+		return true;
+	}
+	if ( IsDefined( tr["position"] ) && Distance( tr["position"], s_mid ) <= 18 )
+	{
+		return true;
+	}
+	return false;
+}
+
 bz_station_trigger_think()
 {
 	level endon( "end_game" );
@@ -681,6 +739,18 @@ bz_station_trigger_think()
 			continue;
 		}
 
+		// Resolve the exact eligible station (range + LOS + facing) and sync HUD immediately if prompt went stale between ticks (A14/S14/O23/F26).
+		target_id = bz_stations_resolve_use_target( player, "" );
+		if ( !IsDefined( target_id ) || target_id == "" )
+		{
+			bz_stations_update_prompt_hud( player );
+			continue;
+		}
+		if ( !IsDefined( player.bz_station_prompt_id ) || player.bz_station_prompt_id != target_id )
+		{
+			bz_stations_update_prompt_hud( player );
+		}
+
 		now = GetTime();
 		if ( IsDefined( player.bz_station_next_use_time ) && now < player.bz_station_next_use_time )
 		{
@@ -688,7 +758,6 @@ bz_station_trigger_think()
 		}
 		player.bz_station_next_use_time = now + 450;
 
-		target_id = bz_stations_resolve_use_target( player, self.id );
 		bz_stations_open_for_player( player, target_id );
 	}
 }
@@ -827,7 +896,19 @@ bz_stations_is_player_in_station_range( player, st )
 		return false;
 	}
 	dist = Distance( ( player.origin[0], player.origin[1], 0 ), ( st.origin[0], st.origin[1], 0 ) );
-	return dist <= 64.0;
+	if ( dist > 64.0 )
+	{
+		return false;
+	}
+	if ( !bz_stations_player_facing_station( player, st ) )
+	{
+		return false;
+	}
+	if ( !bz_stations_has_line_of_sight( player, st ) )
+	{
+		return false;
+	}
+	return true;
 }
 
 bz_stations_get_instances()
@@ -952,7 +1033,7 @@ bz_stations_update_prompt_hud( player )
 	hud.alpha = 1;
 }
 
-// WaW 1.7 ignores SetHintString on script-spawned trigger_radius entities.
+// Custom facing+LOS-gated HUD prompt (engine trigger SetHintString is intentionally omitted so prompts never double or leak through walls).
 bz_stations_watch_player_prompt()
 {
 	self endon( "disconnect" );
@@ -960,7 +1041,7 @@ bz_stations_watch_player_prompt()
 
 	for ( ;; )
 	{
-		wait( 0.15 );
+		wait( 0.05 );
 		bz_stations_update_prompt_hud( self );
 	}
 }

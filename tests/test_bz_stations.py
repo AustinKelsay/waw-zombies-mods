@@ -10,6 +10,7 @@ Tests observable behavior across the three core seams:
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 import re
@@ -54,15 +55,49 @@ EXPECTED_STATION_IDS_BY_MAP = {
     "nazi_zombie_asylum": EXPECTED_STATION_IDS * 2,
 }
 VERRUCKT_STATION_PLACEMENTS = (
-    ((920, 370, 96), (0, 0, 0)),
-    ((920, 180, 96), (0, 0, 0)),
-    ((985, 295, 96), (0, 0, 0)),
-    ((1060, 180, 96), (0, 180, 0)),
-    ((940, -15, 96), (0, 0, 0)),
-    ((940, -155, 96), (0, 0, 0)),
-    ((940, -300, 96), (0, 0, 0)),
-    ((1060, -85, 96), (0, 180, 0)),
+    ((1100, 466, 72), (0, 270, 0)),
+    ((1152, 320, 72), (0, 180, 0)),
+    ((916, 464, 72), (0, 270, 0)),
+    ((880, 114, 72), (0, 0, 0)),
+    ((1142, -266, 72), (0, 90, 0)),
+    ((879, -142, 72), (0, 0, 0)),
+    ((1151, -40, 72), (0, 180, 0)),
+    ((924, 46, 72), (0, 270, 0)),
 )
+STOCK_ENTITIES_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "stock_map_entities.json"
+# Starting-room bounding boxes (x0, x1, y0, y1, z0, z1) for filtering raw .ff entities + physical non-entity props/barricades
+STARTING_ROOM_BOUNDS: dict[str, tuple[float, float, float, float, float, float]] = {
+    "nazi_zombie_factory": (-480, 360, -280, 400, -40, 140),
+    "nazi_zombie_prototype": (-260, 260, 0, 620, -20, 100),
+    "nazi_zombie_asylum": (780, 1260, -380, 530, 20, 160),
+    "nazi_zombie_sumpf": (9800, 10750, 200, 880, -560, -420),
+}
+PHYSICAL_PROP_EXCLUSIONS: dict[str, tuple[tuple[str, float, float, float], ...]] = {
+    "nazi_zombie_factory": (),
+    "nazi_zombie_prototype": (("west_window_wall", -220, 487, 50),),
+    "nazi_zombie_asylum": (
+        ("north_west_window_wall", 864, 417, 40),
+        ("north_door_west_jamb", 962, 479, 15),
+        ("north_east_doorway_jamb", 1167, 282, 15),
+        ("north_west_doorway_jamb", 864, 147, 12),
+        ("south_west_boarded_window", 866, -45, 50),
+        ("south_east_chair", 1152, 50, 50),
+        ("south_east_door_jamb", 1180, -160, 50),
+    ),
+    "nazi_zombie_sumpf": (),
+}
+# Committed BSP wall plane coordinates (axis 'x'|'y', plane_val, sign toward room +1|-1) per station index (O17)
+STOCK_WALL_PLANES: dict[str, tuple[tuple[str, float, int], ...]] = {
+    "nazi_zombie_factory": (("x", -306.0, +1), ("x", -306.0, +1), ("x", 236.0, -1)),
+    "nazi_zombie_prototype": (("x", -201.0, +1), ("x", -207.0, +1), ("y", 578.0, -1), ("y", 578.0, -1)),
+    "nazi_zombie_asylum": (
+        ("y", 479.0, -1), ("x", 1167.0, -1), ("y", 479.0, -1), ("x", 864.0, +1),
+        ("y", -279.0, +1), ("x", 864.0, +1), ("x", 1167.0, -1), ("y", 63.0, -1),
+    ),
+    "nazi_zombie_sumpf": (("y", 768.0, -1), ("y", 267.0, +1), ("x", 10663.0, -1), ("y", 267.0, +1)),
+}
+KIOSK_BACK_DEPTH = {"perks": 11.0, "class": 13.0, "arsenal": 14.0, "pap": 15.0}
+KIOSK_HALF_EXTENTS = {"perks": (11.0, 13.0), "class": (13.0, 16.0), "arsenal": (14.0, 27.0), "pap": (15.0, 20.0)}
 EXPECTED_MENUS = (
     "bz_station_perks",
     "bz_station_class",
@@ -153,40 +188,110 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
 
             self.assertEqual(tuple(seen_ids), expected_ids, f"Station IDs mismatch on {map_name}")
 
-            # Keep at least 85u between station anchors so their interact points stay distinct.
+            # Keep at least 85u between same-room station anchors (and >=75u across Verruckt's solid N/S concrete divider wall).
             for i in range(len(origins)):
                 for j in range(i + 1, len(origins)):
                     sid_a, pos_a = origins[i]
                     sid_b, pos_b = origins[j]
                     dist = _vec_dist(pos_a, pos_b)
+                    cross_wing = map_name == "nazi_zombie_asylum" and (i < 4) != (j < 4)
+                    min_sep = 75.0 if cross_wing else 85.0
                     self.assertGreaterEqual(
                         dist,
-                        85.0,
-                        f"{map_name}: stations {sid_a} and {sid_b} too close ({dist:.1f} units)",
+                        min_sep,
+                        f"{map_name}: stations {sid_a} and {sid_b} too close ({dist:.1f} units < {min_sep:.0f}u)",
                     )
 
-            # Verify BSP-verified non-blocking station placement polish (POL-T4 #40)
+            # Verify BSP-verified wall-hugging non-blocking station placement polish
             if map_name == "nazi_zombie_factory":
-                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (-310, -240, 20))
+                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (-293, -140, 20))
                 self.assertEqual(tuple(by_id["perks"].get_field("angles")[i] for i in range(3)), (0, 0, 0))
-                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (230, -200, 20))
-                self.assertEqual(tuple(by_id["class"].get_field("angles")[i] for i in range(3)), (0, 180, 0))
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (180, 120, 20))
-                self.assertEqual(tuple(by_id["arsenal"].get_field("angles")[i] for i in range(3)), (0, 225, 0))
+                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (-291, -48, 20))
+                self.assertEqual(tuple(by_id["class"].get_field("angles")[i] for i in range(3)), (0, 0, 0))
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (220, -155, 20))
+                self.assertEqual(tuple(by_id["arsenal"].get_field("angles")[i] for i in range(3)), (0, 180, 0))
                 self.assertNotIn("pap", by_id)
             elif map_name == "nazi_zombie_sumpf":
-                # Shi No Numa arsenal placed along open north upstairs floor line between perks and class
-                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (10150, 610, -492))
-                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (10020, 610, -492))
-                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10280, 610, -492))
-                self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10280, 410, -492))
+                # Shi No Numa level-floor solid-wall placements
+                self.assertEqual(tuple(by_id["perks"].get_field("origin")[i] for i in range(3)), (9924, 754, -520))
+                self.assertEqual(tuple(by_id["class"].get_field("origin")[i] for i in range(3)), (10240, 282, -520))
+                self.assertEqual(tuple(by_id["arsenal"].get_field("origin")[i] for i in range(3)), (10647, 650, -520))
+                self.assertEqual(tuple(by_id["pap"].get_field("origin")[i] for i in range(3)), (10505, 284, -520))
+
+    def test_all_19_stations_clear_stock_entities_and_sit_flush_against_bsp_walls(self) -> None:
+        """Fixture-backed, footprint-aware clearance & wall-flushness proof across all 4 Stock Maps (O17/O20/O21/F16/F17/G10/G15)."""
+        self.assertTrue(STOCK_ENTITIES_FIXTURE.is_file(), "Missing committed raw .ff entity fixture")
+        raw_entities = json.loads(STOCK_ENTITIES_FIXTURE.read_text(encoding="utf-8"))
+        for map_name in STOCK_MAPS:
+            specs = self.gsc.call(BZ_STATIONS_MOD, "bz_stations_get_map_specs", map_name)
+            wall_planes = STOCK_WALL_PLANES[map_name]
+            self.assertEqual(specs.size, len(wall_planes))
+            x0, x1, y0, y1, z0, z1 = STARTING_ROOM_BOUNDS[map_name]
+            room_ents = [
+                e for e in raw_entities[map_name]
+                if x0 <= e["origin"][0] <= x1 and y0 <= e["origin"][1] <= y1 and z0 <= e["origin"][2] <= z1
+            ]
+            self.assertGreater(len(room_ents), 0, f"No starting-room entities loaded for {map_name}")
+            for i in range(specs.size):
+                spec = specs[i]
+                sid = spec.get_field("id")
+                org = spec.get_field("origin")
+                ang = spec.get_field("angles")
+                sx, sy = float(org[0]), float(org[1])
+                yaw = int(round(float(ang[1]))) % 360
+                # 1. Wall flushness: kiosk back sits strictly 1.0u..3.0u in front of its committed BSP wall plane (F17)
+                axis, plane_val, sign = wall_planes[i]
+                coord = sx if axis == "x" else sy
+                back_gap = (coord - plane_val) * sign - KIOSK_BACK_DEPTH[sid]
+                self.assertGreaterEqual(
+                    back_gap, 1.0, f"{map_name}[{i}]/{sid} clips into {axis}={plane_val} wall (gap={back_gap:.1f}u)"
+                )
+                self.assertLessEqual(
+                    back_gap, 3.0, f"{map_name}[{i}]/{sid} floats off {axis}={plane_val} wall (gap={back_gap:.1f}u)"
+                )
+                # 2. Rotated kiosk footprint AABB edge clearance against every .ff starting-room entity (incl. Quick Revive!)
+                half_d, half_w = KIOSK_HALF_EXTENTS[sid]
+                hx, hy = (half_d, half_w) if yaw in (0, 180) else (half_w, half_d)
+                for e in room_ents:
+                    ex, ey = float(e["origin"][0]), float(e["origin"][1])
+                    tn = e["targetname"]
+                    cn = e["classname"]
+                    cx = min(max(ex, sx - hx), sx + hx)
+                    cy = min(max(ey, sy - hy), sy + hy)
+                    edge_dist = math.hypot(ex - cx, ey - cy)
+                    center_dist = math.hypot(ex - sx, ey - sy)
+                    if tn == "initial_spawn_points" or cn.startswith("info_player"):
+                        self.assertGreaterEqual(
+                            center_dist, 55.0, f"{map_name}[{i}]/{sid} too close to spawn ({center_dist:.1f}u)"
+                        )
+                        self.assertGreaterEqual(
+                            edge_dist, 40.0, f"{map_name}[{i}]/{sid} footprint too close to spawn ({edge_dist:.1f}u)"
+                        )
+                    else:
+                        # Doors, debris, wall-buys, perk machines (vending_revive), barricades
+                        self.assertGreaterEqual(
+                            center_dist, 80.0, f"{map_name}[{i}]/{sid} too close to {tn} ({center_dist:.1f}u < 80u)"
+                        )
+                        self.assertGreaterEqual(
+                            edge_dist, 50.0, f"{map_name}[{i}]/{sid} footprint too close to {tn} ({edge_dist:.1f}u < 50u)"
+                        )
+                # 3. Physical wall-face barricades / props
+                for label, px, py, min_edge in PHYSICAL_PROP_EXCLUSIONS[map_name]:
+                    cx = min(max(px, sx - hx), sx + hx)
+                    cy = min(max(py, sy - hy), sy + hy)
+                    edge_dist = math.hypot(px - cx, py - cy)
+                    self.assertGreaterEqual(
+                        edge_dist,
+                        min_edge,
+                        f"{map_name}[{i}]/{sid} footprint too close to {label} ({edge_dist:.1f}u < {min_edge:.1f}u)",
+                    )
 
     def test_verruckt_arsenal_trigger_clears_all_four_north_spawns(self) -> None:
         specs = self.gsc.call(BZ_STATIONS_MOD, "bz_stations_get_map_specs", "nazi_zombie_asylum")
         arsenal = next(spec for spec in specs.to_list() if spec.get_field("id") == "arsenal")
         origin = arsenal.get_field("origin")
-        self.assertEqual(tuple(origin.to_list()), (985, 295, 96))
-        self.assertEqual(tuple(arsenal.get_field("angles").to_list()), (0, 0, 0))
+        self.assertEqual(tuple(origin.to_list()), (916, 464, 72))
+        self.assertEqual(tuple(arsenal.get_field("angles").to_list()), (0, 270, 0))
 
         # initial_spawn_points with script_noteworthy=north_spawn in nazi_zombie_asylum.ff.
         north_spawns = ((1097, 302, 91), (1098, 237, 91), (1076.5, 394.5, 97), (1137.5, 121.5, 88))
@@ -268,7 +373,8 @@ class TestBzStationCoordinatesAndSpawning(unittest.TestCase):
             self.assertTrue(bool(mdl.get_field("model")))
         for trig in triggers:
             self.assertEqual(trig.cursor_hint, "HINT_NOICON")
-            self.assertIn("&&1", trig.hint_string)
+            # Engine trigger hint string is intentionally omitted so only the facing+LOS-gated HUD prompt renders (F26/O23).
+            self.assertEqual(trig.hint_string, "")
 
         spawn_events = [e for e in self.gsc.emitted_events if e.startswith("BZ_EVENT|STATION_SPAWN|")]
         self.assertEqual(len(spawn_events), 3)
@@ -412,10 +518,10 @@ class TestBzStationProximityPrompt(unittest.TestCase):
 
     def test_moving_between_stations_updates_text_and_color_on_one_client_hud(self) -> None:
         cases = (
-            ((-140, 460, 24), "[PERKS] Specialty Perk Station - Press [{+activate}]", (1.0, 0.35, 0.35)),
-            ((-140, 320, 24), "[CLASS] Class Altar - Press [{+activate}]", (0.35, 0.85, 1.0)),
-            ((150, 460, 24), "[ARSENAL] Arsenal & Squad Station - Press [{+activate}]", (0.45, 1.0, 0.55)),
-            ((150, 320, 24), "[PAP] Pack-a-Punch Station - Press [{+activate}]", (1.0, 0.85, 0.30)),
+            ((-188, 330, 24), "[PERKS] Specialty Perk Station - Press [{+activate}]", (1.0, 0.35, 0.35)),
+            ((-192, 92, 24), "[CLASS] Class Altar - Press [{+activate}]", (0.35, 0.85, 1.0)),
+            ((66, 562, 24), "[ARSENAL] Arsenal & Squad Station - Press [{+activate}]", (0.45, 1.0, 0.55)),
+            ((-144, 561, 24), "[PAP] Pack-a-Punch Station - Press [{+activate}]", (1.0, 0.85, 0.30)),
         )
         self.assertEqual(self.gsc.hud_elems, [])
         for origin, label, color in cases:
@@ -429,27 +535,37 @@ class TestBzStationProximityPrompt(unittest.TestCase):
                 self.assertEqual(hud.get_field("alpha"), 1)
 
     def test_prompt_uses_nearest_station_within_64_unit_trigger_cylinder(self) -> None:
-        self.update_at((-235, 460, 24))  # 95u horizontally (outside 64u trigger)
+        self.update_at((-93, 330, 24))  # 95u horizontally from Perks (-188, 330) (outside 64u trigger)
         self.assertEqual(self.gsc.hud_elems, [])
-        self.update_at((-205, 460, 24))  # 65u horizontally (outside 64u trigger)
+        self.update_at((-123, 330, 24))  # 65u horizontally (outside 64u trigger)
         self.assertEqual(self.gsc.hud_elems, [])
-        self.update_at((-204, 460, 24))  # 64u horizontally (on trigger boundary)
+        self.player.set_field("angles", GscArray([0, 180, 0]))  # Facing West toward Perks (-188, 330)
+        self.update_at((-124, 330, 24))  # 64u horizontally (on trigger boundary)
         hud = self.player.get_field("bz_station_prompt_hud")
         self.assertEqual(hud.get_field("alpha"), 1)
         self.assertIn("[PERKS]", hud.get_field("text"))
 
-        # Within 64u of Perks (-140, 460) and outside Class (-140, 320)
-        self.update_at((-140, 400, 24))
-        self.assertIn("[PERKS]", hud.get_field("text"))
-        # Within 64u of Class (-140, 320) and outside Perks (-140, 460)
-        self.update_at((-140, 380, 24))
-        self.assertIn("[CLASS]", hud.get_field("text"))
-
-        self.update_at((-140, 460, 96))  # +72u vertically (inside trigger height)
-        self.assertEqual(hud.get_field("alpha"), 1)
-        self.update_at((-140, 460, 97))  # +73u vertically (above trigger height)
+        # Turning away at 60u hides the HUD prompt AND rejects Use (S14/O23)
+        self.player.set_field("angles", GscArray([0, 0, 0]))  # Facing East, away from Perks (-188, 330)
+        self.update_at((-128, 330, 24))
         self.assertEqual(hud.get_field("alpha"), 0)
-        self.update_at((-140, 460, -9))  # -33u vertically (below trigger floor tolerance)
+        self.assertEqual(self.gsc.call(BZ_STATIONS_MOD, "bz_stations_resolve_use_target", self.player, ""), "")
+
+        # Within 64u of PaP (-144, 561) facing West toward PaP
+        self.player.set_field("angles", GscArray([0, 180, 0]))
+        self.update_at((-90, 561, 24))
+        self.assertIn("[PAP]", hud.get_field("text"))
+        # Within 64u of Arsenal (66, 562) facing East toward Arsenal
+        self.player.set_field("angles", GscArray([0, 0, 0]))
+        self.update_at((10, 562, 24))
+        self.assertIn("[ARSENAL]", hud.get_field("text"))
+
+        self.player.set_field("angles", UNDEFINED)
+        self.update_at((-188, 330, 96))  # +72u vertically (inside trigger height)
+        self.assertEqual(hud.get_field("alpha"), 1)
+        self.update_at((-188, 330, 97))  # +73u vertically (above trigger height)
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.update_at((-188, 330, -9))  # -33u vertically (below trigger floor tolerance)
         self.assertEqual(hud.get_field("alpha"), 0)
         triggers = [e for e in self.gsc.spawned_entities if e.classname == "trigger_radius"]
         self.assertTrue(triggers)
@@ -476,9 +592,9 @@ class TestBzStationProximityPrompt(unittest.TestCase):
                 )
 
         # Simulate overlapping instances to distinguish the south HUD preference from the nearest fallback.
-        self.update_at((940, -15, 96))
-        instances[5].set_field("origin", GscArray([940, -65, 96]))
-        self.player.set_field("origin", GscArray([940, -55, 96]))
+        self.update_at((1142, -266, 72))
+        instances[5].set_field("origin", GscArray([1142, -216, 72]))
+        self.player.set_field("origin", GscArray([1142, -236, 72]))
         self.assertIs(
             self.gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", self.player), instances[5]
         )
@@ -486,12 +602,19 @@ class TestBzStationProximityPrompt(unittest.TestCase):
             self.gsc.call(BZ_STATIONS_MOD, "bz_stations_resolve_use_target", self.player, "class"), "perks"
         )
 
+        # Verify solid divider wall blocks phantom prompts through Verruckt N/S divider (F23)
+        self.gsc.bullet_trace_fn = lambda start, end: {"fraction": 0.45, "position": GscArray([924, 73, 108])}
+        self.player.set_field("origin", GscArray([924, 92, 72]))
+        self.player.set_field("angles", GscArray([0, 270, 0]))
+        self.assertFalse(self.gsc.call(BZ_STATIONS_MOD, "bz_stations_is_player_in_station_range", self.player, instances[7]))
+        self.gsc.bullet_trace_fn = None
+
     def test_station_selection_falls_back_to_primary_registry(self) -> None:
         perks = self.gsc.level.get_field("bz_stations")["perks"]
         for station_list in (UNDEFINED, GscArray()):
             with self.subTest(station_list=station_list):
                 self.gsc.level.set_field("bz_station_list", station_list)
-                self.update_at((-140, 460, 24))
+                self.update_at((-188, 330, 24))
                 self.assertEqual(self.player.get_field("bz_station_prompt_id"), "perks")
                 self.assertIs(
                     self.gsc.call(BZ_STATIONS_MOD, "bz_stations_find_nearest_in_range", self.player), perks
@@ -541,36 +664,85 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         gsc.trigger_player = player
         gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
 
-        # (949, 335, 96) lies inside BOTH Perks (920, 370; ~45u) and Arsenal (985, 295; ~54u).
-        player.set_field("origin", GscArray([949, 335, 96]))
+        # Simulate two close triggers (Perks & Class within 110u) to verify overlapping-trigger HUD tiebreak
+        # without coupling production placements to overlapping wall-buy radii (F1/O1).
+        perks_station = gsc.level.get_field("bz_stations")["perks"]
+        class_station = gsc.level.get_field("bz_stations")["class"]
+        perks_station.set_field("origin", GscArray([877, 124, 72]))
+        class_station.set_field("origin", GscArray([877, 234, 72]))
+
+        # (877, 178, 72) lies inside BOTH Perks (877, 124; 54u) and Class (877, 234; 56u).
+        player.set_field("origin", GscArray([877, 178, 72]))
         gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
         hud = player.get_field("bz_station_prompt_hud")
         self.assertIn("[PERKS]", hud.get_field("text"))
 
-        # Move to (955, 330, 96) BEFORE the next HUD refresh (Perks ~53u, Arsenal ~46u — both eligible).
-        # Exercise Arsenal's actual bz_station_trigger_think(): it must open the displayed Perks station.
-        player.set_field("origin", GscArray([955, 330, 96]))
-        arsenal_station = gsc.level.get_field("bz_stations")["arsenal"]
+        # Move to (877, 181, 72) BEFORE the next HUD refresh (Perks 57u, Class 53u — both eligible).
+        # Exercise Class's actual bz_station_trigger_think(): it must open the displayed Perks station.
+        player.set_field("origin", GscArray([877, 181, 72]))
         with self.assertRaises(_StopTriggerLoop):
-            gsc.call_on(arsenal_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+            gsc.call_on(class_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
         self.assertEqual(player.get_field("bz_active_station_id"), "perks")
         self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_perks")
 
-        # Close menu, advance past Use cooldown, refresh HUD at (955, 330, 96) -> [ARSENAL].
-        # Now Perks's trigger firing Use must open the displayed Arsenal station.
+        # Close menu, advance past Use cooldown, refresh HUD at (877, 181, 72) -> [CLASS].
+        # Now Perks's trigger firing Use must open the displayed Class station.
         gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_perks", "close")
         player.set_field("bz_station_next_use_time", 0)
         gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
-        self.assertIn("[ARSENAL]", hud.get_field("text"))
-        perks_station = gsc.level.get_field("bz_stations")["perks"]
+        self.assertIn("[CLASS]", hud.get_field("text"))
         gsc.trigger_delivered = False
         with self.assertRaises(_StopTriggerLoop):
             gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
-        self.assertEqual(player.get_field("bz_active_station_id"), "arsenal")
-        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_arsenal")
+        self.assertEqual(player.get_field("bz_active_station_id"), "class")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_class")
+
+        # Der Riese overlap regression (A14/S14): at (-270,-95,20) facing North (yaw 90) toward Class (-291,-48)
+        # with Perks (-293,-140) behind the player, BOTH HUD and Class trigger must select Class, never Perks!
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_class", "close")
+        perks_station.set_field("origin", GscArray([-293, -140, 20]))
+        class_station.set_field("origin", GscArray([-291, -48, 20]))
+        player.set_field("origin", GscArray([-270, -95, 20]))
+        player.set_field("angles", GscArray([0, 90, 0]))
+        player.set_field("bz_station_next_use_time", 0)
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        self.assertIn("[CLASS]", hud.get_field("text"))
+        gsc.trigger_delivered = False
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "class")
+        self.assertEqual(player.get_field("bz_active_station_menu"), "bz_station_class")
+
+        # S14 between-tick turn regression: HUD shows [PERKS] while facing Perks (yaw 270); player turns to Class (yaw 90)
+        # BEFORE the next HUD tick and presses Use -> trigger must sync HUD to [CLASS] and open Class, never disagree!
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_class", "close")
+        player.set_field("angles", GscArray([0, 270, 0]))
+        player.set_field("bz_station_next_use_time", 0)
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        self.assertIn("[PERKS]", hud.get_field("text"))
+        player.set_field("angles", GscArray([0, 90, 0]))
+        gsc.trigger_delivered = False
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(player.get_field("bz_active_station_id"), "class")
+        self.assertEqual(player.get_field("bz_station_prompt_id"), "")
+        self.assertEqual(hud.get_field("alpha"), 0)
+
+        # Turning completely away (yaw 0, facing neither station) before HUD tick -> Use rejects AND clears stale HUD prompt!
+        gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_class", "close")
+        player.set_field("angles", GscArray([0, 270, 0]))
+        player.set_field("bz_station_next_use_time", 0)
+        gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
+        self.assertEqual(hud.get_field("alpha"), 1)
+        player.set_field("angles", GscArray([0, 0, 0]))
+        gsc.trigger_delivered = False
+        with self.assertRaises(_StopTriggerLoop):
+            gsc.call_on(perks_station, BZ_STATIONS_MOD, "bz_station_trigger_think")
+        self.assertEqual(hud.get_field("alpha"), 0)
+        self.assertEqual(player.get_field("bz_station_prompt_id"), "")
 
     def test_prompt_hides_when_dead_in_last_stand_or_in_station_menu(self) -> None:
-        origin = (-140, 460, 24)
+        origin = (-110, 561, 24)
         self.update_at(origin)
         hud = self.player.get_field("bz_station_prompt_hud")
         for field, blocked, restored in (
@@ -598,7 +770,7 @@ class TestBzStationProximityPrompt(unittest.TestCase):
         third = FakeEntity("PlayerThree", ent_num=2)
         self.gsc.players.extend([second, third])
         for player in (self.player, second, third):
-            player.set_field("origin", GscArray([-140, 460, 24]))
+            player.set_field("origin", GscArray([-110, 561, 24]))
             self.gsc.call(BZ_HOOKS_MOD, "bz_on_player_spawned", player)
             self.gsc.call(BZ_STATIONS_MOD, "bz_stations_update_prompt_hud", player)
 

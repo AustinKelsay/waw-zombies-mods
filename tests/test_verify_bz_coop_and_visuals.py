@@ -589,3 +589,162 @@ class TestLiveHookGates(unittest.TestCase):
         p1_source = (REPO_ROOT / "scripts" / "verify_base_zombies_p1.py").read_text(encoding="utf-8")
         self.assertIn('launch_cmd: str = "+devmap"', p1_source)
         self.assertIn("cmd.extend([launch_cmd, map_name])", p1_source)
+
+    def test_visual_tour_analyzer_enforces_station_audit_and_inspect_extra_frames(self) -> None:
+        with TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            phases = verifier.expected_visual_phases("prototype")
+            extra_phases = verifier.expected_inspect_extra_phases("prototype")
+            frames = []
+            lines = []
+            for idx, phase in enumerate((*phases, *extra_phases)):
+                t_ms = 1000 + idx * 500
+                p = out_dir / f"{phase}.png"
+                raw = f"unique-frame-payload-{idx}-{phase}".encode("ascii")
+                p.write_bytes(raw)
+                frames.append(verifier.CapturedFrame(phase, p, hashlib.sha256(raw).hexdigest(), t_ms))
+                lines.append(f"BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={t_ms}")
+            audit_lines = [
+                "BZ_EVENT|STATION_AUDIT|station=prototype_perks;x=-188;y=330;z=1;back_dist=13;floor_delta=0;skirt_gap=0;misses=0",
+                "BZ_EVENT|STATION_AUDIT|station=prototype_class;x=-192;y=92;z=1;back_dist=15;floor_delta=0;skirt_gap=0;misses=0",
+                "BZ_EVENT|STATION_AUDIT|station=prototype_arsenal;x=66;y=562;z=1;back_dist=16;floor_delta=1;skirt_gap=1;misses=0",
+                "BZ_EVENT|STATION_AUDIT|station=prototype_pap;x=-144;y=561;z=1;back_dist=17;floor_delta=0;skirt_gap=0;misses=0",
+            ]
+            done_line = f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_prototype;phases={len(phases)}"
+            ok_log = "\n".join(("Loading fastfile mod", *audit_lines, *lines, done_line))
+            _, ok_errs = verifier.analyze_visual_tour_result(ok_log, frames, inspect_extra=True)
+            self.assertEqual(ok_errs, [])
+
+            # Missing extra oblique frames must FAIL when inspect_extra=True (A15/S4/F5)
+            _, missing_extra_errs = verifier.analyze_visual_tour_result(
+                ok_log, frames[: len(phases)], inspect_extra=True
+            )
+            self.assertTrue(any("Missing captured frame for prototype_perks_oblique" in e for e in missing_extra_errs))
+
+            # Excessive floor_delta (>2u) must FAIL (O22/F22/S4)
+            bad_floor_log = ok_log.replace("floor_delta=0;skirt_gap=0;misses=0", "floor_delta=6;skirt_gap=6;misses=0", 1)
+            _, bad_floor_errs = verifier.analyze_visual_tour_result(bad_floor_log, frames, inspect_extra=True)
+            self.assertTrue(any("floor_delta=6 exceeds 2u cap" in e for e in bad_floor_errs))
+
+            # Stripping skirt_gap or misses must FAIL rather than defaulting to zero (S4)
+            stripped_log = ok_log.replace(";skirt_gap=0;misses=0", "")
+            _, stripped_errs = verifier.analyze_visual_tour_result(stripped_log, frames, inspect_extra=True)
+            self.assertTrue(any("Missing required STATION_AUDIT field(s) skirt_gap, misses" in e for e in stripped_errs), stripped_errs)
+
+            # Failing WAR_CLUB_MELEE_CYCLE must FAIL factory analyzer (A12/S12)
+            f_phases = verifier.expected_visual_phases("factory")
+            f_extra = verifier.expected_inspect_extra_phases("factory")
+            f_frames, f_lines = [], []
+            for idx, phase in enumerate((*f_phases, *f_extra)):
+                t_ms = 2000 + idx * 500
+                p = out_dir / f"f_{phase}.png"
+                raw = f"factory-payload-{idx}-{phase}".encode("ascii")
+                p.write_bytes(raw)
+                f_frames.append(verifier.CapturedFrame(phase, p, hashlib.sha256(raw).hexdigest(), t_ms))
+                f_lines.append(f"BZ_EVENT|VISUAL_TOUR_PHASE|phase={phase};t={t_ms}")
+            f_audits = [
+                "BZ_EVENT|STATION_AUDIT|station=factory_perks;x=-293;y=-140;z=20;back_dist=13;floor_delta=0;skirt_gap=0;misses=0",
+                "BZ_EVENT|STATION_AUDIT|station=factory_class;x=-291;y=-48;z=20;back_dist=15;floor_delta=0;skirt_gap=0;misses=0",
+                "BZ_EVENT|STATION_AUDIT|station=factory_arsenal;x=220;y=-155;z=20;back_dist=16;floor_delta=0;skirt_gap=0;misses=0",
+            ]
+            f_done = f"BZ_EVENT|VISUAL_TOUR_DONE|map=nazi_zombie_factory;phases={len(f_phases)}"
+            f_ok = "\n".join(("Loading fastfile mod", *f_audits, "BZ_EVENT|WAR_CLUB_MELEE_CYCLE|raised=1;smash_ok=1;restored=1", *f_lines, f_done))
+            _, f_ok_errs = verifier.analyze_visual_tour_result(f_ok, f_frames, inspect_extra=True)
+            self.assertEqual(f_ok_errs, [])
+
+            f_bad_wc = f_ok.replace("raised=1;smash_ok=1;restored=1", "raised=0;smash_ok=0;restored=0")
+            _, f_bad_errs = verifier.analyze_visual_tour_result(f_bad_wc, f_frames, inspect_extra=True)
+            self.assertTrue(any("WAR_CLUB_MELEE_CYCLE failed check raised=0" in e for e in f_bad_errs), f_bad_errs)
+            self.assertTrue(any("WAR_CLUB_MELEE_CYCLE failed check restored=0" in e for e in f_bad_errs), f_bad_errs)
+
+            # Solid-black 16x16 PNG & duplicate station frames on sumpf/prototype must FAIL (F32/A/O/S)
+            import struct
+            import zlib
+
+            def _make_solid_png(w: int, h: int, rgb: tuple[int, int, int]) -> bytes:
+                def _ch(kind: bytes, data: bytes) -> bytes:
+                    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+                ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+                raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+                return b"\x89PNG\r\n\x1a\n" + _ch(b"IHDR", ihdr) + _ch(b"IDAT", zlib.compress(raw)) + _ch(b"IEND", b"")
+
+            black_png = _make_solid_png(16, 16, (0, 0, 0))
+            blank_path = out_dir / "blank_perks.png"
+            blank_path.write_bytes(black_png)
+            bad_frames = list(frames)
+            bad_frames[0] = verifier.CapturedFrame(
+                frames[0].phase, blank_path, hashlib.sha256(black_png).hexdigest(), frames[0].game_t_ms
+            )
+            _, blank_errs = verifier.analyze_visual_tour_result(ok_log, bad_frames, inspect_extra=True)
+            self.assertTrue(any("is blank/uniform" in e for e in blank_errs), blank_errs)
+
+            # ImageMagick 1-bit bilevel all-black PNG (color_type=0, bit_depth=1) must ALSO fail blank check!
+            bilevel_ihdr = struct.pack(">IIBBBBB", 16, 16, 1, 0, 0, 0, 0)
+            bilevel_raw = b"".join(b"\x00\x00\x00" for _ in range(16))
+            def _ch2(kind: bytes, data: bytes) -> bytes:
+                return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+            bilevel_black = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", bilevel_ihdr) + _ch2(b"IDAT", zlib.compress(bilevel_raw)) + _ch2(b"IEND", b"")
+            bilevel_path = out_dir / "bilevel_blank.png"
+            bilevel_path.write_bytes(bilevel_black)
+            bad_bilevel = list(frames)
+            bad_bilevel[0] = verifier.CapturedFrame(
+                frames[0].phase, bilevel_path, hashlib.sha256(bilevel_black).hexdigest(), frames[0].game_t_ms
+            )
+            _, bilevel_errs = verifier.analyze_visual_tour_result(ok_log, bad_bilevel, inspect_extra=True)
+            self.assertTrue(any("is blank/uniform" in e for e in bilevel_errs), bilevel_errs)
+
+            # Full-height (>128 rows!) near-black fade-in (max channel 5/255) & uniform (4,4,4) PNGs must ALSO fail (S16/A)!
+            dim_ihdr = struct.pack(">IIBBBBB", 16, 200, 8, 2, 0, 0, 0)
+            dim_raw = b"".join(
+                b"\x00" + bytes((y % 6, (y + 2) % 6, (y + 4) % 6)) * 16 for y in range(200)
+            )
+            dim_png = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", dim_ihdr) + _ch2(b"IDAT", zlib.compress(dim_raw)) + _ch2(b"IEND", b"")
+            dim_path = out_dir / "dim_fade_200.png"
+            dim_path.write_bytes(dim_png)
+            bad_dim = list(frames)
+            bad_dim[0] = verifier.CapturedFrame(
+                frames[0].phase, dim_path, hashlib.sha256(dim_png).hexdigest(), frames[0].game_t_ms
+            )
+            _, dim_errs = verifier.analyze_visual_tour_result(ok_log, bad_dim, inspect_extra=True)
+            self.assertTrue(any("is blank/uniform" in e for e in dim_errs), dim_errs)
+
+            # Uniform RGB(4,4,4) 200-row Sub-filtered PNG must ALSO fail!
+            uni_raw = b"".join(b"\x01\x04\x04\x04" + b"\x00" * (15 * 3) for _ in range(200))
+            uni_png = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", dim_ihdr) + _ch2(b"IDAT", zlib.compress(uni_raw)) + _ch2(b"IEND", b"")
+            uni_path = out_dir / "uniform_4_200.png"
+            uni_path.write_bytes(uni_png)
+            bad_uni = list(frames)
+            bad_uni[0] = verifier.CapturedFrame(
+                frames[0].phase, uni_path, hashlib.sha256(uni_png).hexdigest(), frames[0].game_t_ms
+            )
+            _, uni_errs = verifier.analyze_visual_tour_result(ok_log, bad_uni, inspect_extra=True)
+            self.assertTrue(any("is blank/uniform" in e for e in uni_errs), uni_errs)
+
+            # Bright content on non-strided columns (e.g. black every 20th col, white between) must NOT false-fail!
+            stripe_ihdr = struct.pack(">IIBBBBB", 1280, 16, 8, 2, 0, 0, 0)
+            stripe_row = b"\x00" + b"".join(
+                (b"\x00\x00\x00" if (x % 20 == 0) else b"\xff\xff\xff") for x in range(1280)
+            )
+            stripe_raw = b"".join(b"\x00" + b"\x00\x00\x00" * 1280 for _ in range(8)) + stripe_row * 8
+            stripe_png = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", stripe_ihdr) + _ch2(b"IDAT", zlib.compress(stripe_raw)) + _ch2(b"IEND", b"")
+            self.assertFalse(verifier._is_blank_or_uniform_png(stripe_png))
+
+            # Grayscale+alpha (color_type=4) black/dim frames must ignore alpha variation & alpha brightness!
+            ga_ihdr = struct.pack(">IIBBBBB", 16, 16, 8, 4, 0, 0, 0)
+            ga_black_var_alpha = b"".join(
+                b"\x00" + b"".join(bytes((0, (x * 17 + y) & 0xFF)) for x in range(16)) for y in range(16)
+            )
+            ga_black_png = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", ga_ihdr) + _ch2(b"IDAT", zlib.compress(ga_black_var_alpha)) + _ch2(b"IEND", b"")
+            self.assertTrue(verifier._is_blank_or_uniform_png(ga_black_png))
+            ga_dim_opaque = b"".join(
+                b"\x00" + b"".join(bytes((x % 6, 255)) for x in range(16)) for y in range(16)
+            )
+            ga_dim_png = b"\x89PNG\r\n\x1a\n" + _ch2(b"IHDR", ga_ihdr) + _ch2(b"IDAT", zlib.compress(ga_dim_opaque)) + _ch2(b"IEND", b"")
+            self.assertTrue(verifier._is_blank_or_uniform_png(ga_dim_png))
+
+            dup_frames = list(frames)
+            dup_frames[1] = verifier.CapturedFrame(
+                frames[1].phase, frames[0].path, frames[0].sha256, frames[1].game_t_ms
+            )
+            _, dup_errs = verifier.analyze_visual_tour_result(ok_log, dup_frames, inspect_extra=True)
+            self.assertTrue(any("duplicate prototype station frames" in e for e in dup_errs), dup_errs)
