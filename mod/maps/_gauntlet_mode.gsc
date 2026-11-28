@@ -240,6 +240,11 @@ redirect_fresh_run_to_nacht( current_map )
 	fields[2] = maps\_gauntlet_log::kv( "next_map", "nazi_zombie_prototype" );
 	maps\_gauntlet_log::emit( "FRESH_RUN_REDIRECT", maps\_gauntlet_log::join_fields( fields ) );
 
+	// Cancel stock maps\_autosave::start_level_save() before tearing down the map;
+	// otherwise WaW 1.7 throws "Attempting to save during a restart." when
+	// SaveGame("levelstart", ...) wakes up during ChangeLevel / exitLevel.
+	level.missionfailed = true;
+
 	if ( is_coop )
 	{
 		SetUINextLevel( "nazi_zombie_prototype" );

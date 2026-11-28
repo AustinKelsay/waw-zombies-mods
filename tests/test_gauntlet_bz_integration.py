@@ -569,6 +569,7 @@ class TestGauntletBzIntegration(unittest.TestCase):
         solo_gsc.level.set_field("script", "nazi_zombie_factory")
         solo_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
         self.assertEqual(solo_gsc.changelevel_calls, [("nazi_zombie_prototype", False)])
+        self.assertTrue(solo_gsc.level.get_field("missionfailed"))
         self.assertEqual(solo_dvars.get("gauntlet_active"), "0")
         self.assertEqual(solo_dvars.get("gauntlet_cycle_order"), "")
         self.assertTrue(
