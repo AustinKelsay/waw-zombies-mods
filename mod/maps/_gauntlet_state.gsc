@@ -236,6 +236,10 @@ load_run_state()
 	{
 		state.cycle_order = maps\_gauntlet_rules::format_cycle_order( parsed_order );
 	}
+	else if ( state.active )
+	{
+		state.cycle_order = maps\_gauntlet_rules::format_cycle_order( maps\_gauntlet_rules::get_stage_maps() );
+	}
 	else
 	{
 		state.cycle_order = "";

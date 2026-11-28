@@ -91,7 +91,7 @@
 		CHOICE_BUTTON_VIS( 			9, "@MENU_GAME_TYPE_SETTINGS", LOCAL_GAMERULES_ACTION, when( dvarString( ui_netGameType ) != 1 && dvarInt( gauntlet_enabled ) == 0 ) )
 		CHOICE_DBUTTON_VIS( 		9, "@MENU_GAME_TYPE_SETTINGS", when( dvarString( ui_netGameType ) == 1 || dvarInt( gauntlet_enabled ) == 1 ) )
 
-		// map selection (unmodified stock picker in Classic Mode; locked in Gauntlet)
+		// map selection (stock map picker for Classic & Enhanced Mode; locked in Gauntlet)
 		itemDef
 		{
 			name			maplist
@@ -184,13 +184,12 @@
 			{
 				play "mouse_click";
 				GAUNTLET_CLASSIC_MODE_ACTION
-				BZ_CLASSIC_MODE_ACTION
 				uiScript acceptServerSettings;
 				close pc_gamesetup_coop;
 			}
 		}
 
-		// Base Zombies Enhancements accept: keeps chosen Stock Map with Phase 1 gates active
+		// Enhanced Mode accept: keeps chosen Stock Map with all shipped Base Zombies gates active
 		itemDef
 		{
 			name			accept_bz_enhancements

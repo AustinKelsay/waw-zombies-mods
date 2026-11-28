@@ -599,6 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # Scenario 1: Gauntlet Stage 1 -> Stage 2 HUD_INIT + HUD_DESTROYED + HUD_INIT update
         print("\n--> Scenario 1: Gauntlet HUD badge lifecycle across Stage 1 -> Stage 2")
+        stage_span = max(1, int(args.target_round))
         res1 = verify_cycle2.run_waw_scenario(
             name="Gauntlet HUD lifecycle (Stage 1 -> Stage 2)",
             log_filename="hud_s1_stage_lifecycle.console.log",
@@ -606,7 +607,7 @@ def main(argv: list[str] | None = None) -> int:
             extra_dvars=[
                 ("gauntlet_active", "0"),
                 ("gauntlet_test_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
-                ("gauntlet_test_stage_span", "1"),
+                ("gauntlet_test_stage_span", str(stage_span)),
                 ("gauntlet_test_target_round", "0"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
                 ("gauntlet_test_prep_duration", str(args.prep_duration)),
@@ -616,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
             analyzer=lambda txt: analyze_hud_log(
                 txt,
                 gauntlet_enabled=1,
-                expected_badges=[(1, 1, 1), (1, 2, 2)],
+                expected_badges=[(1, 1, stage_span), (1, 2, stage_span * 2)],
                 expected_destroy_reasons=["gauntlet_stage_clear"],
             ),
             display_num=display_num,

@@ -34,13 +34,25 @@ import smoke_verify  # noqa: E402
 TEST_CYCLE1_ORDER = "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_asylum,nazi_zombie_factory"
 TEST_CYCLE2_ORDER = "nazi_zombie_asylum,nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_sumpf"
 
-EXPECTED_CYCLE1_SEQUENCE: tuple[tuple[int, int, str, int, int], ...] = (
-    (1, 1, "nazi_zombie_prototype", 1, 1),
-    (1, 2, "nazi_zombie_sumpf", 2, 2),
-    (1, 3, "nazi_zombie_asylum", 3, 3),
-    (1, 4, "nazi_zombie_factory", 4, 4),
-    (2, 1, "nazi_zombie_asylum", 5, 5),
+EXPECTED_CYCLE1_MAPS: tuple[tuple[int, int, str], ...] = (
+    (1, 1, "nazi_zombie_prototype"),
+    (1, 2, "nazi_zombie_sumpf"),
+    (1, 3, "nazi_zombie_asylum"),
+    (1, 4, "nazi_zombie_factory"),
+    (2, 1, "nazi_zombie_asylum"),
 )
+
+
+def expected_cycle1_sequence(stage_span: int = 1) -> tuple[tuple[int, int, str, int, int], ...]:
+    """Compute (cycle, stage, map, start_round, target_round) for any fixed stage span."""
+    span = max(1, int(stage_span))
+    return tuple(
+        (c, s, m, 1 + idx * span, (idx + 1) * span)
+        for idx, (c, s, m) in enumerate(EXPECTED_CYCLE1_MAPS)
+    )
+
+
+EXPECTED_CYCLE1_SEQUENCE: tuple[tuple[int, int, str, int, int], ...] = expected_cycle1_sequence(1)
 
 
 @dataclass(frozen=True)
@@ -79,9 +91,9 @@ def parse_gauntlet_events(log_text: str) -> list[GauntletEvent]:
     return events
 
 
-def is_cycle1_complete(events: list[GauntletEvent]) -> bool:
+def is_cycle1_complete(events: list[GauntletEvent], expected_stage_span: int = 1) -> bool:
     """Return True once Cycle 2 Stage 1 has initialized and applied player points."""
-    exp_c, exp_s, exp_map, exp_start, _ = EXPECTED_CYCLE1_SEQUENCE[-1]
+    exp_c, exp_s, exp_map, exp_start, _ = expected_cycle1_sequence(expected_stage_span)[-1]
     saw_c2_init = False
     for ev in events:
         if (
@@ -101,6 +113,19 @@ def is_cycle1_complete(events: list[GauntletEvent]) -> bool:
     return False
 
 
+def _split_stage_slices(events: list[GauntletEvent]) -> list[list[GauntletEvent]]:
+    """Group events into slices starting at each STAGE_INIT event."""
+    slices: list[list[GauntletEvent]] = []
+    current: list[GauntletEvent] | None = None
+    for ev in events:
+        if ev.event_type == "STAGE_INIT":
+            current = [ev]
+            slices.append(current)
+        elif current is not None:
+            current.append(ev)
+    return slices
+
+
 def analyze_cycle1_log(
     log_text: str,
     expected_stage_span: int = 1,
@@ -108,6 +133,7 @@ def analyze_cycle1_log(
     """Validate full Solo Cycle 1 shuffled 4-map continuous progression and points carryover."""
     events = parse_gauntlet_events(log_text)
     errors: list[str] = []
+    expected_seq = expected_cycle1_sequence(expected_stage_span)
 
     for label, pattern in smoke_verify.FATAL_LOG_PATTERNS:
         for line in log_text.splitlines():
@@ -117,14 +143,14 @@ def analyze_cycle1_log(
 
     # 1. Verify shuffled STAGE_INIT events across all 4 Cycle 1 maps + Cycle 2 wrap
     stage_inits = [e for e in events if e.event_type == "STAGE_INIT"]
-    if len(stage_inits) < len(EXPECTED_CYCLE1_SEQUENCE):
+    if len(stage_inits) < len(expected_seq):
         errors.append(
-            f"Expected at least {len(EXPECTED_CYCLE1_SEQUENCE)} STAGE_INIT events "
+            f"Expected at least {len(expected_seq)} STAGE_INIT events "
             f"(4 Cycle 1 stages + Cycle 2 Stage 1 wrap), found {len(stage_inits)}"
         )
     else:
         run_ids: set[str] = set()
-        for idx, (exp_cycle, exp_stage, exp_map, exp_start, exp_target) in enumerate(EXPECTED_CYCLE1_SEQUENCE):
+        for idx, (exp_cycle, exp_stage, exp_map, exp_start, exp_target) in enumerate(expected_seq):
             ev = stage_inits[idx]
             run_id = ev.fields.get("run_id", "")
             if not run_id:
@@ -137,7 +163,7 @@ def analyze_cycle1_log(
                 ("stage", str(exp_stage)),
                 ("map", exp_map),
                 ("start_round", str(exp_start)),
-                ("target_round", str(exp_start + expected_stage_span - 1 if expected_stage_span != 1 else exp_target)),
+                ("target_round", str(exp_target)),
             )
             for key, expected_val in checks:
                 actual_val = ev.fields.get(key)
@@ -149,15 +175,50 @@ def analyze_cycle1_log(
         if len(run_ids) != 1:
             errors.append(f"Expected consistent run_id across all stages, got {sorted(run_ids)}")
 
+    # 1b. Verify Prep Phase runs on Cycle 1 Stages 2-4 (start_round > 1) and NOT on Stage 1 (start_round == 1)
+    slices = _split_stage_slices(events)
+    if len(slices) >= 4:
+        s1_prep = [e for e in slices[0] if e.event_type in ("PREP_PHASE_START", "PREP_PHASE_END")]
+        if s1_prep:
+            errors.append(f"Stage 1 (start_round=1) should not run Prep Phase, found {len(s1_prep)} events")
+        for idx in range(1, 4):
+            sl = slices[idx]
+            exp_cycle, exp_stage, exp_map, _, _ = expected_seq[idx]
+            has_start = any(
+                e.event_type == "PREP_PHASE_START"
+                and e.fields.get("cycle") == str(exp_cycle)
+                and e.fields.get("stage") == str(exp_stage)
+                and e.fields.get("map") == exp_map
+                for e in sl
+            )
+            has_end = any(
+                e.event_type == "PREP_PHASE_END"
+                and e.fields.get("cycle") == str(exp_cycle)
+                and e.fields.get("stage") == str(exp_stage)
+                and e.fields.get("map") == exp_map
+                for e in sl
+            )
+            if not has_start or not has_end:
+                errors.append(
+                    f"Cycle {exp_cycle} Stage {exp_stage} ({exp_map}) missing Prep Phase "
+                    f"events (start={has_start}, end={has_end})"
+                )
+
     # 2. Verify all 4 Cycle 1 STAGE_CLEAR and solo STAGE_TRANSITION events
     stage_clears = [e for e in events if e.event_type == "STAGE_CLEAR"]
     stage_transitions = [e for e in events if e.event_type == "STAGE_TRANSITION"]
 
-    expected_transitions = (
-        (1, 1, "nazi_zombie_prototype", 1, 1, 2, "nazi_zombie_sumpf"),
-        (1, 2, "nazi_zombie_sumpf", 2, 1, 3, "nazi_zombie_asylum"),
-        (1, 3, "nazi_zombie_asylum", 3, 1, 4, "nazi_zombie_factory"),
-        (1, 4, "nazi_zombie_factory", 4, 2, 1, "nazi_zombie_asylum"),
+    expected_transitions = tuple(
+        (
+            expected_seq[idx][0],
+            expected_seq[idx][1],
+            expected_seq[idx][2],
+            expected_seq[idx][4],
+            expected_seq[idx + 1][0],
+            expected_seq[idx + 1][1],
+            expected_seq[idx + 1][2],
+        )
+        for idx in range(4)
     )
 
     if len(stage_clears) < len(expected_transitions):
@@ -226,9 +287,9 @@ def analyze_cycle1_log(
                     f"applied={applied_vals[idx]}, saved={saved_vals[idx]}"
                 )
 
-        # Continuous Points Floors: S2 (R2=1000), S3 (R3=1500), S4 (R4=2000), C2 S1 (R5=2500)
+        # Continuous Points Floors based on each Stage's start_round
         for idx in range(4):
-            next_start_round = EXPECTED_CYCLE1_SEQUENCE[idx + 1][3]
+            next_start_round = expected_seq[idx + 1][3]
             floor_pts = max(500, next_start_round * 500)
             expected_pts = max(saved_vals[idx], floor_pts)
             if applied_vals[idx + 1] != expected_pts:
@@ -316,6 +377,9 @@ def run_cycle1_verification(
         "gauntlet_test_stage_span",
         str(target_round),
         "+set",
+        "gauntlet_test_target_round",
+        "0",
+        "+set",
         "gauntlet_test_prep_duration",
         "1",
         "+set",
@@ -354,7 +418,7 @@ def run_cycle1_verification(
             if any(pat.search(log_text) for _, pat in smoke_verify.FATAL_LOG_PATTERNS):
                 break
 
-            if is_cycle1_complete(parsed):
+            if is_cycle1_complete(parsed, expected_stage_span=target_round):
                 time.sleep(0.8)
                 log_text, _ = smoke_verify.read_console_logs(appdata)
                 break
@@ -396,7 +460,7 @@ def run_cycle1_verification(
     saved_log.write_text(log_text, encoding="utf-8", errors="replace")
 
     events, errors = analyze_cycle1_log(log_text, expected_stage_span=target_round)
-    if timed_out and not is_cycle1_complete(events):
+    if timed_out and not is_cycle1_complete(events, expected_stage_span=target_round):
         errors.insert(0, f"Timed out after {timeout_s:.1f}s before completing 4-map Cycle 1 run")
 
     return Cycle1VerifyResult(

@@ -52,7 +52,7 @@ Per-map engine console logs are saved under `.smoke_logs/` (gitignored). The com
 
 ### 3. Full end-to-end verification gate
 
-Run the complete 13-stage default quality gate (offline contract tests, `mod.ff` + `waw_gauntlet.iwd` build/deploy, Classic & Gauntlet 4-map smoke, Solo Cycle 1/2+, Co-op transition, team wipe, HUD/menu checks, Perk Carryover, Base Zombies Phase 1 & Phase 2, Base Zombies Co-op self-test, and Enhanced Gauntlet carryover):
+Run the complete 13-stage default quality gate (offline contract tests, `mod.ff` + `waw_gauntlet.iwd` build/deploy, Classic & Gauntlet 4-map smoke, Solo Cycle 1/2+, Co-op transition, team wipe, HUD/menu checks, Perk Carryover, Base Zombies Phase 1 & Phase 2, Base Zombies Co-op self-test, and unified Zombie Gauntlet carryover):
 
 ```sh
 python3 scripts/verify_e2e.py

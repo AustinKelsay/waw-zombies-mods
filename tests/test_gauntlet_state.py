@@ -441,6 +441,35 @@ class TestGauntletStatePersistence(unittest.TestCase):
             "stale_map_mismatch",
         )
 
+        # Shuffled Cycle Order: pending Stage 2 matches shuffled map, rejects chronological map
+        shuffled_next = GscStruct()
+        shuffled_next.set_field("active", True)
+        shuffled_next.set_field("cycle", 1)
+        shuffled_next.set_field("stage", 2)
+        shuffled_next.set_field(
+            "cycle_order",
+            "nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_sumpf,nazi_zombie_asylum",
+        )
+        shuffled_next.set_field("pending_transition", True)
+        self.assertFalse(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", shuffled_next, "nazi_zombie_factory", False)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", shuffled_next, "nazi_zombie_asylum", False),
+            "stale_map_mismatch",
+        )
+
+        # Corrupt gauntlet_cycle_order on an active Run repairs to canonical 4-map order on load
+        self.dvars.set("gauntlet_active", "1")
+        self.dvars.set("gauntlet_cycle", "2")
+        self.dvars.set("gauntlet_stage", "2")
+        self.dvars.set("gauntlet_cycle_order", "corrupt,bad_map,nazi_zombie_prototype")
+        repaired = self.gsc.call(STATE_MOD, "load_run_state")
+        self.assertEqual(
+            repaired.cycle_order,
+            "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory",
+        )
+
         # Active Run with pending_transition=False (host disbanded / quit mid-Stage) -> resets
         stale_mid = GscStruct()
         stale_mid.set_field("active", True)

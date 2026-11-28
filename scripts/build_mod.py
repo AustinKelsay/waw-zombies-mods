@@ -3169,7 +3169,7 @@ def generate_staged_mod_csv(
 
 
 def patch_main_menu_bz(source: str) -> str:
-    """Add Solo 'ENHANCEMENTS' launch entry and Classic bz_enabled=0 reset to ui/main.menu."""
+    """Add Solo 'ENHANCED MODE' launch entry and Classic bz_enabled=0 reset to ui/main.menu."""
     newline = "\r\n" if "\r\n" in source else "\n"
     text = source
 

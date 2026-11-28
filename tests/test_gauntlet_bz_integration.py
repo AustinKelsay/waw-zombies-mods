@@ -52,7 +52,13 @@ class GauntletBzRuntime(BzPerksRuntime):
     """Extends BzPerksRuntime with Gauntlet player/HUD methods needed by _gauntlet_mode/_gauntlet_perks."""
 
     def _exec_method(self, receiver, method: str, args, line: int):
-        if isinstance(receiver, FakeHudElem) and method in ("setshader", "scaleovertime", "fadeovertime"):
+        if isinstance(receiver, FakeHudElem) and method == "setshader":
+            receiver.shader = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if isinstance(receiver, FakeHudElem) and method == "setvalue":
+            receiver.value = args[0] if args else None
+            return UNDEFINED
+        if isinstance(receiver, FakeHudElem) and method in ("scaleovertime", "fadeovertime"):
             return UNDEFINED
         if method == "closemenu":
             receiver.closed_menus = getattr(receiver, "closed_menus", 0) + 1
@@ -414,7 +420,30 @@ class TestGauntletBzIntegration(unittest.TestCase):
         for forbidden in ("GAUNTLET_ENHANCED_SOLO_START_ACTION", "ENHANCED GAUNTLET", "Classic Gauntlet"):
             self.assertNotIn(forbidden, gauntlet_inc)
 
-        # 3. Every Run reset / launch macro clears BZ ledgers and shuffled-cycle dvars
+        # 3. Every Run reset / launch macro clears all 20 persisted Run dvars and keeps every
+        #    quoted exec token safely below WaW 1.7's 1024-byte MAX_TOKEN_CHARS limit.
+        all_persisted_run_dvars = (
+            "gauntlet_active",
+            "gauntlet_run_id",
+            "gauntlet_pending_transition",
+            "gauntlet_cycle",
+            "gauntlet_stage",
+            "gauntlet_cycle_order",
+            "gauntlet_start_round",
+            "gauntlet_target_round",
+            "gauntlet_total_rounds",
+            "gauntlet_fresh_run",
+            "gauntlet_player_points",
+            "gauntlet_player_perks",
+            "gauntlet_bz_perm",
+            "gauntlet_bz_perks",
+            "gauntlet_bz_weapons",
+            "gauntlet_next_map",
+            "gauntlet_next_display",
+            "gauntlet_disconnected_players",
+            "gauntlet_spectators",
+            "gauntlet_lobby_status",
+        )
         for macro in (
             "GAUNTLET_CLEAR_RUN_STATE_EXEC",
             "GAUNTLET_SOLO_START_ACTION",
@@ -424,15 +453,15 @@ class TestGauntletBzIntegration(unittest.TestCase):
             with self.subTest(macro=macro):
                 m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
                 self.assertIsNotNone(m, f"Missing {macro}")
-                for dvar in (
-                    "gauntlet_cycle_order",
-                    "gauntlet_start_round",
-                    "gauntlet_target_round",
-                    "gauntlet_bz_perm",
-                    "gauntlet_bz_perks",
-                    "gauntlet_bz_weapons",
-                ):
+                for dvar in all_persisted_run_dvars:
                     self.assertIn(f"set {dvar}", m.group(0))
+
+        coop_mode_m = re.search(r"#define\s+GAUNTLET_COOP_MODE_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
+        self.assertIsNotNone(coop_mode_m)
+        self.assertIn("GAUNTLET_CLEAR_RUN_STATE_EXEC", coop_mode_m.group(0))
+
+        for quoted in re.findall(r'exec(?:OnDvarIntValue\s+\w+\s+\d+)?\s+"((?:\\.|[^"\\])*)"', gauntlet_inc):
+            self.assertLess(len(quoted), 700, f"Menu exec token too close to 1024-byte WaW limit ({len(quoted)} chars)")
 
         # 4. Unified GAUNTLET_SOLO_START_ACTION and GAUNTLET_COOP_FRESH_LOCK_ACTION enable full Enhanced Mode
         for macro in ("GAUNTLET_SOLO_START_ACTION", "GAUNTLET_COOP_FRESH_LOCK_ACTION"):
@@ -472,6 +501,29 @@ class TestGauntletBzIntegration(unittest.TestCase):
             self.assertIn("ZOMBIE GAUNTLET", patched_levels)
             self.assertIn("ENHANCED: DER RIESE", patched_levels)
             self.assertNotIn("ENHANCED GAUNTLET", patched_levels)
+
+    def test_init_high_round_chalk_hud_rounds_2_to_5_and_high_rounds(self) -> None:
+        for start_round, exp_hud1_shader, exp_hud2_shader, exp_hud1_val, exp_hud2_destroyed in (
+            (4, "hud_chalk_4", None, None, False),
+            (5, "hud_chalk_5", None, None, False),
+            (8, "hud_chalk_5", "hud_chalk_3", None, False),
+            (10, "hud_chalk_5", "hud_chalk_5", None, False),
+            (14, None, None, 14, True),
+        ):
+            with self.subTest(start_round=start_round):
+                gsc = GauntletBzRuntime(MOD_ROOT, _make_enhanced_dvars())
+                h1 = FakeHudElem(1)
+                h2 = FakeHudElem(2)
+                h1.shader = None
+                h2.shader = None
+                h1.value = None
+                gsc.level.set_field("chalk_hud1", h1)
+                gsc.level.set_field("chalk_hud2", h2)
+                gsc.call(GAUNTLET_MODE_MOD, "init_high_round_chalk_hud", start_round)
+                self.assertEqual(h1.shader, exp_hud1_shader)
+                self.assertEqual(h2.shader, exp_hud2_shader)
+                self.assertEqual(h1.value, exp_hud1_val)
+                self.assertEqual(h2.destroyed, exp_hud2_destroyed)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify host-side Co-op native PaP & Hellhounds, enhanced Gauntlet, and 4-map visuals.
+"""Verify host-side Co-op native PaP & Hellhounds, Zombie Gauntlet carryover, and 4-map visuals.
 
 Note on WaW 1.7 CoDWaW.exe Co-op: the stock Steam Co-op binary has no CLI `connect`
 command and rejects join-in-progress (`Client connect ignored because join in progress

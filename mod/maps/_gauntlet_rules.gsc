@@ -202,7 +202,7 @@ get_map_for_stage_in_order( stage, cycle_order )
 		return undefined;
 	}
 
-	if ( IsDefined( cycle_order ) && cycle_order.size == 4 )
+	if ( IsDefined( cycle_order ) && cycle_order.size == 4 && IsDefined( cycle_order[idx - 1] ) )
 	{
 		candidate = tolower( "" + cycle_order[idx - 1] );
 		if ( is_valid_stage_map( candidate ) )
@@ -231,7 +231,7 @@ stage_index_for_map_in_order( map_name, cycle_order )
 	{
 		for ( i = 0; i < 4; i++ )
 		{
-			if ( tolower( "" + cycle_order[i] ) == normalized )
+			if ( IsDefined( cycle_order[i] ) && tolower( "" + cycle_order[i] ) == normalized )
 			{
 				return i + 1;
 			}
@@ -637,8 +637,8 @@ map_has_hellhounds( map_name )
 	return false;
 }
 
-// Schedules the next Hellhound round relative to a Cycle 2+ Stage's start_round
-// so dog rounds are never permanently skipped when start_round > stock's 5..7.
+// Schedules the next Hellhound round relative to any high-round Stage's start_round
+// (start_round > 1) so dog rounds are never permanently skipped when start_round > stock's 5..7.
 // Guarantees result >= start_round + 1 and clamps <= target_round when
 // target_round > start_round.
 compute_next_dog_round( start_round, target_round, offset )

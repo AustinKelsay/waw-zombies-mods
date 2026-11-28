@@ -114,16 +114,28 @@ def _verify_high_round_stage(
         errors.append(f"{label}: missing POINTS_APPLIED")
     else:
         pts_ev = pts_events[0]
-        if expected_points is not None and pts_ev.fields.get("points") != str(expected_points):
+        actual_points = pts_ev.fields.get("points")
+        if expected_points is not None and actual_points != str(expected_points):
             errors.append(
-                f"{label}: POINTS_APPLIED points={pts_ev.fields.get('points')!r}, "
+                f"{label}: POINTS_APPLIED points={actual_points!r}, "
                 f"expected {expected_points!r} ({pts_ev.raw})"
             )
-        if expected_floor is not None and pts_ev.fields.get("floor") != str(expected_floor):
-            errors.append(
-                f"{label}: POINTS_APPLIED floor={pts_ev.fields.get('floor')!r}, "
-                f"expected {expected_floor!r} ({pts_ev.raw})"
-            )
+        if expected_floor is not None:
+            if pts_ev.fields.get("floor") != str(expected_floor):
+                errors.append(
+                    f"{label}: POINTS_APPLIED floor={pts_ev.fields.get('floor')!r}, "
+                    f"expected {expected_floor!r} ({pts_ev.raw})"
+                )
+            try:
+                if actual_points is None or int(actual_points) < expected_floor:
+                    errors.append(
+                        f"{label}: POINTS_APPLIED points={actual_points!r} is below "
+                        f"expected floor {expected_floor} ({pts_ev.raw})"
+                    )
+            except ValueError:
+                errors.append(
+                    f"{label}: POINTS_APPLIED points={actual_points!r} is not an integer ({pts_ev.raw})"
+                )
 
     # HIGH_ROUND_APPLIED check
     hr_indices = [i for i, e in enumerate(stage_events) if e.event_type == "HIGH_ROUND_APPLIED"]
@@ -269,6 +281,11 @@ def analyze_c1_to_c2_wrap_log(
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 1 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
 
+    c1_s4_saved = next((e for e in c1_s4 if e.event_type == "POINTS_SAVED"), None)
+    expected_c2_points: int | None = None
+    if c1_s4_saved is not None and c1_s4_saved.fields.get("points", "").isdigit():
+        expected_c2_points = max(int(c1_s4_saved.fields["points"]), 5000)
+
     _verify_high_round_stage(
         stage_events=c2_s1,
         label="Cycle 2 Stage 1 (wrap)",
@@ -280,7 +297,7 @@ def analyze_c1_to_c2_wrap_log(
         expected_move_speed=80,
         expected_prep_duration=expected_prep_duration,
         expect_dogs=False,
-        expected_points=None,
+        expected_points=expected_c2_points,
         expected_floor=5000,
         errors=errors,
     )
@@ -327,7 +344,7 @@ def analyze_c2_to_c3_wrap_log(
     log_text: str,
     expected_prep_duration: int = 3,
 ) -> tuple[list[GauntletEvent], list[str]]:
-    """Validate Cycle 2 Stage 4 (factory, R10 + dogs) -> Cycle 3 Stage 1 (prototype, R15) wrap."""
+    """Validate Cycle 2 Stage 4 (factory, R14 + dogs) -> Cycle 3 Stage 1 (prototype, R15) wrap."""
     events = verify_cycle1.parse_gauntlet_events(log_text)
     errors: list[str] = []
     _check_fatal_patterns(log_text, errors)
@@ -366,6 +383,11 @@ def analyze_c2_to_c3_wrap_log(
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 2 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
 
+    c2_s4_saved = next((e for e in c2_s4 if e.event_type == "POINTS_SAVED"), None)
+    expected_c3_points: int | None = None
+    if c2_s4_saved is not None and c2_s4_saved.fields.get("points", "").isdigit():
+        expected_c3_points = max(int(c2_s4_saved.fields["points"]), 7500)
+
     _verify_high_round_stage(
         stage_events=c3_s1,
         label="Cycle 3 Stage 1 (wrap)",
@@ -377,7 +399,7 @@ def analyze_c2_to_c3_wrap_log(
         expected_move_speed=120,
         expected_prep_duration=expected_prep_duration,
         expect_dogs=False,
-        expected_points=None,
+        expected_points=expected_c3_points,
         expected_floor=7500,
         errors=errors,
     )

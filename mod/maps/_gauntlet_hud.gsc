@@ -1,7 +1,7 @@
 // Persistent in-game HUD overlay for Zombie Gauntlet (Call of Duty: WaW 1.7).
 //
-// Renders a minimal, unobtrusive top-right badge showing the active Cycle,
-// Stage (1..4), and effective Target Round without overlapping:
+// Renders a minimal, unobtrusive top-right badge showing the active Cycle and
+// Stage (1..4) while hiding the rolled Target Round (ADR-0001) without overlapping:
 //   - Top-center Prep Phase countdown (alignX="center", y=24..52, sort=9)
 //   - Center-middle Stage Clear banner (alignX="center", y=-36..26, sort=10)
 //   - Bottom-left stock round chalk HUD

@@ -1,6 +1,6 @@
 # End-to-End Verification Runbook (`waw_gauntlet`)
 
-This runbook documents how operators and agents run the automated verification quality gate for **Zombie Gauntlet** and **Classic Mode** across all four stock Call of Duty: World at War Nazi Zombies maps (`nazi_zombie_prototype`, `nazi_zombie_asylum`, `nazi_zombie_sumpf`, `nazi_zombie_factory`).
+This runbook documents how operators and agents run the automated verification quality gate for **Classic Mode**, **Enhanced Mode**, and **Zombie Gauntlet** across all four stock Call of Duty: World at War Nazi Zombies maps (`nazi_zombie_prototype`, `nazi_zombie_asylum`, `nazi_zombie_sumpf`, `nazi_zombie_factory`).
 
 ---
 
@@ -44,7 +44,7 @@ python3 scripts/verify_e2e.py --offline-only
 
 | # | Stage ID | Command | What It Verifies | Issue #1 / #9 Coverage |
 | --- | --- | --- | --- | --- |
-| 1 | `offline-tests` | `python3 -m unittest discover -s tests -v` | Pure-logic Gauntlet Rules math (Cycles 1–10, Points Floor, Prep Phase, stock zombie HP/speed/spawn decay), host dvar persistence round-trips, `build_mod.py` hook injection & no-`foreach` lint, and log analyzer contracts. | Issue #1 Seam 1; Issue #9 AC #1 |
+| 1 | `offline-tests` | `python3 -m unittest discover -s tests -v` | Pure-logic Gauntlet Rules math (shuffled Cycle Orders with no-repeat boundaries, continuous `[4, 6]` Stage Spans, Points Floor, Prep Phase, stock zombie HP/speed/spawn decay), host dvar persistence round-trips, `build_mod.py` hook injection & no-`foreach` lint, and log analyzer contracts. | Issue #1 Seam 1; Issue #9 AC #1; #100; #105 |
 | 2 | `build-deploy` | `python3 scripts/build_mod.py --deploy` | Extracts era-specific stock map + `_zombiemode.gsc` scripts, injects `gauntlet_enabled`-gated hooks, compiles `dist/waw_gauntlet/mod.ff` via `linker_pc.exe`, packages `waw_gauntlet.iwd`, and deploys to Steam AppData. | Issue #9 AC #1 |
 | 3 | `classic-gauntlet-smoke` | `python3 scripts/smoke_verify.py --skip-build --modes 0 1` | Boots all 4 stock maps in **Classic Mode** (`gauntlet_enabled 0`) and **Zombie Gauntlet** (`gauntlet_enabled 1`), asserting `mod.ff` loads with zero 400-FX or script errors and emits `GAUNTLET_EVENT\|MOD_LOADED` (and `GAUNTLET_READY` when enabled). | Issue #9 AC #5 (Classic Mode non-regression) |
 | 4 | `solo-cycle1` | `python3 scripts/verify_cycle1.py --skip-build` | Continuous Solo Run across a shuffled 4-map Cycle 1 order + no-repeat Cycle 2 Stage 1 wrap verifying continuous round escalation (`R1 -> R2 -> R3 -> R4 -> R5`), `STAGE_INIT`, `STAGE_CLEAR`, Solo `ChangeLevel` `STAGE_TRANSITION`, and Points Floor carryover. | Issue #105 (GPO-T3) |

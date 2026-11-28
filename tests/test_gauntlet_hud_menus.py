@@ -116,6 +116,8 @@ class FakeHudElem(GscStruct):
         self.destroyed: bool = False
         self.destroy_count: int = 0
         self.fade_calls: list[float] = []
+        self.shader: str | None = None
+        self.value: Any = None
 
 
 class HudGscParser(Parser):
@@ -295,6 +297,14 @@ class HudGscRuntime(GscRuntime):
         if method == "fadeovertime":
             if isinstance(receiver, FakeHudElem):
                 receiver.fade_calls.append(float(args[0]) if args else 0.0)
+            return UNDEFINED
+        if method == "setshader":
+            if isinstance(receiver, FakeHudElem):
+                receiver.shader = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if method == "setvalue":
+            if isinstance(receiver, FakeHudElem):
+                receiver.value = args[0] if args else None
             return UNDEFINED
         if method == "endon":
             event_name = _waw_to_str(args[0]) if args else ""

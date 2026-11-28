@@ -2336,7 +2336,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         self.assertIn("GAUNTLET_COOP_SETUP_TOGGLE", coop_menu)
         self.assertNotIn("BZ_COOP_SETUP_TOGGLE", coop_menu)
         self.assertIn("accept_bz_enhancements", coop_menu)
-        self.assertIn("BZ_CLASSIC_MODE_ACTION", coop_menu)
+        self.assertIn("GAUNTLET_CLASSIC_MODE_ACTION", coop_menu)
 
         # Verify staged stock menus get Enhancements Solo/Co-op patches cleanly with balanced braces
         with tempfile.TemporaryDirectory() as tmp:

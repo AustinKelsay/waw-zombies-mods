@@ -162,6 +162,11 @@ def analyze_wipe_log(
                 f"RUN_RESET handoff_cleared={reset_ev.fields.get('handoff_cleared')!r}, "
                 f"expected '1' ({reset_ev.raw})"
             )
+        if reset_ev.fields.get("progression_cleared") != "1":
+            errors.append(
+                f"RUN_RESET progression_cleared={reset_ev.fields.get('progression_cleared')!r}, "
+                f"expected '1' ({reset_ev.raw})"
+            )
         if wipe_run_id and reset_ev.fields.get("run_id") != wipe_run_id:
             errors.append(
                 f"RUN_RESET run_id={reset_ev.fields.get('run_id')!r} does not match "

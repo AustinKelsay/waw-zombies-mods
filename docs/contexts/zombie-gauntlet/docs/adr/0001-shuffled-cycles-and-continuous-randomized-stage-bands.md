@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# Shuffled Cycles and Continuous Randomized Stage Bands
+# Shuffled Cycles and Continuous Randomized Stage Spans
 
 Zombie Gauntlet replaces fixed chronological map loops and per-Stage Round 1 resets with two progression rules designed to maximize run-to-run novelty and late-game pacing while staying 100% pure GSC within WaW 1.7 engine limits:
 
@@ -11,7 +11,7 @@ Zombie Gauntlet replaces fixed chronological map loops and per-Stage Round 1 res
 
 ## Considered Options
 
-- **Keep fixed chronological order (`Nacht -> Verruckt -> Sumpf -> Der Riese`) and fixed round bands (`1–10` × 4, `10–15` × 4)**: Makes every Run play identically and causes severe early-game drag under unified Enhanced Gauntlet, since players carry Classes, Perks, and Elemental PaP weapons back into Round 1 three extra times during Cycle 1 and must play ~60+ total rounds before reaching Round 15.
+- **Keep fixed chronological order (`Nacht -> Verruckt -> Sumpf -> Der Riese`) and fixed round bands (`1–10` × 4, `10–15` × 4)**: Makes every Run play identically and causes severe early-game drag under unified Zombie Gauntlet, since players carry Classes, Perks, and Elemental PaP weapons back into Round 1 three extra times during Cycle 1 and must play ~60+ total rounds before reaching Round 15.
 - **Shuffle all 4 Stock Maps on Cycle 1 Stage 1**: WaW 1.7 `.menu` scripts cannot run an RNG shuffle before launching the first map in Solo or Co-op Host Setup, so shuffling Stage 1 would require an awkward extra mid-load map redirect on Round 1 in Co-op lobbies. Opening Cycle 1 on Nacht der Untoten provides a clean 4–6 round warm-up and zero extra map reloads, while shuffling Stages 2–4 and all 4 maps in Cycle 2+.
 - **Wider Stage Span (`3–7` rounds) or visible exact Target Round**: A 3-round Stage can feel cut short before players finish opening doors, while a 7-round Stage drags on tight maps; `4–6` rounds averages 5 cleanly with tight variance. Hiding the exact Target Round on the HUD keeps each later round tense without cluttering the HUD.
 

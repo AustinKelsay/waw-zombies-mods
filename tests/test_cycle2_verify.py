@@ -75,6 +75,14 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    def test_wrap_points_below_floor_fails(self) -> None:
+        bad = self._build_valid_c1_to_c2_wrap_log().replace(
+            "POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_prototype;carried=4560;floor=5000",
+            "POINTS_APPLIED|player=n_player;points=4560;start_round=10;map=nazi_zombie_prototype;carried=4560;floor=5000",
+        )
+        _, errors = verify_cycle2.analyze_c1_to_c2_wrap_log(bad, expected_prep_duration=3)
+        self.assertTrue(any("5000" in err for err in errors), errors)
+
     def test_double_scaled_round10_health_fails(self) -> None:
         bad = self._build_valid_c1_to_c2_wrap_log().replace(
             "ZOMBIE_SPAWNED_SAMPLE|round=10;health=1045;move_speed=sprint",
