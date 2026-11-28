@@ -89,7 +89,7 @@ ensure_gauntlet_enhancements_coupled()
 	{
 		SetDvar( "bz_elements_enabled", "1" );
 	}
-	if ( GetDvar( "bz_companions_enabled" ) == "" )
+	if ( GetDvarInt( "bz_companions_enabled" ) != 0 || GetDvar( "bz_companions_enabled" ) == "" )
 	{
 		SetDvar( "bz_companions_enabled", "0" );
 	}
@@ -192,6 +192,10 @@ bz_elements_enabled()
 
 bz_companions_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return false;
+	}
 	if ( !bz_enabled() )
 	{
 		return false;

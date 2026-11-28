@@ -40,7 +40,7 @@
 // Co-op Host Setup accept action when single-map Enhanced Mode is active.
 #define BZ_COOP_ACCEPT_ACTION \
 	GAUNTLET_CLEAR_RUN_STATE_EXEC \
-	exec "set waw_game_mode 1; set gauntlet_enabled 0; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0";
+	exec "set waw_game_mode 1; set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0; set gauntlet_enabled 0; set bz_enabled 1; set bz_perks_enabled 1; set bz_classes_enabled 1; set bz_pap_enabled 1; set bz_elements_enabled 1; set bz_companions_enabled 0";
 
 // Single-map Enhanced Mode status and the local build ID for all Co-op lobbies
 // (visible to both hosts and clean-profile guests regardless of local bz_enabled).

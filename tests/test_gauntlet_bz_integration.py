@@ -374,6 +374,8 @@ class TestGauntletBzIntegration(unittest.TestCase):
         dvars.set("bz_classes_enabled", "0")
         dvars.set("bz_pap_enabled", "0")
         dvars.set("bz_elements_enabled", "0")
+        # Even if bz_companions_enabled was previously set to 1, Gauntlet forces it to 0
+        dvars.set("bz_companions_enabled", "1")
         gsc = GauntletBzRuntime(MOD_ROOT, dvars)
         # Pure gate predicates evaluate open immediately when gauntlet_enabled=1
         self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_enabled"))
@@ -390,6 +392,7 @@ class TestGauntletBzIntegration(unittest.TestCase):
         self.assertEqual(dvars.get("bz_pap_enabled"), "1")
         self.assertEqual(dvars.get("bz_elements_enabled"), "1")
         self.assertEqual(dvars.get("bz_companions_enabled"), "0")
+        self.assertFalse(gsc.call(BZ_HOOKS_MOD, "bz_companions_enabled"))
 
         # Classic Mode (gauntlet_enabled=0, bz_enabled=0) stays strictly disabled.
         classic_dvars = FakeDvarStore()
@@ -501,6 +504,91 @@ class TestGauntletBzIntegration(unittest.TestCase):
             self.assertIn("ZOMBIE GAUNTLET", patched_levels)
             self.assertIn("ENHANCED: DER RIESE", patched_levels)
             self.assertNotIn("ENHANCED GAUNTLET", patched_levels)
+
+        # 6. Co-op Host Setup locks Game Type & Game Type Settings in Enhanced Mode and Gauntlet,
+        #    and Enhanced Mode accept + queued Gauntlet accept enforce Nazi Zombies gametype.
+        self.assertIn(
+            'CHOICE_DVARLIST_VIS( \t\t1, "@MENU_GAME_TYPE"',
+            coop_menu,
+        )
+        self.assertIn(
+            "when( dvarInt( gauntlet_enabled ) == 0 && dvarInt( bz_enabled ) == 0 )",
+            coop_menu,
+        )
+        self.assertIn(
+            'CHOICE_DBUTTON_VIS( \t\t1, "@MENU_GAME_TYPE", when( dvarInt( gauntlet_enabled ) == 1 || dvarInt( bz_enabled ) == 1 ) )',
+            coop_menu,
+        )
+        bz_accept_m = re.search(r"#define\s+BZ_COOP_ACCEPT_ACTION\b.*?(?:\n\n|\Z)", bz_inc, re.DOTALL)
+        self.assertIsNotNone(bz_accept_m)
+        for token in ("set ui_gametype zom", "set ui_netGametypeName zom", "set zombiemode 1", "set arcademode 0"):
+            self.assertIn(token, bz_accept_m.group(0))
+
+    def test_stale_or_fresh_run_on_non_nacht_map_redirects_to_nacht_without_saving_corrupt_stage(self) -> None:
+        class RedirectRuntime(GauntletBzRuntime):
+            def __init__(self, mod_root: Path, dvars: FakeDvarStore) -> None:
+                super().__init__(mod_root, dvars)
+                self.changelevel_calls: list[tuple[str, bool]] = []
+                self.next_level_calls: list[str] = []
+                self.exit_level_calls: list[bool] = []
+                self.coop_game = False
+
+            def _call_builtin(self, name_lower: str, args, line: int):
+                if name_lower == "changelevel":
+                    self.changelevel_calls.append((_waw_to_str(args[0]), bool(args[1]) if len(args) > 1 else False))
+                    return True, UNDEFINED
+                if name_lower == "setuinextlevel":
+                    self.next_level_calls.append(_waw_to_str(args[0]))
+                    return True, UNDEFINED
+                if name_lower == "exitlevel":
+                    self.exit_level_calls.append(bool(args[0]) if args else False)
+                    return True, UNDEFINED
+                return super()._call_builtin(name_lower, args, line)
+
+            def call(self, module_path: str, func_name: str, *args):
+                if self.normalize_module_key(module_path) == "maps/_utility" and func_name.lower() == "coopgame":
+                    return self.coop_game
+                return super().call(module_path, func_name, *args)
+
+        # Solo stale-run reload on Der Riese: emits RUN_RESET + FRESH_RUN_REDIRECT, redirects to Nacht, keeps active=0
+        solo_dvars = _make_enhanced_dvars()
+        solo_dvars.set("gauntlet_active", "1")
+        solo_dvars.set("gauntlet_run_id", "interrupted_run")
+        solo_dvars.set("gauntlet_cycle", "1")
+        solo_dvars.set("gauntlet_stage", "2")
+        solo_dvars.set("gauntlet_pending_transition", "0")
+        solo_dvars.set(
+            "gauntlet_cycle_order",
+            "nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_asylum,nazi_zombie_sumpf",
+        )
+        solo_dvars.set("gauntlet_start_round", "7")
+        solo_dvars.set("gauntlet_target_round", "10")
+        solo_gsc = RedirectRuntime(MOD_ROOT, solo_dvars)
+        solo_gsc.level.set_field("script", "nazi_zombie_factory")
+        solo_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
+        self.assertEqual(solo_gsc.changelevel_calls, [("nazi_zombie_prototype", False)])
+        self.assertEqual(solo_dvars.get("gauntlet_active"), "0")
+        self.assertEqual(solo_dvars.get("gauntlet_cycle_order"), "")
+        self.assertTrue(
+            any("FRESH_RUN_REDIRECT|mode=solo;from_map=nazi_zombie_factory;next_map=nazi_zombie_prototype" in e for e in solo_gsc.emitted_events),
+            solo_gsc.emitted_events,
+        )
+
+        # Co-op fresh/stale boot on Der Riese: queues Nacht and returns party to lobby via exitLevel(false)
+        coop_dvars = _make_enhanced_dvars()
+        coop_dvars.set("gauntlet_active", "0")
+        coop_gsc = RedirectRuntime(MOD_ROOT, coop_dvars)
+        coop_gsc.coop_game = True
+        coop_gsc.level.set_field("script", "nazi_zombie_factory")
+        coop_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
+        self.assertEqual(coop_gsc.next_level_calls, ["nazi_zombie_prototype"])
+        self.assertEqual(coop_dvars.get("ui_mapname"), "nazi_zombie_prototype")
+        self.assertEqual(coop_gsc.exit_level_calls, [False])
+        self.assertEqual(coop_dvars.get("gauntlet_active"), "0")
+        self.assertTrue(
+            any("FRESH_RUN_REDIRECT|mode=coop;from_map=nazi_zombie_factory;next_map=nazi_zombie_prototype" in e for e in coop_gsc.emitted_events),
+            coop_gsc.emitted_events,
+        )
 
     def test_init_high_round_chalk_hud_rounds_2_to_5_and_high_rounds(self) -> None:
         for start_round, exp_hud1_shader, exp_hud2_shader, exp_hud1_val, exp_hud2_destroyed in (

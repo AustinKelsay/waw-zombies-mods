@@ -83,6 +83,21 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
         _, errors = verify_cycle2.analyze_c1_to_c2_wrap_log(bad, expected_prep_duration=3)
         self.assertTrue(any("5000" in err for err in errors), errors)
 
+    def test_wrap_missing_points_saved_and_bogus_balance_fail(self) -> None:
+        for fn, log in (
+            (verify_cycle2.analyze_c1_to_c2_wrap_log, self._build_valid_c1_to_c2_wrap_log()),
+            (verify_cycle2.analyze_c2_to_c3_wrap_log, self._build_valid_c2_to_c3_wrap_log()),
+        ):
+            with self.subTest(fn=fn.__name__):
+                missing_saved = "\n".join(l for l in log.splitlines() if "|POINTS_SAVED|" not in l)
+                bogus = missing_saved.replace("points=5000;", "points=9999;").replace("points=7500;", "points=9999;")
+                _, errors = fn(bogus, expected_prep_duration=3)
+                self.assertTrue(any("POINTS_SAVED" in err for err in errors), errors)
+
+                bad_carried = log.replace("carried=4560;", "carried=none;").replace("carried=7060;", "carried=none;")
+                _, errors2 = fn(bad_carried, expected_prep_duration=3)
+                self.assertTrue(any("carried=" in err for err in errors2), errors2)
+
     def test_double_scaled_round10_health_fails(self) -> None:
         bad = self._build_valid_c1_to_c2_wrap_log().replace(
             "ZOMBIE_SPAWNED_SAMPLE|round=10;health=1045;move_speed=sprint",

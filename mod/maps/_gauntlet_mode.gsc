@@ -219,17 +219,37 @@ on_pre_zombiemode_init()
 }
 
 // Seam called inside round_start() immediately before level thread round_think().
-init_fresh_run_for_map( current_map )
+// Fresh Runs MUST open on Nacht der Untoten (Cycle 1 Stage 1, ADR-0001).
+// If a fresh Run or stale-run reset lands on another map, keep Run state cleared
+// and redirect Solo straight to Nacht or return a Co-op party to the lobby with
+// Nacht queued so Nacht is never skipped in Cycle 1.
+redirect_fresh_run_to_nacht( current_map )
 {
-	state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
-	parsed_fresh_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
-	map_stage = maps\_gauntlet_rules::stage_index_for_map_in_order( current_map, parsed_fresh_order );
-	if ( map_stage >= 1 && map_stage != state.stage )
+	maps\_gauntlet_state::clear_run_state();
+
+	is_coop = ( maps\_utility::coopGame() || GetDvarInt( "gauntlet_test_force_coop" ) == 1 );
+	mode_label = "solo";
+	if ( is_coop )
 	{
-		state.stage = map_stage;
-		state = maps\_gauntlet_state::save_run_state( state );
+		mode_label = "coop";
 	}
-	return state;
+
+	fields = [];
+	fields[0] = maps\_gauntlet_log::kv( "mode", mode_label );
+	fields[1] = maps\_gauntlet_log::kv( "from_map", current_map );
+	fields[2] = maps\_gauntlet_log::kv( "next_map", "nazi_zombie_prototype" );
+	maps\_gauntlet_log::emit( "FRESH_RUN_REDIRECT", maps\_gauntlet_log::join_fields( fields ) );
+
+	if ( is_coop )
+	{
+		SetUINextLevel( "nazi_zombie_prototype" );
+		SetDvar( "ui_mapname", "nazi_zombie_prototype" );
+		exitLevel( false );
+		return true;
+	}
+
+	ChangeLevel( "nazi_zombie_prototype", false );
+	return true;
 }
 
 on_stage_init()
@@ -258,11 +278,21 @@ on_stage_init()
 		maps\_gauntlet_log::emit( "RUN_RESET", maps\_gauntlet_log::join_fields( reset_fields ) );
 
 		maps\_gauntlet_state::clear_run_state();
-		state = init_fresh_run_for_map( current_map );
+		if ( current_map != "nazi_zombie_prototype" )
+		{
+			redirect_fresh_run_to_nacht( current_map );
+			return;
+		}
+		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
 	}
 	else if ( !state.active )
 	{
-		state = init_fresh_run_for_map( current_map );
+		if ( current_map != "nazi_zombie_prototype" )
+		{
+			redirect_fresh_run_to_nacht( current_map );
+			return;
+		}
+		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
 	}
 	else if ( state.pending_transition )
 	{

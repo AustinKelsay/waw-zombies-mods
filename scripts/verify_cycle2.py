@@ -283,8 +283,12 @@ def analyze_c1_to_c2_wrap_log(
 
     c1_s4_saved = next((e for e in c1_s4 if e.event_type == "POINTS_SAVED"), None)
     expected_c2_points: int | None = None
-    if c1_s4_saved is not None and c1_s4_saved.fields.get("points", "").isdigit():
-        expected_c2_points = max(int(c1_s4_saved.fields["points"]), 5000)
+    expected_c2_carried: str | None = None
+    if c1_s4_saved is None or not c1_s4_saved.fields.get("points", "").isdigit():
+        errors.append("Cycle 1 Stage 4 missing valid POINTS_SAVED event")
+    else:
+        expected_c2_carried = c1_s4_saved.fields["points"]
+        expected_c2_points = max(int(expected_c2_carried), 5000)
 
     _verify_high_round_stage(
         stage_events=c2_s1,
@@ -301,6 +305,13 @@ def analyze_c1_to_c2_wrap_log(
         expected_floor=5000,
         errors=errors,
     )
+    if expected_c2_carried is not None:
+        c2_pts_ev = next((e for e in c2_s1 if e.event_type == "POINTS_APPLIED"), None)
+        if c2_pts_ev is not None and c2_pts_ev.fields.get("carried") != expected_c2_carried:
+            errors.append(
+                f"Cycle 2 Stage 1 (wrap): POINTS_APPLIED carried={c2_pts_ev.fields.get('carried')!r}, "
+                f"expected {expected_c2_carried!r} ({c2_pts_ev.raw})"
+            )
 
     return events, errors
 
@@ -385,8 +396,12 @@ def analyze_c2_to_c3_wrap_log(
 
     c2_s4_saved = next((e for e in c2_s4 if e.event_type == "POINTS_SAVED"), None)
     expected_c3_points: int | None = None
-    if c2_s4_saved is not None and c2_s4_saved.fields.get("points", "").isdigit():
-        expected_c3_points = max(int(c2_s4_saved.fields["points"]), 7500)
+    expected_c3_carried: str | None = None
+    if c2_s4_saved is None or not c2_s4_saved.fields.get("points", "").isdigit():
+        errors.append("Cycle 2 Stage 4 missing valid POINTS_SAVED event")
+    else:
+        expected_c3_carried = c2_s4_saved.fields["points"]
+        expected_c3_points = max(int(expected_c3_carried), 7500)
 
     _verify_high_round_stage(
         stage_events=c3_s1,
@@ -403,6 +418,13 @@ def analyze_c2_to_c3_wrap_log(
         expected_floor=7500,
         errors=errors,
     )
+    if expected_c3_carried is not None:
+        c3_pts_ev = next((e for e in c3_s1 if e.event_type == "POINTS_APPLIED"), None)
+        if c3_pts_ev is not None and c3_pts_ev.fields.get("carried") != expected_c3_carried:
+            errors.append(
+                f"Cycle 3 Stage 1 (wrap): POINTS_APPLIED carried={c3_pts_ev.fields.get('carried')!r}, "
+                f"expected {expected_c3_carried!r} ({c3_pts_ev.raw})"
+            )
 
     return events, errors
 

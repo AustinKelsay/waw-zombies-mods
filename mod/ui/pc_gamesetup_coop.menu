@@ -65,7 +65,9 @@
 	#undef	CHOICE_DVAR_WIDTH_OFFSET
 	#define	CHOICE_DVAR_WIDTH_OFFSET 170
 		// server settings =========================================
-		CHOICE_DVARLIST_VIS( 		1, "@MENU_GAME_TYPE", "", ITEM_TYPE_MULTI, ownerdraw UI_NETGAMETYPE textaligny 20, execOnDvarStringValue "ui_netGametypeName" zom "set ui_hostOptions 0; set ui_hostOptionsEnabled 0;";, 1 )
+		// Game Type is editable only in Classic Mode; Enhanced Mode & Zombie Gauntlet lock to Nazi Zombies.
+		CHOICE_DVARLIST_VIS( 		1, "@MENU_GAME_TYPE", "", ITEM_TYPE_MULTI, ownerdraw UI_NETGAMETYPE textaligny 20, execOnDvarStringValue "ui_netGametypeName" zom "set ui_hostOptions 0; set ui_hostOptionsEnabled 0;";, when( dvarInt( gauntlet_enabled ) == 0 && dvarInt( bz_enabled ) == 0 ) )
+		CHOICE_DBUTTON_VIS( 		1, "@MENU_GAME_TYPE", when( dvarInt( gauntlet_enabled ) == 1 || dvarInt( bz_enabled ) == 1 ) )
 		CHOICE_DVAREDIT_VIS( 		2, "@MENU_SERVER_NAME", "sv_hostname", 20, 9, ;, 1 )
 		CHOICE_DVAREDIT_VIS( 		3, "@MENU_PASSWORD1", "g_password", 12, 9, ;, 1 )
 
@@ -88,8 +90,8 @@
 
 		CHOICE_SEPARATOR( CHOICE_SEP_2 )
 
-		CHOICE_BUTTON_VIS( 			9, "@MENU_GAME_TYPE_SETTINGS", LOCAL_GAMERULES_ACTION, when( dvarString( ui_netGameType ) != 1 && dvarInt( gauntlet_enabled ) == 0 ) )
-		CHOICE_DBUTTON_VIS( 		9, "@MENU_GAME_TYPE_SETTINGS", when( dvarString( ui_netGameType ) == 1 || dvarInt( gauntlet_enabled ) == 1 ) )
+		CHOICE_BUTTON_VIS( 			9, "@MENU_GAME_TYPE_SETTINGS", LOCAL_GAMERULES_ACTION, when( dvarString( ui_netGameType ) != 1 && dvarInt( gauntlet_enabled ) == 0 && dvarInt( bz_enabled ) == 0 ) )
+		CHOICE_DBUTTON_VIS( 		9, "@MENU_GAME_TYPE_SETTINGS", when( dvarString( ui_netGameType ) == 1 || dvarInt( gauntlet_enabled ) == 1 || dvarInt( bz_enabled ) == 1 ) )
 
 		// map selection (stock map picker for Classic & Enhanced Mode; locked in Gauntlet)
 		itemDef
@@ -261,6 +263,7 @@
 			action
 			{
 				play "mouse_click";
+				exec "set ui_gametype zom; set ui_netGametypeName zom; set zombiemode 1; set arcademode 0; set ui_hostOptions 0; set ui_hostOptionsEnabled 0;";
 				close pc_gamesetup_coop;
 			}
 		}
