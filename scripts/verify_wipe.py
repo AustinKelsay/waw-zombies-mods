@@ -162,6 +162,11 @@ def analyze_wipe_log(
                 f"RUN_RESET handoff_cleared={reset_ev.fields.get('handoff_cleared')!r}, "
                 f"expected '1' ({reset_ev.raw})"
             )
+        if reset_ev.fields.get("progression_cleared") != "1":
+            errors.append(
+                f"RUN_RESET progression_cleared={reset_ev.fields.get('progression_cleared')!r}, "
+                f"expected '1' ({reset_ev.raw})"
+            )
         if wipe_run_id and reset_ev.fields.get("run_id") != wipe_run_id:
             errors.append(
                 f"RUN_RESET run_id={reset_ev.fields.get('run_id')!r} does not match "
@@ -530,6 +535,9 @@ def main(argv: list[str] | None = None) -> int:
                     ("gauntlet_run_id", run_id),
                     ("gauntlet_cycle", "2"),
                     ("gauntlet_stage", str(stage_num)),
+                    ("gauntlet_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                    ("gauntlet_start_round", "10"),
+                    ("gauntlet_target_round", "14"),
                     ("gauntlet_total_rounds", str(prior_rounds)),
                     ("gauntlet_pending_transition", "1"),
                     ("gauntlet_player_points", "n_player=12500"),

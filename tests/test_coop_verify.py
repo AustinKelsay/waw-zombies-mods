@@ -32,7 +32,7 @@ class TestCoopLogAnalyzers(unittest.TestCase):
             "      dvar set gauntlet_pending_transition 1",
             "      dvar set gauntlet_next_map nazi_zombie_asylum",
             "      dvar set gauntlet_next_display Verruckt",
-            "      dvar set gauntlet_lobby_status NEXT STAGE: C1 S2/4 - Verruckt (R1-R10)",
+            "      dvar set gauntlet_lobby_status NEXT STAGE: C1 S2/4 - Verruckt (Starting R2)",
             "      dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=1;next_cycle=1;next_stage=2;next_map=nazi_zombie_asylum",
             "      dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=coop;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2;player_count=1",
             "----- Server Shutdown -----",
@@ -95,7 +95,7 @@ class TestCoopLogAnalyzers(unittest.TestCase):
 
     def test_coop_transition_requires_lobby_handoff_dvars(self) -> None:
         missing_status = self._build_valid_coop_transition_log().replace(
-            "      dvar set gauntlet_lobby_status NEXT STAGE: C1 S2/4 - Verruckt (R1-R10)\n",
+            "      dvar set gauntlet_lobby_status NEXT STAGE: C1 S2/4 - Verruckt (Starting R2)\n",
             "",
         )
         _, errors = verify_coop.analyze_coop_stage_clear_log(missing_status)

@@ -116,6 +116,8 @@ class FakeHudElem(GscStruct):
         self.destroyed: bool = False
         self.destroy_count: int = 0
         self.fade_calls: list[float] = []
+        self.shader: str | None = None
+        self.value: Any = None
 
 
 class HudGscParser(Parser):
@@ -296,6 +298,14 @@ class HudGscRuntime(GscRuntime):
             if isinstance(receiver, FakeHudElem):
                 receiver.fade_calls.append(float(args[0]) if args else 0.0)
             return UNDEFINED
+        if method == "setshader":
+            if isinstance(receiver, FakeHudElem):
+                receiver.shader = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if method == "setvalue":
+            if isinstance(receiver, FakeHudElem):
+                receiver.value = args[0] if args else None
+            return UNDEFINED
         if method == "endon":
             event_name = _waw_to_str(args[0]) if args else ""
             self._current_endons.add((id(receiver), event_name))
@@ -411,24 +421,25 @@ class TestGauntletHudGsc(unittest.TestCase):
         code_only = "\n".join(line.split("//", 1)[0] for line in source.splitlines())
         self.assertIsNone(re.search(r"\bforeach\b", code_only))
 
-    def test_format_gauntlet_badge_text_is_ascii_and_matches_spec(self) -> None:
+    def test_format_gauntlet_badge_text_is_ascii_and_hides_target_round(self) -> None:
         cases = [
-            (1, 1, 10, "GAUNTLET - C1 S1/4 - TARGET R10"),
-            (1, 4, 10, "GAUNTLET - C1 S4/4 - TARGET R10"),
-            (2, 1, 15, "GAUNTLET - C2 S1/4 - TARGET R15"),
-            (3, 3, 20, "GAUNTLET - C3 S3/4 - TARGET R20"),
-            (5, 2, 30, "GAUNTLET - C5 S2/4 - TARGET R30"),
+            (1, 1, 5, "GAUNTLET - C1 S1/4"),
+            (1, 4, 19, "GAUNTLET - C1 S4/4"),
+            (2, 1, 24, "GAUNTLET - C2 S1/4"),
+            (3, 3, 52, "GAUNTLET - C3 S3/4"),
+            (5, 2, 91, "GAUNTLET - C5 S2/4"),
         ]
         for cycle, stage, target, expected in cases:
             actual = self.gsc.call(HUD_MOD, "format_gauntlet_badge_text", cycle, stage, target)
             self.assertEqual(actual, expected)
+            self.assertNotIn("TARGET", actual)
             self.assertTrue(all(32 <= ord(ch) <= 126 for ch in actual), f"Non-ASCII in {actual!r}")
 
     def test_init_gauntlet_hud_creates_non_overlapping_top_corner_badge_and_emits_event(self) -> None:
         state = self._make_state(1, 1)
-        info = self._make_stage_info(1, 1, 10)
+        info = self._make_stage_info(1, 1, 5)
 
-        hud = self.gsc.call(HUD_MOD, "init_gauntlet_hud", state, info, 10)
+        hud = self.gsc.call(HUD_MOD, "init_gauntlet_hud", state, info, 5)
         self.assertIsInstance(hud, FakeHudElem)
         self.assertEqual(len(self.gsc.live_hud_elems), 1)
         self.assertIs(self.gsc.level.get_field("gauntlet_hud_badge"), hud)
@@ -443,10 +454,10 @@ class TestGauntletHudGsc(unittest.TestCase):
         self.assertEqual(hud.get_field("y"), 12)
         self.assertAlmostEqual(hud.get_field("fontscale"), 1.35)
         self.assertTrue(hud.get_field("hidewheninmenu"))
-        self.assertEqual(hud.current_text, "GAUNTLET - C1 S1/4 - TARGET R10")
+        self.assertEqual(hud.current_text, "GAUNTLET - C1 S1/4")
 
         self.assertIn(
-            "GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=10;text=GAUNTLET - C1 S1/4 - TARGET R10",
+            "GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=5;text=GAUNTLET - C1 S1/4",
             self.gsc.emitted_events,
         )
 
@@ -455,22 +466,22 @@ class TestGauntletHudGsc(unittest.TestCase):
             HUD_MOD,
             "init_gauntlet_hud",
             self._make_state(1, 1),
-            self._make_stage_info(1, 1, 10),
-            10,
+            self._make_stage_info(1, 1, 5),
+            5,
         )
         badge = self.gsc.level.get_field("gauntlet_hud_badge")
         self.assertEqual(len(badge.text_history), 1)
 
         # Updating with identical values must NOT re-call SetText (protects configstring budget)
-        self.assertTrue(self.gsc.call(HUD_MOD, "update_gauntlet_hud", 1, 1, 10))
+        self.assertTrue(self.gsc.call(HUD_MOD, "update_gauntlet_hud", 1, 1, 5))
         self.assertEqual(len(badge.text_history), 1)
 
-        # Updating to Cycle 2 Stage 3 Target R15 updates badge text and emits HUD_UPDATE
+        # Updating to Cycle 2 Stage 3 updates badge text and emits HUD_UPDATE without TARGET spoiler
         self.assertTrue(self.gsc.call(HUD_MOD, "update_gauntlet_hud", 2, 3, 15))
-        self.assertEqual(badge.current_text, "GAUNTLET - C2 S3/4 - TARGET R15")
+        self.assertEqual(badge.current_text, "GAUNTLET - C2 S3/4")
         self.assertEqual(len(badge.text_history), 2)
         self.assertIn(
-            "GAUNTLET_EVENT|HUD_UPDATE|cycle=2;stage=3;target_round=15;text=GAUNTLET - C2 S3/4 - TARGET R15",
+            "GAUNTLET_EVENT|HUD_UPDATE|cycle=2;stage=3;target_round=15;text=GAUNTLET - C2 S3/4",
             self.gsc.emitted_events,
         )
 
@@ -725,12 +736,12 @@ class TestHudLogAnalyzer(unittest.TestCase):
         return "\n".join(
             [
                 "Loading fastfile 'mod'",
-                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;start_round=1;target_round=10;run_id=run_1",
-                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=10;text=GAUNTLET - C1 S1/4 - TARGET R10",
-                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=10;next_cycle=1;next_stage=2;next_map=nazi_zombie_asylum",
+                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;start_round=1;target_round=5;run_id=run_1",
+                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=5;text=GAUNTLET - C1 S1/4",
+                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=5;next_cycle=1;next_stage=2;next_map=nazi_zombie_asylum",
                 "dvar set gauntlet_event GAUNTLET_EVENT|HUD_DESTROYED|reason=gauntlet_stage_clear",
-                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=15;run_id=run_1",
-                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=2;stage=1;target_round=15;text=GAUNTLET - C2 S1/4 - TARGET R15",
+                "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=14;run_id=run_1",
+                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=2;stage=1;target_round=14;text=GAUNTLET - C2 S1/4",
                 "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=1;map=nazi_zombie_prototype;duration=3",
                 "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=2;stage=1;map=nazi_zombie_prototype;duration=3",
                 "dvar set gauntlet_event GAUNTLET_EVENT|HUD_DESTROYED|reason=gauntlet_run_wipe",
@@ -741,7 +752,7 @@ class TestHudLogAnalyzer(unittest.TestCase):
         _, errors = self.vhm.analyze_hud_log(
             self._valid_gauntlet_hud_log(),
             gauntlet_enabled=1,
-            expected_badges=[(1, 1, 10), (2, 1, 15)],
+            expected_badges=[(1, 1, 5), (2, 1, 14)],
             expected_destroy_reasons=["gauntlet_stage_clear", "gauntlet_run_wipe"],
         )
         self.assertEqual(errors, [])
@@ -761,7 +772,7 @@ class TestHudLogAnalyzer(unittest.TestCase):
             [
                 "Loading fastfile 'mod'",
                 "dvar set gauntlet_event GAUNTLET_EVENT|MOD_LOADED|map=nazi_zombie_prototype;gauntlet_enabled=0",
-                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=10;text=GAUNTLET - C1 S1/4 - TARGET R10",
+                "dvar set gauntlet_event GAUNTLET_EVENT|HUD_INIT|cycle=1;stage=1;target_round=5;text=GAUNTLET - C1 S1/4",
             ]
         ) + "\n"
         _, errors = self.vhm.analyze_hud_log(bad_classic, gauntlet_enabled=0)
@@ -769,16 +780,16 @@ class TestHudLogAnalyzer(unittest.TestCase):
 
     def test_wrong_badge_text_or_missing_destroy_fails(self) -> None:
         bad_text = self._valid_gauntlet_hud_log().replace(
-            "text=GAUNTLET - C2 S1/4 - TARGET R15",
-            "text=GAUNTLET - C2 S1/4 - TARGET R10",
+            "text=GAUNTLET - C2 S1/4",
+            "text=GAUNTLET - C2 S1/4 - TARGET R14",
         )
         _, errors = self.vhm.analyze_hud_log(
             bad_text,
             gauntlet_enabled=1,
-            expected_badges=[(1, 1, 10), (2, 1, 15)],
+            expected_badges=[(1, 1, 5), (2, 1, 14)],
             expected_destroy_reasons=["gauntlet_stage_clear", "gauntlet_run_wipe"],
         )
-        self.assertTrue(any("TARGET R15" in e for e in errors))
+        self.assertTrue(any("GAUNTLET - C2 S1/4" in e for e in errors))
 
         missing_destroy = self._valid_gauntlet_hud_log().replace(
             "dvar set gauntlet_event GAUNTLET_EVENT|HUD_DESTROYED|reason=gauntlet_run_wipe\n",
@@ -787,7 +798,7 @@ class TestHudLogAnalyzer(unittest.TestCase):
         _, errors2 = self.vhm.analyze_hud_log(
             missing_destroy,
             gauntlet_enabled=1,
-            expected_badges=[(1, 1, 10), (2, 1, 15)],
+            expected_badges=[(1, 1, 5), (2, 1, 14)],
             expected_destroy_reasons=["gauntlet_stage_clear", "gauntlet_run_wipe"],
         )
         self.assertTrue(any("HUD_DESTROYED" in e for e in errors2))

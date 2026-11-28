@@ -52,7 +52,13 @@ class GauntletBzRuntime(BzPerksRuntime):
     """Extends BzPerksRuntime with Gauntlet player/HUD methods needed by _gauntlet_mode/_gauntlet_perks."""
 
     def _exec_method(self, receiver, method: str, args, line: int):
-        if isinstance(receiver, FakeHudElem) and method in ("setshader", "scaleovertime", "fadeovertime"):
+        if isinstance(receiver, FakeHudElem) and method == "setshader":
+            receiver.shader = _waw_to_str(args[0]) if args else ""
+            return UNDEFINED
+        if isinstance(receiver, FakeHudElem) and method == "setvalue":
+            receiver.value = args[0] if args else None
+            return UNDEFINED
+        if isinstance(receiver, FakeHudElem) and method in ("scaleovertime", "fadeovertime"):
             return UNDEFINED
         if method == "closemenu":
             receiver.closed_menus = getattr(receiver, "closed_menus", 0) + 1
@@ -359,57 +365,123 @@ class TestGauntletBzIntegration(unittest.TestCase):
         self.assertEqual(dvars.get("gauntlet_bz_perks"), "")
         self.assertEqual(dvars.get("gauntlet_bz_weapons"), "")
 
-    def test_solo_and_coop_enhanced_gauntlet_menu_contracts(self) -> None:
+    def test_gauntlet_enabled_automatically_couples_enhanced_mode_gates(self) -> None:
+        # ADR-0006: launching with gauntlet_enabled=1 alone (bz_* unset or 0) forces Enhanced Mode on.
+        dvars = FakeDvarStore()
+        dvars.set("gauntlet_enabled", "1")
+        dvars.set("bz_enabled", "0")
+        dvars.set("bz_perks_enabled", "0")
+        dvars.set("bz_classes_enabled", "0")
+        dvars.set("bz_pap_enabled", "0")
+        dvars.set("bz_elements_enabled", "0")
+        # Even if bz_companions_enabled was previously set to 1, Gauntlet forces it to 0
+        dvars.set("bz_companions_enabled", "1")
+        gsc = GauntletBzRuntime(MOD_ROOT, dvars)
+        # Pure gate predicates evaluate open immediately when gauntlet_enabled=1
+        self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_enabled"))
+        self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_perks_enabled"))
+        self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_classes_enabled"))
+        self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_pap_enabled"))
+        self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_elements_enabled"))
+        self.assertFalse(gsc.call(BZ_HOOKS_MOD, "bz_companions_enabled"))
+        # ensure_bz_dvars() (called on stage/map boot) persists the coupled dvars
+        gsc.call(BZ_HOOKS_MOD, "ensure_bz_dvars")
+        self.assertEqual(dvars.get("bz_enabled"), "1")
+        self.assertEqual(dvars.get("bz_perks_enabled"), "1")
+        self.assertEqual(dvars.get("bz_classes_enabled"), "1")
+        self.assertEqual(dvars.get("bz_pap_enabled"), "1")
+        self.assertEqual(dvars.get("bz_elements_enabled"), "1")
+        self.assertEqual(dvars.get("bz_companions_enabled"), "0")
+        self.assertFalse(gsc.call(BZ_HOOKS_MOD, "bz_companions_enabled"))
+
+        # Classic Mode (gauntlet_enabled=0, bz_enabled=0) stays strictly disabled.
+        classic_dvars = FakeDvarStore()
+        classic_dvars.set("gauntlet_enabled", "0")
+        classic_gsc = GauntletBzRuntime(MOD_ROOT, classic_dvars)
+        classic_gsc.call(BZ_HOOKS_MOD, "ensure_bz_dvars")
+        self.assertFalse(classic_gsc.call(BZ_HOOKS_MOD, "bz_enabled"))
+        self.assertEqual(classic_dvars.get("bz_enabled"), "0")
+        self.assertEqual(classic_dvars.get("bz_perks_enabled"), "0")
+
+    def test_solo_and_coop_three_mode_gauntlet_menu_contracts(self) -> None:
         ui_dir = MOD_ROOT / "ui"
         self.assertEqual(verify_hud_menus.validate_ui_contracts(ui_dir), [])
 
         gauntlet_inc = (ui_dir / "gauntlet_menus.inc").read_text(encoding="latin1")
         bz_inc = (ui_dir / "bz_menus.inc").read_text(encoding="latin1")
+        coop_menu = (ui_dir / "pc_gamesetup_coop.menu").read_text(encoding="latin1")
 
-        # 1. Co-op Enhancements toggle is visible even when gauntlet_enabled == 1
-        toggle_m = re.search(r"#define\s+BZ_COOP_SETUP_TOGGLE\b.*?(?:\n\n|\Z)", bz_inc, re.DOTALL)
+        # 1. Co-op Host Setup uses a single 3-mode GAME MODE selector (no separate BZ toggle)
+        self.assertNotIn("BZ_COOP_SETUP_TOGGLE", bz_inc)
+        self.assertNotIn("BZ_COOP_SETUP_TOGGLE", coop_menu)
+        toggle_m = re.search(r"#define\s+GAUNTLET_COOP_SETUP_TOGGLE\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
         self.assertIsNotNone(toggle_m)
-        self.assertNotIn("dvarInt( gauntlet_enabled ) == 0", toggle_m.group(0))
+        for label in ('"Classic Mode" 0', '"Enhanced Mode" 1', '"Zombie Gauntlet" 2'):
+            self.assertIn(label, toggle_m.group(0))
 
-        # 2. BZ_COOP_TOGGLE_ACTION does not wipe gauntlet_enabled
-        bz_toggle_m = re.search(r"#define\s+BZ_COOP_TOGGLE_ACTION\b.*?(?:\n\n|\Z)", bz_inc, re.DOTALL)
-        self.assertIsNotNone(bz_toggle_m)
-        self.assertNotIn("set gauntlet_enabled 0", bz_toggle_m.group(0))
+        # 2. Retired Classic-vs-Enhanced Gauntlet split macros/labels are completely absent
+        for forbidden in ("GAUNTLET_ENHANCED_SOLO_START_ACTION", "ENHANCED GAUNTLET", "Classic Gauntlet"):
+            self.assertNotIn(forbidden, gauntlet_inc)
 
-        # 3. GAUNTLET_COOP_TOGGLE_ACTION & GAUNTLET_COOP_FRESH_LOCK_ACTION do not force bz_enabled 0
-        for macro in ("GAUNTLET_COOP_TOGGLE_ACTION", "GAUNTLET_COOP_FRESH_LOCK_ACTION"):
-            m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
-            self.assertIsNotNone(m, f"Missing {macro}")
-            self.assertNotIn("set bz_enabled 0", m.group(0))
+        # 3. Every Run reset / launch macro clears all 20 persisted Run dvars and keeps every
+        #    quoted exec token safely below WaW 1.7's 1024-byte MAX_TOKEN_CHARS limit.
+        all_persisted_run_dvars = (
+            "gauntlet_active",
+            "gauntlet_run_id",
+            "gauntlet_pending_transition",
+            "gauntlet_cycle",
+            "gauntlet_stage",
+            "gauntlet_cycle_order",
+            "gauntlet_start_round",
+            "gauntlet_target_round",
+            "gauntlet_total_rounds",
+            "gauntlet_fresh_run",
+            "gauntlet_player_points",
+            "gauntlet_player_perks",
+            "gauntlet_bz_perm",
+            "gauntlet_bz_perks",
+            "gauntlet_bz_weapons",
+            "gauntlet_next_map",
+            "gauntlet_next_display",
+            "gauntlet_disconnected_players",
+            "gauntlet_spectators",
+            "gauntlet_lobby_status",
+        )
         for macro in (
             "GAUNTLET_CLEAR_RUN_STATE_EXEC",
             "GAUNTLET_SOLO_START_ACTION",
-            "GAUNTLET_ENHANCED_SOLO_START_ACTION",
             "GAUNTLET_CLASSIC_MODE_ACTION",
-            "GAUNTLET_COOP_TOGGLE_ACTION",
             "GAUNTLET_COOP_FRESH_LOCK_ACTION",
         ):
             with self.subTest(macro=macro):
                 m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
                 self.assertIsNotNone(m, f"Missing {macro}")
-                for ledger in ("gauntlet_bz_perm", "gauntlet_bz_perks", "gauntlet_bz_weapons"):
-                    self.assertIn(f"set {ledger}", m.group(0))
+                for dvar in all_persisted_run_dvars:
+                    self.assertIn(f"set {dvar}", m.group(0))
 
-        # 4. GAUNTLET_ENHANCED_SOLO_START_ACTION enables Gauntlet + full Phase 1/2 BZ gates
-        enh_m = re.search(r"#define\s+GAUNTLET_ENHANCED_SOLO_START_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
-        self.assertIsNotNone(enh_m)
-        for token in (
-            "set gauntlet_enabled 1",
-            "set bz_enabled 1",
-            "set bz_perks_enabled 1",
-            "set bz_classes_enabled 1",
-            "set bz_pap_enabled 1",
-            "set bz_elements_enabled 1",
-            "map nazi_zombie_prototype",
-        ):
-            self.assertIn(token, enh_m.group(0))
+        coop_mode_m = re.search(r"#define\s+GAUNTLET_COOP_MODE_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
+        self.assertIsNotNone(coop_mode_m)
+        self.assertIn("GAUNTLET_CLEAR_RUN_STATE_EXEC", coop_mode_m.group(0))
 
-        # 5. Staged stock menus expose ENHANCED GAUNTLET in Solo main & levels menus with balanced braces
+        for quoted in re.findall(r'exec(?:OnDvarIntValue\s+\w+\s+\d+)?\s+"((?:\\.|[^"\\])*)"', gauntlet_inc):
+            self.assertLess(len(quoted), 700, f"Menu exec token too close to 1024-byte WaW limit ({len(quoted)} chars)")
+
+        # 4. Unified GAUNTLET_SOLO_START_ACTION and GAUNTLET_COOP_FRESH_LOCK_ACTION enable full Enhanced Mode
+        for macro in ("GAUNTLET_SOLO_START_ACTION", "GAUNTLET_COOP_FRESH_LOCK_ACTION"):
+            m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
+            self.assertIsNotNone(m)
+            for token in (
+                "set gauntlet_enabled 1",
+                "set bz_enabled 1",
+                "set bz_perks_enabled 1",
+                "set bz_classes_enabled 1",
+                "set bz_pap_enabled 1",
+                "set bz_elements_enabled 1",
+                "set bz_companions_enabled 0",
+            ):
+                self.assertIn(token, m.group(0))
+
+        # 5. Staged stock menus expose single ZOMBIE GAUNTLET + single-map Enhanced Mode (zero ENHANCED GAUNTLET)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             raw_ui = root / "tools" / "raw" / "ui"
@@ -426,10 +498,122 @@ class TestGauntletBzIntegration(unittest.TestCase):
 
             patched_main = (stage_dir / "ui" / "main.menu").read_text(encoding="latin1")
             patched_levels = (stage_dir / "ui" / "levels.menu").read_text(encoding="latin1")
-            self.assertIn("ENHANCED GAUNTLET", patched_main)
-            self.assertIn("GAUNTLET_ENHANCED_SOLO_START_ACTION", patched_main)
-            self.assertIn("ENHANCED GAUNTLET", patched_levels)
-            self.assertIn("GAUNTLET_ENHANCED_SOLO_START_ACTION", patched_levels)
+            self.assertIn("ZOMBIE GAUNTLET", patched_main)
+            self.assertIn("ENHANCED MODE", patched_main)
+            self.assertNotIn("ENHANCED GAUNTLET", patched_main)
+            self.assertIn("ZOMBIE GAUNTLET", patched_levels)
+            self.assertIn("ENHANCED: DER RIESE", patched_levels)
+            self.assertNotIn("ENHANCED GAUNTLET", patched_levels)
+
+        # 6. Co-op Host Setup locks Game Type & Game Type Settings in Enhanced Mode and Gauntlet,
+        #    and Enhanced Mode accept + queued Gauntlet accept enforce Nazi Zombies gametype.
+        self.assertIn(
+            'CHOICE_DVARLIST_VIS( \t\t1, "@MENU_GAME_TYPE"',
+            coop_menu,
+        )
+        self.assertIn(
+            "when( dvarInt( gauntlet_enabled ) == 0 && dvarInt( bz_enabled ) == 0 )",
+            coop_menu,
+        )
+        self.assertIn(
+            'CHOICE_DBUTTON_VIS( \t\t1, "@MENU_GAME_TYPE", when( dvarInt( gauntlet_enabled ) == 1 || dvarInt( bz_enabled ) == 1 ) )',
+            coop_menu,
+        )
+        bz_accept_m = re.search(r"#define\s+BZ_COOP_ACCEPT_ACTION\b.*?(?:\n\n|\Z)", bz_inc, re.DOTALL)
+        self.assertIsNotNone(bz_accept_m)
+        for token in ("set ui_gametype zom", "set ui_netGametypeName zom", "set zombiemode 1", "set arcademode 0"):
+            self.assertIn(token, bz_accept_m.group(0))
+
+    def test_stale_or_fresh_run_on_non_nacht_map_redirects_to_nacht_without_saving_corrupt_stage(self) -> None:
+        class RedirectRuntime(GauntletBzRuntime):
+            def __init__(self, mod_root: Path, dvars: FakeDvarStore) -> None:
+                super().__init__(mod_root, dvars)
+                self.changelevel_calls: list[tuple[str, bool]] = []
+                self.next_level_calls: list[str] = []
+                self.exit_level_calls: list[bool] = []
+                self.coop_game = False
+
+            def _call_builtin(self, name_lower: str, args, line: int):
+                if name_lower == "setdvar" and args and _waw_to_str(args[0]).lower() == "ui_mapname":
+                    raise AssertionError("GSC must never call SetDvar('ui_mapname', ...) in WaW 1.7")
+                if name_lower == "changelevel":
+                    self.changelevel_calls.append((_waw_to_str(args[0]), bool(args[1]) if len(args) > 1 else False))
+                    return True, UNDEFINED
+                if name_lower == "setuinextlevel":
+                    self.next_level_calls.append(_waw_to_str(args[0]))
+                    return True, UNDEFINED
+                if name_lower == "exitlevel":
+                    self.exit_level_calls.append(bool(args[0]) if args else False)
+                    return True, UNDEFINED
+                return super()._call_builtin(name_lower, args, line)
+
+            def call(self, module_path: str, func_name: str, *args):
+                if self.normalize_module_key(module_path) == "maps/_utility" and func_name.lower() == "coopgame":
+                    return self.coop_game
+                return super().call(module_path, func_name, *args)
+
+        # Solo stale-run reload on Der Riese: emits RUN_RESET + FRESH_RUN_REDIRECT, redirects to Nacht, keeps active=0
+        solo_dvars = _make_enhanced_dvars()
+        solo_dvars.set("gauntlet_active", "1")
+        solo_dvars.set("gauntlet_run_id", "interrupted_run")
+        solo_dvars.set("gauntlet_cycle", "1")
+        solo_dvars.set("gauntlet_stage", "2")
+        solo_dvars.set("gauntlet_pending_transition", "0")
+        solo_dvars.set(
+            "gauntlet_cycle_order",
+            "nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_asylum,nazi_zombie_sumpf",
+        )
+        solo_dvars.set("gauntlet_start_round", "7")
+        solo_dvars.set("gauntlet_target_round", "10")
+        solo_gsc = RedirectRuntime(MOD_ROOT, solo_dvars)
+        solo_gsc.level.set_field("script", "nazi_zombie_factory")
+        solo_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
+        self.assertEqual(solo_gsc.changelevel_calls, [("nazi_zombie_prototype", False)])
+        self.assertTrue(solo_gsc.level.get_field("missionfailed"))
+        self.assertEqual(solo_dvars.get("gauntlet_active"), "0")
+        self.assertEqual(solo_dvars.get("gauntlet_cycle_order"), "")
+        self.assertTrue(
+            any("FRESH_RUN_REDIRECT|mode=solo;from_map=nazi_zombie_factory;next_map=nazi_zombie_prototype" in e for e in solo_gsc.emitted_events),
+            solo_gsc.emitted_events,
+        )
+
+        # Co-op fresh/stale boot on Der Riese: queues Nacht and returns party to lobby via exitLevel(false)
+        coop_dvars = _make_enhanced_dvars()
+        coop_dvars.set("gauntlet_active", "0")
+        coop_gsc = RedirectRuntime(MOD_ROOT, coop_dvars)
+        coop_gsc.coop_game = True
+        coop_gsc.level.set_field("script", "nazi_zombie_factory")
+        coop_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
+        self.assertEqual(coop_gsc.next_level_calls, ["nazi_zombie_prototype"])
+        self.assertEqual(coop_gsc.exit_level_calls, [False])
+        self.assertEqual(coop_dvars.get("gauntlet_active"), "0")
+        self.assertTrue(
+            any("FRESH_RUN_REDIRECT|mode=coop;from_map=nazi_zombie_factory;next_map=nazi_zombie_prototype" in e for e in coop_gsc.emitted_events),
+            coop_gsc.emitted_events,
+        )
+
+    def test_init_high_round_chalk_hud_rounds_2_to_5_and_high_rounds(self) -> None:
+        for start_round, exp_hud1_shader, exp_hud2_shader, exp_hud1_val, exp_hud2_destroyed in (
+            (4, "hud_chalk_4", None, None, False),
+            (5, "hud_chalk_5", None, None, False),
+            (8, "hud_chalk_5", "hud_chalk_3", None, False),
+            (10, "hud_chalk_5", "hud_chalk_5", None, False),
+            (14, None, None, 14, True),
+        ):
+            with self.subTest(start_round=start_round):
+                gsc = GauntletBzRuntime(MOD_ROOT, _make_enhanced_dvars())
+                h1 = FakeHudElem(1)
+                h2 = FakeHudElem(2)
+                h1.shader = None
+                h2.shader = None
+                h1.value = None
+                gsc.level.set_field("chalk_hud1", h1)
+                gsc.level.set_field("chalk_hud2", h2)
+                gsc.call(GAUNTLET_MODE_MOD, "init_high_round_chalk_hud", start_round)
+                self.assertEqual(h1.shader, exp_hud1_shader)
+                self.assertEqual(h2.shader, exp_hud2_shader)
+                self.assertEqual(h1.value, exp_hud1_val)
+                self.assertEqual(h2.destroyed, exp_hud2_destroyed)
 
 
 if __name__ == "__main__":

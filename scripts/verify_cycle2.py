@@ -114,16 +114,28 @@ def _verify_high_round_stage(
         errors.append(f"{label}: missing POINTS_APPLIED")
     else:
         pts_ev = pts_events[0]
-        if expected_points is not None and pts_ev.fields.get("points") != str(expected_points):
+        actual_points = pts_ev.fields.get("points")
+        if expected_points is not None and actual_points != str(expected_points):
             errors.append(
-                f"{label}: POINTS_APPLIED points={pts_ev.fields.get('points')!r}, "
+                f"{label}: POINTS_APPLIED points={actual_points!r}, "
                 f"expected {expected_points!r} ({pts_ev.raw})"
             )
-        if expected_floor is not None and pts_ev.fields.get("floor") != str(expected_floor):
-            errors.append(
-                f"{label}: POINTS_APPLIED floor={pts_ev.fields.get('floor')!r}, "
-                f"expected {expected_floor!r} ({pts_ev.raw})"
-            )
+        if expected_floor is not None:
+            if pts_ev.fields.get("floor") != str(expected_floor):
+                errors.append(
+                    f"{label}: POINTS_APPLIED floor={pts_ev.fields.get('floor')!r}, "
+                    f"expected {expected_floor!r} ({pts_ev.raw})"
+                )
+            try:
+                if actual_points is None or int(actual_points) < expected_floor:
+                    errors.append(
+                        f"{label}: POINTS_APPLIED points={actual_points!r} is below "
+                        f"expected floor {expected_floor} ({pts_ev.raw})"
+                    )
+            except ValueError:
+                errors.append(
+                    f"{label}: POINTS_APPLIED points={actual_points!r} is not an integer ({pts_ev.raw})"
+                )
 
     # HIGH_ROUND_APPLIED check
     hr_indices = [i for i, e in enumerate(stage_events) if e.event_type == "HIGH_ROUND_APPLIED"]
@@ -244,19 +256,55 @@ def analyze_c1_to_c2_wrap_log(
     c1_s4 = stages[0]
     c2_s1 = stages[1]
 
-    # Cycle 1 Stage 4 must NOT run Prep Phase or HIGH_ROUND_APPLIED
-    if any(e.event_type in ("PREP_PHASE_START", "PREP_PHASE_END") for e in c1_s4):
-        errors.append("Cycle 1 Stage 4 unexpectedly ran Prep Phase")
-    if any(e.event_type == "HIGH_ROUND_APPLIED" for e in c1_s4):
-        errors.append("Cycle 1 Stage 4 unexpectedly emitted HIGH_ROUND_APPLIED")
+    # Cycle 1 Stage 4 starts at Round 9 (> 1) under continuous escalation and runs Prep Phase + HIGH_ROUND_APPLIED
+    _verify_high_round_stage(
+        stage_events=c1_s4,
+        label="Cycle 1 Stage 4 (continuous factory R9)",
+        expected_cycle=1,
+        expected_stage=4,
+        expected_map="nazi_zombie_factory",
+        expected_start_round=9,
+        expected_health=950,
+        expected_move_speed=72,
+        expected_prep_duration=expected_prep_duration,
+        expect_dogs=True,
+        expected_points=4500,
+        expected_floor=4500,
+        errors=errors,
+    )
 
     clear_ev = next((e for e in c1_s4 if e.event_type == "STAGE_CLEAR"), None)
     if clear_ev is None:
         errors.append("Cycle 1 Stage 4 missing STAGE_CLEAR")
     else:
-        for k, exp in (("cycle", "1"), ("stage", "4"), ("next_cycle", "2"), ("next_stage", "1"), ("next_map", "nazi_zombie_prototype")):
+        for k, exp in (("cycle", "1"), ("stage", "4"), ("completed_round", "9"), ("next_cycle", "2"), ("next_stage", "1"), ("next_map", "nazi_zombie_prototype")):
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 1 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
+
+    c2_pts_ev = next((e for e in c2_s1 if e.event_type == "POINTS_APPLIED"), None)
+    dest_player = c2_pts_ev.fields.get("player", "") if c2_pts_ev is not None else ""
+    if c2_pts_ev is not None and not dest_player:
+        errors.append(f"Cycle 2 Stage 1 (wrap): POINTS_APPLIED missing player ({c2_pts_ev.raw})")
+    c1_s4_saved = next(
+        (
+            e
+            for e in c1_s4
+            if e.event_type == "POINTS_SAVED"
+            and e.fields.get("map") == "nazi_zombie_factory"
+            and bool(dest_player)
+            and e.fields.get("player") == dest_player
+        ),
+        None,
+    )
+    expected_c2_points: int | None = None
+    expected_c2_carried: str | None = None
+    if c1_s4_saved is None or not c1_s4_saved.fields.get("points", "").isdigit():
+        errors.append(
+            f"Cycle 1 Stage 4 missing valid POINTS_SAVED event for player={dest_player!r} on nazi_zombie_factory"
+        )
+    else:
+        expected_c2_carried = c1_s4_saved.fields["points"]
+        expected_c2_points = max(int(expected_c2_carried), 5000)
 
     _verify_high_round_stage(
         stage_events=c2_s1,
@@ -269,10 +317,16 @@ def analyze_c1_to_c2_wrap_log(
         expected_move_speed=80,
         expected_prep_duration=expected_prep_duration,
         expect_dogs=False,
-        expected_points=5000,
+        expected_points=expected_c2_points,
         expected_floor=5000,
         errors=errors,
     )
+    if expected_c2_carried is not None and c2_pts_ev is not None:
+        if c2_pts_ev.fields.get("carried") != expected_c2_carried:
+            errors.append(
+                f"Cycle 2 Stage 1 (wrap): POINTS_APPLIED carried={c2_pts_ev.fields.get('carried')!r}, "
+                f"expected {expected_c2_carried!r} ({c2_pts_ev.raw})"
+            )
 
     return events, errors
 
@@ -299,7 +353,7 @@ def analyze_surplus_preservation_log(
         expected_stage=1,
         expected_map="nazi_zombie_prototype",
         expected_start_round=10,
-        expected_target_round=15,
+        expected_target_round=14,
         expected_health=1045,
         expected_move_speed=80,
         expected_prep_duration=expected_prep_duration,
@@ -316,7 +370,7 @@ def analyze_c2_to_c3_wrap_log(
     log_text: str,
     expected_prep_duration: int = 3,
 ) -> tuple[list[GauntletEvent], list[str]]:
-    """Validate Cycle 2 Stage 4 (factory, R10 + dogs) -> Cycle 3 Stage 1 (prototype, R15) wrap."""
+    """Validate Cycle 2 Stage 4 (factory, R14 + dogs) -> Cycle 3 Stage 1 (prototype, R15) wrap."""
     events = verify_cycle1.parse_gauntlet_events(log_text)
     errors: list[str] = []
     _check_fatal_patterns(log_text, errors)
@@ -337,13 +391,13 @@ def analyze_c2_to_c3_wrap_log(
         expected_cycle=2,
         expected_stage=4,
         expected_map="nazi_zombie_factory",
-        expected_start_round=10,
-        expected_health=1045,
-        expected_move_speed=80,
+        expected_start_round=14,
+        expected_health=1527,
+        expected_move_speed=112,
         expected_prep_duration=expected_prep_duration,
         expect_dogs=True,
-        expected_points=5000,
-        expected_floor=5000,
+        expected_points=7000,
+        expected_floor=7000,
         errors=errors,
     )
 
@@ -351,9 +405,34 @@ def analyze_c2_to_c3_wrap_log(
     if clear_ev is None:
         errors.append("Cycle 2 Stage 4 missing STAGE_CLEAR")
     else:
-        for k, exp in (("cycle", "2"), ("stage", "4"), ("completed_round", "10"), ("next_cycle", "3"), ("next_stage", "1"), ("next_map", "nazi_zombie_prototype")):
+        for k, exp in (("cycle", "2"), ("stage", "4"), ("completed_round", "14"), ("next_cycle", "3"), ("next_stage", "1"), ("next_map", "nazi_zombie_prototype")):
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 2 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
+
+    c3_pts_ev = next((e for e in c3_s1 if e.event_type == "POINTS_APPLIED"), None)
+    dest_player = c3_pts_ev.fields.get("player", "") if c3_pts_ev is not None else ""
+    if c3_pts_ev is not None and not dest_player:
+        errors.append(f"Cycle 3 Stage 1 (wrap): POINTS_APPLIED missing player ({c3_pts_ev.raw})")
+    c2_s4_saved = next(
+        (
+            e
+            for e in c2_s4
+            if e.event_type == "POINTS_SAVED"
+            and e.fields.get("map") == "nazi_zombie_factory"
+            and bool(dest_player)
+            and e.fields.get("player") == dest_player
+        ),
+        None,
+    )
+    expected_c3_points: int | None = None
+    expected_c3_carried: str | None = None
+    if c2_s4_saved is None or not c2_s4_saved.fields.get("points", "").isdigit():
+        errors.append(
+            f"Cycle 2 Stage 4 missing valid POINTS_SAVED event for player={dest_player!r} on nazi_zombie_factory"
+        )
+    else:
+        expected_c3_carried = c2_s4_saved.fields["points"]
+        expected_c3_points = max(int(expected_c3_carried), 7500)
 
     _verify_high_round_stage(
         stage_events=c3_s1,
@@ -366,10 +445,16 @@ def analyze_c2_to_c3_wrap_log(
         expected_move_speed=120,
         expected_prep_duration=expected_prep_duration,
         expect_dogs=False,
-        expected_points=7500,
+        expected_points=expected_c3_points,
         expected_floor=7500,
         errors=errors,
     )
+    if expected_c3_carried is not None and c3_pts_ev is not None:
+        if c3_pts_ev.fields.get("carried") != expected_c3_carried:
+            errors.append(
+                f"Cycle 3 Stage 1 (wrap): POINTS_APPLIED carried={c3_pts_ev.fields.get('carried')!r}, "
+                f"expected {expected_c3_carried!r} ({c3_pts_ev.raw})"
+            )
 
     return events, errors
 
@@ -609,8 +694,8 @@ def main(argv: list[str] | None = None) -> int:
     display_num, xvfb, xfwm, xdg_tmp = smoke_verify.start_virtual_display()
     results: list[ScenarioResult] = []
     try:
-        # Scenario 1: Cycle 1 Stage 4 (factory) -> Cycle 2 Stage 1 (prototype, R10, Floor=5000, Prep Phase)
-        print("\n--> Scenario 1: Cycle 1 Stage 4 (factory) -> Cycle 2 Stage 1 (prototype, R10) wrap")
+        # Scenario 1: Cycle 1 Stage 4 (factory, R9) -> Cycle 2 Stage 1 (prototype, R10, Floor=5000, Prep Phase)
+        print("\n--> Scenario 1: Cycle 1 Stage 4 (factory, R9) -> Cycle 2 Stage 1 (prototype, R10) wrap")
         res1 = run_waw_scenario(
             name="Cycle 1 Stage 4 -> Cycle 2 Stage 1 wrap",
             log_filename="cycle2_s1_c1_to_c2_wrap.console.log",
@@ -620,10 +705,15 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_run_id", "verify_c1_c2"),
                 ("gauntlet_cycle", "1"),
                 ("gauntlet_stage", "4"),
-                ("gauntlet_total_rounds", "30"),
+                ("gauntlet_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                ("gauntlet_start_round", "9"),
+                ("gauntlet_target_round", "9"),
+                ("gauntlet_total_rounds", "8"),
                 ("gauntlet_pending_transition", "1"),
                 ("gauntlet_player_points", ""),
-                ("gauntlet_test_target_round", "1"),
+                ("gauntlet_test_next_cycle_order", "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_asylum,nazi_zombie_factory"),
+                ("gauntlet_test_stage_span", "5"),
+                ("gauntlet_test_target_round", "0"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
                 ("gauntlet_test_prep_duration", str(args.prep_duration)),
                 ("gauntlet_test_autoclear", "1"),
@@ -647,7 +737,7 @@ def main(argv: list[str] | None = None) -> int:
                 observed_player_key = ev.fields["player"]
                 break
 
-        # Scenario 2: Surplus preservation (8500 > 5000 floor) on Cycle 2 Stage 1 (prototype, prod target=15)
+        # Scenario 2: Surplus preservation (8500 > 5000 floor) on Cycle 2 Stage 1 (prototype, R10..14)
         print(
             f"\n--> Scenario 2: Surplus preservation on Cycle 2 Stage 1 "
             f"({observed_player_key}=8500 > floor 5000)"
@@ -661,7 +751,10 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_run_id", "verify_surplus"),
                 ("gauntlet_cycle", "2"),
                 ("gauntlet_stage", "1"),
-                ("gauntlet_total_rounds", "40"),
+                ("gauntlet_cycle_order", "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_asylum,nazi_zombie_factory"),
+                ("gauntlet_start_round", "10"),
+                ("gauntlet_target_round", "14"),
+                ("gauntlet_total_rounds", "9"),
                 ("gauntlet_pending_transition", "1"),
                 ("gauntlet_player_points", f"{observed_player_key}=8500"),
                 ("gauntlet_test_target_round", "0"),
@@ -683,8 +776,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         results.append(res2)
 
-        # Scenario 3: Cycle 2 Stage 4 (factory, R10 + dogs) -> Cycle 3 Stage 1 (prototype, R15, Floor=7500)
-        print("\n--> Scenario 3: Cycle 2 Stage 4 (factory, R10 + Hellhounds) -> Cycle 3 Stage 1 (prototype, R15) wrap")
+        # Scenario 3: Cycle 2 Stage 4 (factory, R14 + dogs) -> Cycle 3 Stage 1 (prototype, R15, Floor=7500)
+        print("\n--> Scenario 3: Cycle 2 Stage 4 (factory, R14 + Hellhounds) -> Cycle 3 Stage 1 (prototype, R15) wrap")
         res3 = run_waw_scenario(
             name="Cycle 2 Stage 4 -> Cycle 3 Stage 1 wrap",
             log_filename="cycle2_s3_c2_to_c3_wrap.console.log",
@@ -694,10 +787,15 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_run_id", "verify_c2_c3"),
                 ("gauntlet_cycle", "2"),
                 ("gauntlet_stage", "4"),
-                ("gauntlet_total_rounds", "55"),
+                ("gauntlet_cycle_order", "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_asylum,nazi_zombie_factory"),
+                ("gauntlet_start_round", "14"),
+                ("gauntlet_target_round", "18"),
+                ("gauntlet_total_rounds", "13"),
                 ("gauntlet_pending_transition", "1"),
                 ("gauntlet_player_points", ""),
-                ("gauntlet_test_target_round", "10"),
+                ("gauntlet_test_next_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                ("gauntlet_test_stage_span", "5"),
+                ("gauntlet_test_target_round", "14"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
                 ("gauntlet_test_prep_duration", str(args.prep_duration)),
                 ("gauntlet_test_autoclear", "1"),

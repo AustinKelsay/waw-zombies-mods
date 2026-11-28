@@ -455,7 +455,9 @@ class TestLiveHookGates(unittest.TestCase):
                 with self.subTest(dvar=dvar, enabled=bz_enabled, value=value):
                     dvars = FakeDvarStore()
                     dvars.set("bz_enabled", bz_enabled)
-                    dvars.set("gauntlet_enabled", "1")
+                    # Classic Mode has gauntlet_enabled=0 and bz_enabled=0; unified Gauntlet
+                    # (gauntlet_enabled=1) always enables Enhanced Mode (ADR-0006).
+                    dvars.set("gauntlet_enabled", "1" if (dvar == "bz_test_gauntlet_seed" and bz_enabled == "1") else "0")
                     dvars.set(dvar, value)
                     runtime = BzGscRuntime(REPO_ROOT / "mod", dvars)
                     runtime.level.set_field("script", "nazi_zombie_prototype")
@@ -465,7 +467,8 @@ class TestLiveHookGates(unittest.TestCase):
 
     def test_selftest_dispatcher_is_a_noop_in_classic_mode(self) -> None:
         dvars = FakeDvarStore()
-        dvars.set("gauntlet_enabled", "1")
+        dvars.set("gauntlet_enabled", "0")
+        dvars.set("bz_enabled", "0")
         for dvar in self.HOOKS:
             dvars.set(dvar, "1")
         runtime = BzGscRuntime(REPO_ROOT / "mod", dvars)

@@ -41,9 +41,9 @@ DEFAULT_MOD_UI_DIR = REPO_ROOT / "mod" / "ui"
 # ---------------------------------------------------------------------------
 
 
-def format_expected_badge(cycle: int, stage: int, target_round: int) -> str:
-    """Return the canonical ASCII-safe Gauntlet HUD badge text."""
-    return f"GAUNTLET - C{cycle} S{stage}/4 - TARGET R{target_round}"
+def format_expected_badge(cycle: int, stage: int, target_round: int | None = None) -> str:
+    """Return the canonical ASCII-safe Gauntlet HUD badge text (hidden Target Round)."""
+    return f"GAUNTLET - C{cycle} S{stage}/4"
 
 
 def _strip_c_comments_and_strings(text: str) -> str:
@@ -143,10 +143,14 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
         solo_macro_checks = (
             ("GAUNTLET_SOLO_START_ACTION", "Solo start action macro"),
             ("set gauntlet_enabled 1", "Solo Gauntlet mode enable"),
+            ("set bz_enabled 1", "Unified Gauntlet Enhanced Mode enable"),
             ("set gauntlet_active 0", "Solo stale active reset"),
             ("set gauntlet_pending_transition 0", "Solo stale transition reset"),
             ("set gauntlet_cycle 1", "Solo cycle reset"),
             ("set gauntlet_stage 1", "Solo stage reset"),
+            ("set gauntlet_cycle_order", "Solo cycle order reset"),
+            ("set gauntlet_start_round", "Solo start round reset"),
+            ("set gauntlet_target_round", "Solo target round reset"),
             ("set gauntlet_total_rounds 0", "Solo total_rounds reset"),
             ("set gauntlet_player_points", "Solo player points ledger reset"),
             ("set gauntlet_player_perks", "Solo player perks ledger reset"),
@@ -156,10 +160,11 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
             ("map nazi_zombie_prototype", "Solo launch Nacht der Untoten"),
             ("GAUNTLET_CLASSIC_MODE_ACTION", "Classic Mode disable macro"),
             ("set gauntlet_enabled 0", "Classic Mode explicit disable"),
-            ("GAUNTLET_COOP_SETUP_TOGGLE", "Co-op Host Setup toggle macro"),
-            ("gauntlet_enabled", "Co-op gauntlet_enabled dvar binding"),
-            ("Classic Mode", "Co-op toggle Classic Mode label"),
-            ("Zombie Gauntlet", "Co-op toggle Zombie Gauntlet label"),
+            ("GAUNTLET_COOP_SETUP_TOGGLE", "Co-op Host Setup 3-mode selector macro"),
+            ("waw_game_mode", "Co-op 3-mode selector dvar binding"),
+            ("Classic Mode", "Co-op selector Classic Mode label"),
+            ("Enhanced Mode", "Co-op selector Enhanced Mode label"),
+            ("Zombie Gauntlet", "Co-op selector Zombie Gauntlet label"),
             ("GAUNTLET_COOP_FRESH_LOCK_ACTION", "Co-op fresh Run map-lock macro"),
             ("set ui_mapname nazi_zombie_prototype", "Co-op Nacht der Untoten lock"),
             ("GAUNTLET_COOP_LOBBY_STATUS_PANEL", "Co-op lobby status panel macro"),
@@ -169,6 +174,9 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
         for needle, label in solo_macro_checks:
             if needle not in inc:
                 errors.append(f"gauntlet_menus.inc missing {label} ({needle!r})")
+        for forbidden in ("GAUNTLET_ENHANCED_SOLO_START_ACTION", "ENHANCED GAUNTLET", "Classic Gauntlet"):
+            if forbidden in inc:
+                errors.append(f"gauntlet_menus.inc still contains retired split token {forbidden!r}")
 
     # Validate pc_gamesetup_coop.menu structure and contracts
     coop = texts.get("pc_gamesetup_coop.menu", "")
@@ -287,7 +295,7 @@ def patch_levels_menu(source: str) -> str:
         indent = match.group("indent")
         gauntlet_entry = (
             f'{indent}BZ_ZOMBIE_CHOICE_BUTTON( 1, "ZOMBIE GAUNTLET", GAUNTLET_SOLO_START_ACTION, '
-            f'"gauntlet_prototype", "nazi_zombie_prototype", "Endless 4-map escalating Zombies Run starting on Nacht der Untoten.", '
+            f'"gauntlet_prototype", "nazi_zombie_prototype", "Endless shuffled 4-map Zombie Gauntlet with Enhanced Mode & continuous rounds.", '
             f'15, exec "set ui_load_index 15" ){newline}'
         )
         text = text[: match.start()] + gauntlet_entry + text[match.start() :]
@@ -591,13 +599,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # Scenario 1: Gauntlet Stage 1 -> Stage 2 HUD_INIT + HUD_DESTROYED + HUD_INIT update
         print("\n--> Scenario 1: Gauntlet HUD badge lifecycle across Stage 1 -> Stage 2")
+        stage_span = max(1, int(args.target_round))
         res1 = verify_cycle2.run_waw_scenario(
             name="Gauntlet HUD lifecycle (Stage 1 -> Stage 2)",
             log_filename="hud_s1_stage_lifecycle.console.log",
             start_map="nazi_zombie_prototype",
             extra_dvars=[
                 ("gauntlet_active", "0"),
-                ("gauntlet_test_target_round", str(args.target_round)),
+                ("gauntlet_test_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                ("gauntlet_test_stage_span", str(stage_span)),
+                ("gauntlet_test_target_round", "0"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
                 ("gauntlet_test_prep_duration", str(args.prep_duration)),
                 ("gauntlet_test_autoclear", "1"),
@@ -606,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
             analyzer=lambda txt: analyze_hud_log(
                 txt,
                 gauntlet_enabled=1,
-                expected_badges=[(1, 1, args.target_round), (1, 2, args.target_round)],
+                expected_badges=[(1, 1, stage_span), (1, 2, stage_span * 2)],
                 expected_destroy_reasons=["gauntlet_stage_clear"],
             ),
             display_num=display_num,

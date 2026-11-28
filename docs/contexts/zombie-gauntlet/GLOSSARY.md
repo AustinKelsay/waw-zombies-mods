@@ -1,14 +1,14 @@
 # Zombie Gauntlet
 
-Standalone endless multi-map Nazi Zombies progression mode in which a squad plays through all four Stock Maps in escalating round-band passes until team wipe.
+Endless multi-map Nazi Zombies progression mode built on Enhanced Mode, in which a squad plays through shuffled passes of all four Stock Maps with continuously climbing rounds until team wipe.
 
 ## Language
 
 ### Game Mode
 
 **Zombie Gauntlet** (short: **Gauntlet**):
-A standalone endless Nazi Zombies game mode in which a squad plays through all four Stock Maps in escalating round-band passes until team wipe.
-_Avoid_: Roguelike mode, Campaign mode, World Tour, Circuit
+The unified endless Nazi Zombies progression mode combining Enhanced Mode with shuffled four-map Stage transitions and continuously escalating rounds until team wipe.
+_Avoid_: Classic Gauntlet, Enhanced Gauntlet, Roguelike mode, Campaign mode, World Tour, Circuit
 
 ### Progression Structure
 
@@ -17,21 +17,25 @@ One complete Zombie Gauntlet attempt from Cycle 1, Stage 1 until all players are
 _Avoid_: Match, Session, Game
 
 **Cycle**:
-One complete chronological pass through all four Stock Maps (Nacht der Untoten, Verrückt, Shi No Numa, Der Riese) at a fixed starting and target round band.
+One complete pass through all four Stock Maps in a freshly shuffled order (Cycle 1 opens on Nacht der Untoten and shuffles Stages 2–4; Cycle 2+ shuffles all four maps without repeating the previous Cycle's final map first).
 _Avoid_: Lap, Loop, Tier, Rotation
 
 **Stage**:
-A single map visit within a Cycle, defined by its Stock Map, starting round, and Target Round.
+A single map visit within a Cycle, defined by its Stock Map, continuous starting round, and randomized Stage Span.
 _Avoid_: Leg, Map run, Level, Round set
 
+**Stage Span**:
+The randomized number of rounds a Stage lasts before triggering a Stage Transition (4–6 rounds, averaging 5), kept hidden on the HUD for suspense.
+_Avoid_: Stage length, Round band, Stage duration
+
 **Target Round**:
-The round number that a squad must complete to clear the current Stage and trigger a Stage Transition.
+The hidden round number (derived from the Stage's starting round and Stage Span) that a squad must complete to clear the current Stage and trigger a Stage Transition.
 _Avoid_: Goal round, Cap round, End round
 
 ### Stage Lifecycle & Economy
 
 **Prep Phase**:
-A timed grace window at the start of any Cycle 2+ Stage during which zombies do not spawn, allowing players to open doors, acquire weapons, and buy perks before high-round combat begins.
+A timed grace window at the start of any Stage after Stage 1 during which zombies do not spawn, allowing players to open doors, acquire weapons, and buy perks before high-round combat begins.
 _Avoid_: Grace period, Warmup, Intermission
 
 **Points Floor**:

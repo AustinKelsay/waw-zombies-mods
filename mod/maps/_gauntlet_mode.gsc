@@ -5,7 +5,7 @@
 //
 // Extension seams exposed for downstream tickets:
 //   - on_pre_zombiemode_init()                         (#8 precaching)
-//   - on_stage_init() -> on_stage_ready(state, info)   (#5 Cycle 2+ start & Prep Phase, #8 HUD)
+//   - on_stage_init() -> on_stage_ready(state, info)   (high-round start & Prep Phase for start_round > 1, #8 HUD)
 //   - on_round_started(round_num)                      (#8 HUD updates, test autoclear)
 //   - on_round_completed(completed_round)              (#4 Stage Clear + transition)
 //   - execute_coop_stage_transition(state, info)       (#6 Co-op lobby-assisted transition)
@@ -62,6 +62,18 @@ ensure_handoff_dvars_registered()
 	{
 		SetDvar( "gauntlet_spectators", "" );
 	}
+	if ( GetDvar( "gauntlet_cycle_order" ) == "" )
+	{
+		SetDvar( "gauntlet_cycle_order", "" );
+	}
+	if ( GetDvar( "gauntlet_start_round" ) == "" )
+	{
+		SetDvar( "gauntlet_start_round", "" );
+	}
+	if ( GetDvar( "gauntlet_target_round" ) == "" )
+	{
+		SetDvar( "gauntlet_target_round", "" );
+	}
 }
 
 get_current_map_name()
@@ -108,7 +120,7 @@ resolve_prep_phase_duration( stage_info )
 	base_duration = Int( stage_info.prep_duration );
 	if ( base_duration <= 0 )
 	{
-		// Cycle 1 always skips Prep Phase regardless of test dvar overrides.
+		// Opening Stage (start_round <= 1) skips Prep Phase regardless of test dvar overrides.
 		return 0;
 	}
 
@@ -201,11 +213,49 @@ on_pre_zombiemode_init()
 		return;
 	}
 
+	maps\_bz_hooks::ensure_bz_dvars();
 	maps\_gauntlet_hud::on_pre_zombiemode_init();
 	maps\_gauntlet_perks::precache_perk_shaders();
 }
 
 // Seam called inside round_start() immediately before level thread round_think().
+// Fresh Runs MUST open on Nacht der Untoten (Cycle 1 Stage 1, ADR-0001).
+// If a fresh Run or stale-run reset lands on another map, keep Run state cleared
+// and redirect Solo straight to Nacht or return a Co-op party to the lobby with
+// Nacht queued so Nacht is never skipped in Cycle 1.
+redirect_fresh_run_to_nacht( current_map )
+{
+	maps\_gauntlet_state::clear_run_state();
+
+	is_coop = ( maps\_utility::coopGame() || GetDvarInt( "gauntlet_test_force_coop" ) == 1 );
+	mode_label = "solo";
+	if ( is_coop )
+	{
+		mode_label = "coop";
+	}
+
+	fields = [];
+	fields[0] = maps\_gauntlet_log::kv( "mode", mode_label );
+	fields[1] = maps\_gauntlet_log::kv( "from_map", current_map );
+	fields[2] = maps\_gauntlet_log::kv( "next_map", "nazi_zombie_prototype" );
+	maps\_gauntlet_log::emit( "FRESH_RUN_REDIRECT", maps\_gauntlet_log::join_fields( fields ) );
+
+	// Cancel stock maps\_autosave::start_level_save() before tearing down the map;
+	// otherwise WaW 1.7 throws "Attempting to save during a restart." when
+	// SaveGame("levelstart", ...) wakes up during ChangeLevel / exitLevel.
+	level.missionfailed = true;
+
+	if ( is_coop )
+	{
+		SetUINextLevel( "nazi_zombie_prototype" );
+		exitLevel( false );
+		return true;
+	}
+
+	ChangeLevel( "nazi_zombie_prototype", false );
+	return true;
+}
+
 on_stage_init()
 {
 	if ( !is_gauntlet_enabled() )
@@ -213,6 +263,7 @@ on_stage_init()
 		return;
 	}
 
+	maps\_bz_hooks::ensure_bz_dvars();
 	ensure_handoff_dvars_registered();
 
 	current_map = get_current_map_name();
@@ -231,23 +282,21 @@ on_stage_init()
 		maps\_gauntlet_log::emit( "RUN_RESET", maps\_gauntlet_log::join_fields( reset_fields ) );
 
 		maps\_gauntlet_state::clear_run_state();
-		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
-		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
-		if ( map_stage >= 1 && map_stage != state.stage )
+		if ( current_map != "nazi_zombie_prototype" )
 		{
-			state.stage = map_stage;
-			state = maps\_gauntlet_state::save_run_state( state );
+			redirect_fresh_run_to_nacht( current_map );
+			return;
 		}
+		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
 	}
 	else if ( !state.active )
 	{
-		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
-		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
-		if ( map_stage >= 1 && map_stage != state.stage )
+		if ( current_map != "nazi_zombie_prototype" )
 		{
-			state.stage = map_stage;
-			state = maps\_gauntlet_state::save_run_state( state );
+			redirect_fresh_run_to_nacht( current_map );
+			return;
 		}
+		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
 	}
 	else if ( state.pending_transition )
 	{
@@ -256,7 +305,8 @@ on_stage_init()
 		maps\_gauntlet_state::clear_lobby_handoff_dvars();
 	}
 
-	stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage );
+	parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage, parsed_order, state.start_round, state.target_round );
 	effective_target_round = resolve_effective_target_round( stage_info );
 
 	level.gauntlet_state = state;
@@ -284,11 +334,11 @@ on_stage_init()
 	// round combat can race with score restoration.
 	apply_connected_players_starting_points( stage_info.start_round, current_map );
 
-	// Downstream extension seam (#5 Cycle 2+ high-round setup & Prep Phase, #8 persistent HUD).
+	// Downstream extension seam (high-round setup & Prep Phase for start_round > 1, persistent HUD).
 	on_stage_ready( state, stage_info );
 }
 
-// Ticket #5: Cycle 2+ stock-accurate high-round initialization and Prep Phase.
+// Stock-accurate high-round initialization and Prep Phase for any Stage with start_round > 1.
 // Runs inside round_start() immediately before stock round_think() spawns zombies,
 // while players, doors, Mystery Box, power, and perks are already fully active.
 on_stage_ready( state, stage_info )
@@ -364,6 +414,23 @@ init_high_round_chalk_hud( start_round )
 			level.chalk_hud2.color = ( 0.423, 0.004, 0 );
 			level.chalk_hud2 SetShader( "hud_chalk_" + ( start_round - 5 ), 64, 64 );
 			level.chalk_hud2.alpha = 1;
+		}
+		return;
+	}
+
+	if ( start_round > 1 )
+	{
+		if ( IsDefined( level.chalk_hud1 ) )
+		{
+			level.chalk_hud1.alignX = "left";
+			level.chalk_hud1.alignY = "bottom";
+			level.chalk_hud1.horzAlign = "left";
+			level.chalk_hud1.vertAlign = "bottom";
+			level.chalk_hud1.x = 0;
+			level.chalk_hud1.y = 0;
+			level.chalk_hud1.color = ( 0.423, 0.004, 0 );
+			level.chalk_hud1 SetShader( "hud_chalk_" + start_round, 64, 64 );
+			level.chalk_hud1.alpha = 1;
 		}
 	}
 }
@@ -544,12 +611,12 @@ monitor_player_score_cache( cache )
 				cache.perks = maps\_gauntlet_perks::collect_player_active_perks( self );
 				cache.perks_sampled = true;
 			}
-			if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
+			if ( maps\_bz_hooks::bz_enabled() && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
 			{
 				cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
 				cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
 				cache.bz_weapons = "";
-				if ( GetDvarInt( "bz_elements_enabled" ) == 1 )
+				if ( maps\_bz_hooks::bz_elements_enabled() )
 				{
 					cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
 				}
@@ -588,11 +655,11 @@ watch_player_disconnect()
 	cache.bz_perks = "";
 	cache.bz_weapons = "";
 	cache.bz_sampled = false;
-	if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
+	if ( maps\_bz_hooks::bz_enabled() && IsDefined( self.gauntlet_bz_restored ) && self.gauntlet_bz_restored )
 	{
 		cache.bz_perm = maps\_bz_gauntlet_bridge::encode_perm_record( self );
 		cache.bz_perks = maps\_bz_gauntlet_bridge::encode_perks_record( self );
-		if ( GetDvarInt( "bz_elements_enabled" ) == 1 )
+		if ( maps\_bz_hooks::bz_elements_enabled() )
 		{
 			cache.bz_weapons = maps\_bz_gauntlet_bridge::encode_weapons_record( self );
 		}
@@ -625,7 +692,7 @@ watch_player_disconnect()
 		{
 			maps\_gauntlet_perks::record_player_perks( cache.guid, cache.name, cache.perks );
 		}
-		if ( GetDvarInt( "bz_enabled" ) == 1 && IsDefined( cache.bz_sampled ) && cache.bz_sampled )
+		if ( maps\_bz_hooks::bz_enabled() && IsDefined( cache.bz_sampled ) && cache.bz_sampled )
 		{
 			maps\_bz_gauntlet_bridge::record_player_bz_state( cache.guid, cache.name, cache.bz_perm, cache.bz_perks, cache.bz_weapons );
 		}
@@ -662,7 +729,7 @@ watch_late_joining_players( start_round, current_map )
 		level waittill( "connecting", player );
 		if ( IsDefined( player ) )
 		{
-			if ( GetDvarInt( "bz_enabled" ) == 1 && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
+			if ( maps\_bz_hooks::bz_enabled() && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
 			{
 				player.gauntlet_bz_restore_pending = true;
 			}
@@ -687,7 +754,7 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 		return;
 	}
 
-	if ( GetDvarInt( "bz_enabled" ) == 1 && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
+	if ( maps\_bz_hooks::bz_enabled() && ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) )
 	{
 		player.gauntlet_bz_restore_pending = true;
 	}
@@ -764,7 +831,7 @@ apply_player_starting_points( player, start_round, current_map, is_late_join )
 
 	maps\_gauntlet_perks::restore_player_perks( player, current_map );
 
-	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	if ( maps\_bz_hooks::bz_enabled() )
 	{
 		maps\_bz_gauntlet_bridge::restore_player_bz_state( player, current_map );
 		if ( IsDefined( player.gauntlet_bz_restore_pending ) && player.gauntlet_bz_restore_pending )
@@ -1036,7 +1103,7 @@ checkpoint_all_players_points()
 			maps\_gauntlet_state::record_player_points( guid, name, pts );
 		}
 		maps\_gauntlet_perks::snapshot_player_perks( player, get_current_map_name() );
-		if ( GetDvarInt( "bz_enabled" ) == 1 )
+		if ( maps\_bz_hooks::bz_enabled() )
 		{
 			if ( ( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) &&
 				maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) )
@@ -1150,7 +1217,7 @@ snapshot_all_players_points( current_map )
 		}
 
 		maps\_gauntlet_perks::snapshot_player_perks( player, current_map );
-		if ( GetDvarInt( "bz_enabled" ) == 1 &&
+		if ( maps\_bz_hooks::bz_enabled() &&
 			( !IsDefined( player.gauntlet_bz_restored ) || !player.gauntlet_bz_restored ) &&
 			maps\_gauntlet_state::is_player_marked_disconnected( guid, name ) )
 		{
@@ -1171,7 +1238,7 @@ handle_stage_clear( completed_round )
 	// so nobody can bleed out or wipe during the 5s celebration.
 	protect_players_for_stage_clear();
 
-	if ( GetDvarInt( "bz_enabled" ) == 1 )
+	if ( maps\_bz_hooks::bz_enabled() )
 	{
 		maps\_bz_gauntlet_bridge::close_all_bz_station_menus();
 	}
@@ -1179,8 +1246,9 @@ handle_stage_clear( completed_round )
 	snapshot_all_players_points( current_map );
 
 	rounds_cleared = compute_rounds_cleared_in_stage( prev_info.start_round, completed_round );
-	next_state = maps\_gauntlet_state::advance_run_state( prev_state, rounds_cleared );
-	next_info = maps\_gauntlet_rules::get_stage_info( next_state.cycle, next_state.stage );
+	next_state = maps\_gauntlet_state::advance_run_state( prev_state, rounds_cleared, completed_round );
+	next_order = maps\_gauntlet_rules::parse_cycle_order( next_state.cycle_order );
+	next_info = maps\_gauntlet_rules::get_stage_info( next_state.cycle, next_state.stage, next_order, next_state.start_round, next_state.target_round );
 
 	// Populate Co-op lobby handoff dvars for Ticket #8 UI and post-transition checks.
 	maps\_gauntlet_state::set_lobby_handoff_dvars( next_info );

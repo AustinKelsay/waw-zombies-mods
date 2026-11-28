@@ -8,6 +8,10 @@ Workspace-wide vocabulary shared across all Call of Duty: World at War (vanilla 
 Standard, unmodified World at War Nazi Zombies gameplay on any individual Stock Map with all custom game modes and enhancements disabled.
 _Avoid_: Vanilla mode, Normal mode, Default mode
 
+**Enhanced Mode**:
+Single-map Nazi Zombies gameplay on any of the four Stock Maps with all shipped Base Zombies enhancements enabled and Zombie Gauntlet progression disabled.
+_Avoid_: Base Zombies mode, Modded classic, Single-map enhanced
+
 **Stock Map**:
 One of the four official Call of Duty: World at War Nazi Zombies maps: Nacht der Untoten, Verrückt, Shi No Numa, or Der Riese.
 _Avoid_: Base map, Official map, Original map

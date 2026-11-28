@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify host-side Co-op native PaP & Hellhounds, enhanced Gauntlet, and 4-map visuals.
+"""Verify host-side Co-op native PaP & Hellhounds, Zombie Gauntlet carryover, and 4-map visuals.
 
 Note on WaW 1.7 CoDWaW.exe Co-op: the stock Steam Co-op binary has no CLI `connect`
 command and rejects join-in-progress (`Client connect ignored because join in progress
@@ -622,11 +622,13 @@ def main(argv: list[str] | None = None) -> int:
         gauntlet = mode == "enhanced-gauntlet"
         dvars = [
             ("gauntlet_enabled", str(int(gauntlet))),
-            ("bz_enabled", "1"),
-            ("bz_perks_enabled", "1"),
-            ("bz_classes_enabled", "1"),
-            ("bz_pap_enabled", "1"),
-            ("bz_elements_enabled", "1"),
+            # Unified Gauntlet (ADR-0006): leave bz_* at 0 when gauntlet_enabled=1 so live
+            # verification proves runtime coupling enables Enhanced Mode automatically.
+            ("bz_enabled", "0" if gauntlet else "1"),
+            ("bz_perks_enabled", "0" if gauntlet else "1"),
+            ("bz_classes_enabled", "0" if gauntlet else "1"),
+            ("bz_pap_enabled", "0" if gauntlet else "1"),
+            ("bz_elements_enabled", "0" if gauntlet else "1"),
             ("bz_companions_enabled", "0"),
         ]
         for key in ("bz_test_coop_selftest", "bz_test_visual_tour", "bz_test_gauntlet_seed"):
@@ -634,9 +636,13 @@ def main(argv: list[str] | None = None) -> int:
         if gauntlet:
             dvars.extend([
                 ("gauntlet_active", "0"),
+                ("gauntlet_test_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                ("gauntlet_test_next_cycle_order", "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_asylum,nazi_zombie_factory"),
+                ("gauntlet_test_stage_span", "1"),
+                ("gauntlet_test_prep_duration", "1"),
                 ("gauntlet_test_force_coop", "0"),
                 ("gauntlet_test_autoclear", "1"),
-                ("gauntlet_test_target_round", "1"),
+                ("gauntlet_test_target_round", "0"),
                 ("gauntlet_test_banner_delay", "1.0"),
                 ("gauntlet_test_summary_delay", "0.5"),
             ])

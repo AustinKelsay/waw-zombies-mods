@@ -37,11 +37,16 @@ class TestGauntletStatePersistence(unittest.TestCase):
         self.assertEqual(loaded.total_rounds, 0)
         self.assertFalse(loaded.pending_transition)
 
-        # Verify exact dvar values written
+        # Verify exact dvar values written (including shuffled Cycle 1 order & [4, 6] span)
         self.assertEqual(self.dvars.get("gauntlet_active"), "1")
         self.assertEqual(self.dvars.get("gauntlet_run_id"), "run_42")
         self.assertEqual(self.dvars.get("gauntlet_cycle"), "1")
         self.assertEqual(self.dvars.get("gauntlet_stage"), "1")
+        self.assertEqual(self.dvars.get("gauntlet_start_round"), "1")
+        self.assertIn(created.target_round, (4, 5, 6))
+        self.assertEqual(self.dvars.get("gauntlet_target_round"), str(created.target_round))
+        self.assertTrue(created.cycle_order.startswith("nazi_zombie_prototype,"))
+        self.assertEqual(len(created.cycle_order.split(",")), 4)
         self.assertEqual(self.dvars.get("gauntlet_total_rounds"), "0")
         self.assertEqual(self.dvars.get("gauntlet_pending_transition"), "0")
 
@@ -191,11 +196,14 @@ class TestGauntletStatePersistence(unittest.TestCase):
         # Mode gate untouched
         self.assertEqual(self.dvars.get("gauntlet_enabled"), "1")
 
-        # Every Run state dvar cleanly wiped
+        # Every Run state dvar cleanly wiped (including cycle_order, start_round, target_round)
         self.assertEqual(self.dvars.get("gauntlet_active"), "0")
         self.assertEqual(self.dvars.get("gauntlet_run_id"), "")
         self.assertEqual(self.dvars.get("gauntlet_cycle"), "")
         self.assertEqual(self.dvars.get("gauntlet_stage"), "")
+        self.assertEqual(self.dvars.get("gauntlet_cycle_order"), "")
+        self.assertEqual(self.dvars.get("gauntlet_start_round"), "")
+        self.assertEqual(self.dvars.get("gauntlet_target_round"), "")
         self.assertEqual(self.dvars.get("gauntlet_total_rounds"), "")
         self.assertEqual(self.dvars.get("gauntlet_pending_transition"), "0")
         self.assertEqual(self.dvars.get("gauntlet_player_points"), "")
@@ -271,15 +279,16 @@ class TestGauntletStatePersistence(unittest.TestCase):
         self.dvars.set("gauntlet_fresh_run", "1")
         self.gsc.call(STATE_MOD, "init_fresh_run", "coop_handoff")
 
-        next_info = self.gsc.call("maps\\_gauntlet_rules", "get_stage_info", 2, 2)
+        next_info = self.gsc.call("maps\\_gauntlet_rules", "get_stage_info", 2, 2, UNDEFINED, 10, 14)
         status = self.gsc.call(STATE_MOD, "set_lobby_handoff_dvars", next_info)
-        self.assertEqual(status, "NEXT STAGE: C2 S2/4 - Verruckt (R10-R15)")
+        self.assertEqual(status, "NEXT STAGE: C2 S2/4 - Verruckt (Starting R10)")
+        self.assertNotIn("R14", status)
         self.assertEqual(self.dvars.get("gauntlet_pending_transition"), "1")
         self.assertEqual(self.dvars.get("gauntlet_next_map"), "nazi_zombie_asylum")
         self.assertEqual(self.dvars.get("gauntlet_next_display"), "Verruckt")
         self.assertEqual(
             self.dvars.get("gauntlet_lobby_status"),
-            "NEXT STAGE: C2 S2/4 - Verruckt (R10-R15)",
+            "NEXT STAGE: C2 S2/4 - Verruckt (Starting R10)",
         )
 
         # Mark disconnected and spectator flags to verify clear_run_state wipes them too
@@ -430,6 +439,35 @@ class TestGauntletStatePersistence(unittest.TestCase):
         self.assertEqual(
             self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", valid_next, "nazi_zombie_prototype", False),
             "stale_map_mismatch",
+        )
+
+        # Shuffled Cycle Order: pending Stage 2 matches shuffled map, rejects chronological map
+        shuffled_next = GscStruct()
+        shuffled_next.set_field("active", True)
+        shuffled_next.set_field("cycle", 1)
+        shuffled_next.set_field("stage", 2)
+        shuffled_next.set_field(
+            "cycle_order",
+            "nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_sumpf,nazi_zombie_asylum",
+        )
+        shuffled_next.set_field("pending_transition", True)
+        self.assertFalse(
+            self.gsc.call(STATE_MOD, "should_reset_stale_run", shuffled_next, "nazi_zombie_factory", False)
+        )
+        self.assertEqual(
+            self.gsc.call(STATE_MOD, "get_stale_run_reset_reason", shuffled_next, "nazi_zombie_asylum", False),
+            "stale_map_mismatch",
+        )
+
+        # Corrupt gauntlet_cycle_order on an active Run repairs to canonical 4-map order on load
+        self.dvars.set("gauntlet_active", "1")
+        self.dvars.set("gauntlet_cycle", "2")
+        self.dvars.set("gauntlet_stage", "2")
+        self.dvars.set("gauntlet_cycle_order", "corrupt,bad_map,nazi_zombie_prototype")
+        repaired = self.gsc.call(STATE_MOD, "load_run_state")
+        self.assertEqual(
+            repaired.cycle_order,
+            "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory",
         )
 
         # Active Run with pending_transition=False (host disbanded / quit mid-Stage) -> resets

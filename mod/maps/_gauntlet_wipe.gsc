@@ -40,6 +40,12 @@ build_wipe_summary( state, stage_info, final_round, current_map )
 		final_cycle = Int( stage_info.cycle );
 	}
 
+	parsed_order = undefined;
+	if ( IsDefined( state ) && IsDefined( state.cycle_order ) && state.cycle_order != "" )
+	{
+		parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	}
+
 	final_stage = 1;
 	if ( IsDefined( state ) && IsDefined( state.stage ) && Int( state.stage ) >= 1 )
 	{
@@ -51,7 +57,7 @@ build_wipe_summary( state, stage_info, final_round, current_map )
 	}
 	else if ( resolved_map != "" )
 	{
-		map_stage = maps\_gauntlet_rules::stage_index_for_map( resolved_map );
+		map_stage = maps\_gauntlet_rules::stage_index_for_map_in_order( resolved_map, parsed_order );
 		if ( map_stage >= 1 )
 		{
 			final_stage = map_stage;
@@ -69,7 +75,17 @@ build_wipe_summary( state, stage_info, final_round, current_map )
 
 	if ( !IsDefined( stage_info ) )
 	{
-		stage_info = maps\_gauntlet_rules::get_stage_info( final_cycle, final_stage );
+		state_start = undefined;
+		state_target = undefined;
+		if ( IsDefined( state ) && IsDefined( state.start_round ) )
+		{
+			state_start = state.start_round;
+		}
+		if ( IsDefined( state ) && IsDefined( state.target_round ) )
+		{
+			state_target = state.target_round;
+		}
+		stage_info = maps\_gauntlet_rules::get_stage_info( final_cycle, final_stage, parsed_order, state_start, state_target );
 	}
 
 	if ( resolved_map == "" && IsDefined( stage_info.map_name ) )
@@ -281,7 +297,12 @@ handle_team_wipe()
 	stage_info = level.gauntlet_stage_info;
 	if ( !IsDefined( stage_info ) )
 	{
-		stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage );
+		parsed_order = undefined;
+		if ( IsDefined( state ) && IsDefined( state.cycle_order ) && state.cycle_order != "" )
+		{
+			parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+		}
+		stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage, parsed_order, state.start_round, state.target_round );
 	}
 
 	final_round = stage_info.start_round;
@@ -325,6 +346,11 @@ handle_team_wipe()
 	{
 		handoff_cleared = 1;
 	}
+	progression_cleared = 0;
+	if ( GetDvar( "gauntlet_cycle_order" ) == "" && GetDvar( "gauntlet_start_round" ) == "" && GetDvar( "gauntlet_target_round" ) == "" )
+	{
+		progression_cleared = 1;
+	}
 
 	reset_fields = [];
 	reset_fields[0] = maps\_gauntlet_log::kv( "run_id", summary.run_id );
@@ -332,6 +358,7 @@ handle_team_wipe()
 	reset_fields[2] = maps\_gauntlet_log::kv( "ledger_cleared", ledger_cleared );
 	reset_fields[3] = maps\_gauntlet_log::kv( "perks_cleared", perks_cleared );
 	reset_fields[4] = maps\_gauntlet_log::kv( "handoff_cleared", handoff_cleared );
+	reset_fields[5] = maps\_gauntlet_log::kv( "progression_cleared", progression_cleared );
 	maps\_gauntlet_log::emit( "RUN_RESET", maps\_gauntlet_log::join_fields( reset_fields ) );
 
 	summary_delay = resolve_summary_delay();

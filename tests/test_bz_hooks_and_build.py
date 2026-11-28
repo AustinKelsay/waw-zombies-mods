@@ -2313,12 +2313,12 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
             "map nazi_zombie_sumpf",
             "BZ_CLASSIC_MODE_ACTION",
             "set bz_enabled 0",
-            "BZ_COOP_SETUP_TOGGLE",
+            "BZ_COOP_ACCEPT_ACTION",
             "BZ_COOP_LOBBY_STATUS_PANEL",
         ):
             self.assertIn(token, bz_inc)
 
-        # Verify Gauntlet Solo & Classic actions explicitly zero all 6 bz_*_enabled gates
+        # Verify Classic action explicitly zeroes all 6 bz_*_enabled gates
         gauntlet_inc = (ui_dir / "gauntlet_menus.inc").read_text(encoding="latin1")
         self.assertIn('#include "ui/bz_menus.inc"', gauntlet_inc)
         for gate in (
@@ -2331,11 +2331,12 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
         ):
             self.assertIn(gate, gauntlet_inc)
 
-        # Verify pc_gamesetup_coop.menu exposes Enhancements toggle without breaking Gauntlet/Classic
+        # Verify pc_gamesetup_coop.menu exposes 3-mode selector without separate BZ toggle
         coop_menu = (ui_dir / "pc_gamesetup_coop.menu").read_text(encoding="latin1")
-        self.assertIn("BZ_COOP_SETUP_TOGGLE", coop_menu)
+        self.assertIn("GAUNTLET_COOP_SETUP_TOGGLE", coop_menu)
+        self.assertNotIn("BZ_COOP_SETUP_TOGGLE", coop_menu)
         self.assertIn("accept_bz_enhancements", coop_menu)
-        self.assertIn("BZ_CLASSIC_MODE_ACTION", coop_menu)
+        self.assertIn("GAUNTLET_CLASSIC_MODE_ACTION", coop_menu)
 
         # Verify staged stock menus get Enhancements Solo/Co-op patches cleanly with balanced braces
         with tempfile.TemporaryDirectory() as tmp:
@@ -2367,7 +2368,7 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 non_ascii = [ch for ch in content if ord(ch) > 126 or (ord(ch) < 32 and ch not in "\t\r\n")]
                 self.assertEqual(non_ascii, [], f"Non-ASCII chars in patched {name}")
 
-            self.assertIn("ENHANCEMENTS", patched_main)
+            self.assertIn("ENHANCED MODE", patched_main)
             self.assertIn("BZ_SOLO_START_ACTION", patched_main)
             for gate in (
                 "set bz_enabled 0",
@@ -2378,10 +2379,10 @@ class TestBzBuildPatchersAndMenus(unittest.TestCase):
                 "set bz_companions_enabled 0",
             ):
                 self.assertIn(gate, patched_main)
-            self.assertIn("ENHANCEMENTS: DER RIESE", patched_levels)
-            self.assertIn("ENHANCEMENTS: NACHT", patched_levels)
-            self.assertIn("ENHANCEMENTS: VERRUCKT", patched_levels)
-            self.assertIn("ENHANCEMENTS: SHI NO NUMA", patched_levels)
+            self.assertIn("ENHANCED: DER RIESE", patched_levels)
+            self.assertIn("ENHANCED: NACHT", patched_levels)
+            self.assertIn("ENHANCED: VERRUCKT", patched_levels)
+            self.assertIn("ENHANCED: SHI NO NUMA", patched_levels)
             self.assertIn("BZ_SOLO_START_ACTION", patched_levels)
             self.assertIn("BZ_SOLO_START_PROTOTYPE_ACTION", patched_levels)
             self.assertIn("BZ_SOLO_START_ASYLUM_ACTION", patched_levels)

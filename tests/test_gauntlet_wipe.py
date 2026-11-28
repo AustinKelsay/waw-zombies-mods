@@ -308,7 +308,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         state.set_field("stage", 2)
         state.set_field("total_rounds", 45)
         state.set_field("run_id", "run_c2s2")
-        stage_info = self.gsc.call(RULES_MOD, "get_stage_info", 2, 2)
+        stage_info = self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14)
 
         summary = self.gsc.call(WIPE_MOD, "build_wipe_summary", state, stage_info, 12, "nazi_zombie_asylum")
         self.assertEqual(summary.final_cycle, 2)
@@ -341,7 +341,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.level.set_field("gauntlet_stage_cleared", False)
 
         handled = self.gsc.call(WIPE_MOD, "handle_team_wipe")
@@ -379,7 +379,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
             self.gsc.emitted_events,
         )
         self.assertIn(
-            "GAUNTLET_EVENT|RUN_RESET|run_id=run_wipe_777;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1",
+            "GAUNTLET_EVENT|RUN_RESET|run_id=run_wipe_777;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1;progression_cleared=1",
             self.gsc.emitted_events,
         )
         self.assertIn(
@@ -426,7 +426,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.call(WIPE_MOD, "handle_team_wipe")
 
         # Reload persisted state -> inactive
@@ -468,6 +468,37 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.assertEqual(self.gsc.exit_level_calls, [False])
         self.assertEqual(len(self.gsc.created_huds), 4)
         self.assertTrue(all(h.destroyed for h in self.gsc.created_huds))
+
+    def test_handle_team_wipe_fallback_preserves_shuffled_order_and_start_round(self) -> None:
+        self.dvars.set("gauntlet_enabled", "1")
+        self.dvars.set("gauntlet_test_summary_delay", "0.5")
+        state = self.gsc.call(STATE_MOD, "init_fresh_run", "run_shuffled_fallback")
+        state.set_field("cycle", 1)
+        state.set_field("stage", 2)
+        state.set_field(
+            "cycle_order",
+            "nazi_zombie_prototype,nazi_zombie_factory,nazi_zombie_sumpf,nazi_zombie_asylum",
+        )
+        state.set_field("start_round", 6)
+        state.set_field("target_round", 10)
+        state.set_field("total_rounds", 5)
+        state = self.gsc.call(STATE_MOD, "save_run_state", state)
+
+        # Leave level.gauntlet_stage_info UNDEFINED to exercise the fallback path
+        self.gsc.level.set_field("script", "nazi_zombie_factory")
+        self.gsc.level.set_field("round_number", 8)
+        self.gsc.level.set_field("gauntlet_state", state)
+        self.gsc.level.set_field("gauntlet_stage_info", UNDEFINED)
+
+        self.assertTrue(self.gsc.call(WIPE_MOD, "handle_team_wipe"))
+        self.assertIn(
+            "GAUNTLET_EVENT|RUN_WIPE|cycle=1;stage=2;map=nazi_zombie_factory;display=Der Riese;final_round=8;total_rounds=7;run_id=run_shuffled_fallback",
+            self.gsc.emitted_events,
+        )
+        self.assertIn(
+            "GAUNTLET_EVENT|RUN_RESET|run_id=run_shuffled_fallback;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1;progression_cleared=1",
+            self.gsc.emitted_events,
+        )
 
     def test_double_trigger_guard_prevents_duplicate_wipe(self) -> None:
         self.dvars.set("gauntlet_enabled", "1")
@@ -567,7 +598,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.level.set_field("gauntlet_stage_cleared", False)
 
         self.assertTrue(self.gsc.call(WIPE_MOD, "maybe_run_test_force_wipe", 12))
@@ -602,7 +633,7 @@ class TestVerifyWipeLogAnalyzers(unittest.TestCase):
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=2;map=nazi_zombie_asylum;duration=2",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=2;stage=2;map=nazi_zombie_asylum;duration=2",
             "dvar set gauntlet_event GAUNTLET_EVENT|RUN_WIPE|cycle=2;stage=2;map=nazi_zombie_asylum;display=Verruckt;final_round=12;total_rounds=47;run_id=verify_wipe_c2s2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|RUN_RESET|run_id=verify_wipe_c2s2;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1",
+            "dvar set gauntlet_event GAUNTLET_EVENT|RUN_RESET|run_id=verify_wipe_c2s2;active=0;ledger_cleared=1;perks_cleared=1;handoff_cleared=1;progression_cleared=1",
             "dvar set gauntlet_event GAUNTLET_EVENT|RUN_SUMMARY|cycle=2;stage=2;map=nazi_zombie_asylum;display=Verruckt;final_round=12;total_rounds=47",
         ]
         return "\n".join(lines) + "\n"
@@ -660,6 +691,13 @@ class TestVerifyWipeLogAnalyzers(unittest.TestCase):
             dirty_ledger, 2, 2, "nazi_zombie_asylum", "Verruckt", 12, 47
         )
         self.assertTrue(any("ledger_cleared" in e for e in errs))
+
+        # RUN_RESET reports progression_cleared=0
+        dirty_prog = self._valid_wipe_log().replace("progression_cleared=1", "progression_cleared=0")
+        _, errs = self.verify_wipe.analyze_wipe_log(
+            dirty_prog, 2, 2, "nazi_zombie_asylum", "Verruckt", 12, 47
+        )
+        self.assertTrue(any("progression_cleared" in e for e in errs))
 
         # Duplicate RUN_WIPE event
         dup_wipe = self._valid_wipe_log() + (

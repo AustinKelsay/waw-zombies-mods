@@ -164,51 +164,79 @@ class TestBuildModPatching(unittest.TestCase):
 
 
 class TestCycle1LogAnalyzer(unittest.TestCase):
-    def _build_valid_cycle1_log(self) -> str:
-        lines = [
-            "Loading fastfile 'mod'",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=500;start_round=1;map=nazi_zombie_prototype",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=560;map=nazi_zombie_prototype",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=1;next_cycle=1;next_stage=2;next_map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=560;start_round=1;map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=620;map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=2;map=nazi_zombie_asylum;completed_round=1;next_cycle=1;next_stage=3;next_map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf;next_cycle=1;next_stage=3",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=3;map=nazi_zombie_sumpf;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=620;start_round=1;map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=680;map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=3;map=nazi_zombie_sumpf;completed_round=1;next_cycle=1;next_stage=4;next_map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_factory;next_cycle=1;next_stage=4",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=4;map=nazi_zombie_factory;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=680;start_round=1;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=740;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=4;map=nazi_zombie_factory;completed_round=1;next_cycle=2;next_stage=1;next_map=nazi_zombie_prototype",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_prototype;next_cycle=2;next_stage=1",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_prototype",
-        ]
+    def _build_valid_cycle1_log(self, span: int = 1) -> str:
+        seq = verify_cycle1.expected_cycle1_sequence(span)
+        lines = ["Loading fastfile 'mod'"]
+        prev_saved = 0
+        for idx, (c, s, m, sr, tr) in enumerate(seq):
+            lines.append(
+                f"dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle={c};stage={s};map={m};start_round={sr};target_round={tr};run_id=run_100"
+            )
+            floor_pts = max(500, sr * 500)
+            applied = 500 if idx == 0 else max(prev_saved, floor_pts)
+            carried = "none" if idx == 0 else str(prev_saved)
+            lines.append(
+                f"dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points={applied};start_round={sr};map={m};carried={carried};floor={floor_pts}"
+            )
+            if sr > 1:
+                lines.append(
+                    f"dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle={c};stage={s};map={m};duration=1"
+                )
+                lines.append(
+                    f"dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle={c};stage={s};map={m};duration=1"
+                )
+            if idx < 4:
+                prev_saved = applied + 620
+                nc, ns, nm, _, _ = seq[idx + 1]
+                lines.append(
+                    f"dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points={prev_saved};map={m}"
+                )
+                lines.append(
+                    f"dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle={c};stage={s};map={m};completed_round={tr};next_cycle={nc};next_stage={ns};next_map={nm}"
+                )
+                lines.append(
+                    f"dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map={nm};next_cycle={nc};next_stage={ns}"
+                )
         return "\n".join(lines) + "\n"
 
     def test_valid_cycle1_log_passes(self) -> None:
-        log = self._build_valid_cycle1_log()
-        events, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
-        self.assertEqual(errors, [])
-        self.assertTrue(verify_cycle1.is_cycle1_complete(events))
+        for span in (1, 2):
+            with self.subTest(span=span):
+                log = self._build_valid_cycle1_log(span=span)
+                events, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=span)
+                self.assertEqual(errors, [])
+                self.assertTrue(verify_cycle1.is_cycle1_complete(events, expected_stage_span=span))
+
+    def test_missing_prep_phase_on_stage2_fails(self) -> None:
+        log = self._build_valid_cycle1_log().replace(
+            "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=1;stage=2;map=nazi_zombie_sumpf;duration=1\n",
+            "",
+        )
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
+        self.assertTrue(any("Prep Phase" in err for err in errors), errors)
 
     def test_broken_points_carryover_fails(self) -> None:
         log = self._build_valid_cycle1_log().replace(
-            "POINTS_APPLIED|player=n_player;points=560;start_round=1;map=nazi_zombie_asylum",
-            "POINTS_APPLIED|player=n_player;points=500;start_round=1;map=nazi_zombie_asylum",
+            "POINTS_APPLIED|player=n_player;points=1740;start_round=3;map=nazi_zombie_asylum",
+            "POINTS_APPLIED|player=n_player;points=1500;start_round=3;map=nazi_zombie_asylum",
         )
-        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertTrue(any("Points carryover mismatch" in err for err in errors))
+
+    def test_lost_carryover_masked_by_floor_fails(self) -> None:
+        # span=2 -> Stage 2 starts at R3 (floor=1500 > saved=1120), so applied=1500 still passes
+        # the balance check while carried=none proves carryover was lost.
+        log = self._build_valid_cycle1_log(span=2).replace(";carried=1120;", ";carried=none;")
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=2)
+        self.assertTrue(any("carried mismatch" in err for err in errors), errors)
+
+        blank_player = self._build_valid_cycle1_log(span=1).replace("player=n_player;", "player=;")
+        _, errors2 = verify_cycle1.analyze_cycle1_log(blank_player, expected_stage_span=1)
+        self.assertTrue(any("player mismatch" in err for err in errors2), errors2)
 
     def test_fatal_script_error_fails(self) -> None:
         log = self._build_valid_cycle1_log() + "******* script runtime error *******\n"
-        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertTrue(any("Script runtime error" in err for err in errors))
 
 
