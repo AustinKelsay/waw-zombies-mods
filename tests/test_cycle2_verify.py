@@ -98,6 +98,10 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
                 _, errors2 = fn(bad_carried, expected_prep_duration=3)
                 self.assertTrue(any("carried=" in err for err in errors2), errors2)
 
+                other_player = log.replace("POINTS_SAVED|player=n_player;", "POINTS_SAVED|player=n_other;")
+                _, errors3 = fn(other_player, expected_prep_duration=3)
+                self.assertTrue(any("POINTS_SAVED" in err for err in errors3), errors3)
+
     def test_double_scaled_round10_health_fails(self) -> None:
         bad = self._build_valid_c1_to_c2_wrap_log().replace(
             "ZOMBIE_SPAWNED_SAMPLE|round=10;health=1045;move_speed=sprint",

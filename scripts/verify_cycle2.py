@@ -281,11 +281,24 @@ def analyze_c1_to_c2_wrap_log(
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 1 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
 
-    c1_s4_saved = next((e for e in c1_s4 if e.event_type == "POINTS_SAVED"), None)
+    c2_pts_ev = next((e for e in c2_s1 if e.event_type == "POINTS_APPLIED"), None)
+    dest_player = c2_pts_ev.fields.get("player", "") if c2_pts_ev is not None else ""
+    c1_s4_saved = next(
+        (
+            e
+            for e in c1_s4
+            if e.event_type == "POINTS_SAVED"
+            and e.fields.get("map") == "nazi_zombie_factory"
+            and (not dest_player or e.fields.get("player") == dest_player)
+        ),
+        None,
+    )
     expected_c2_points: int | None = None
     expected_c2_carried: str | None = None
     if c1_s4_saved is None or not c1_s4_saved.fields.get("points", "").isdigit():
-        errors.append("Cycle 1 Stage 4 missing valid POINTS_SAVED event")
+        errors.append(
+            f"Cycle 1 Stage 4 missing valid POINTS_SAVED event for player={dest_player!r} on nazi_zombie_factory"
+        )
     else:
         expected_c2_carried = c1_s4_saved.fields["points"]
         expected_c2_points = max(int(expected_c2_carried), 5000)
@@ -305,9 +318,8 @@ def analyze_c1_to_c2_wrap_log(
         expected_floor=5000,
         errors=errors,
     )
-    if expected_c2_carried is not None:
-        c2_pts_ev = next((e for e in c2_s1 if e.event_type == "POINTS_APPLIED"), None)
-        if c2_pts_ev is not None and c2_pts_ev.fields.get("carried") != expected_c2_carried:
+    if expected_c2_carried is not None and c2_pts_ev is not None:
+        if c2_pts_ev.fields.get("carried") != expected_c2_carried:
             errors.append(
                 f"Cycle 2 Stage 1 (wrap): POINTS_APPLIED carried={c2_pts_ev.fields.get('carried')!r}, "
                 f"expected {expected_c2_carried!r} ({c2_pts_ev.raw})"
@@ -394,11 +406,24 @@ def analyze_c2_to_c3_wrap_log(
             if clear_ev.fields.get(k) != exp:
                 errors.append(f"Cycle 2 Stage 4 STAGE_CLEAR {k}={clear_ev.fields.get(k)!r}, expected {exp!r}")
 
-    c2_s4_saved = next((e for e in c2_s4 if e.event_type == "POINTS_SAVED"), None)
+    c3_pts_ev = next((e for e in c3_s1 if e.event_type == "POINTS_APPLIED"), None)
+    dest_player = c3_pts_ev.fields.get("player", "") if c3_pts_ev is not None else ""
+    c2_s4_saved = next(
+        (
+            e
+            for e in c2_s4
+            if e.event_type == "POINTS_SAVED"
+            and e.fields.get("map") == "nazi_zombie_factory"
+            and (not dest_player or e.fields.get("player") == dest_player)
+        ),
+        None,
+    )
     expected_c3_points: int | None = None
     expected_c3_carried: str | None = None
     if c2_s4_saved is None or not c2_s4_saved.fields.get("points", "").isdigit():
-        errors.append("Cycle 2 Stage 4 missing valid POINTS_SAVED event")
+        errors.append(
+            f"Cycle 2 Stage 4 missing valid POINTS_SAVED event for player={dest_player!r} on nazi_zombie_factory"
+        )
     else:
         expected_c3_carried = c2_s4_saved.fields["points"]
         expected_c3_points = max(int(expected_c3_carried), 7500)
@@ -418,9 +443,8 @@ def analyze_c2_to_c3_wrap_log(
         expected_floor=7500,
         errors=errors,
     )
-    if expected_c3_carried is not None:
-        c3_pts_ev = next((e for e in c3_s1 if e.event_type == "POINTS_APPLIED"), None)
-        if c3_pts_ev is not None and c3_pts_ev.fields.get("carried") != expected_c3_carried:
+    if expected_c3_carried is not None and c3_pts_ev is not None:
+        if c3_pts_ev.fields.get("carried") != expected_c3_carried:
             errors.append(
                 f"Cycle 3 Stage 1 (wrap): POINTS_APPLIED carried={c3_pts_ev.fields.get('carried')!r}, "
                 f"expected {expected_c3_carried!r} ({c3_pts_ev.raw})"

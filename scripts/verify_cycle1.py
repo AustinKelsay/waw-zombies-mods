@@ -287,11 +287,24 @@ def analyze_cycle1_log(
                     f"applied={applied_vals[idx]}, saved={saved_vals[idx]}"
                 )
 
-        # Continuous Points Floors based on each Stage's start_round
+        # Continuous Points Floors + carried-balance verification across every transition
         for idx in range(4):
+            saved_ev = points_saved[idx]
+            dest_ev = points_applied[idx + 1]
             next_start_round = expected_seq[idx + 1][3]
             floor_pts = max(500, next_start_round * 500)
             expected_pts = max(saved_vals[idx], floor_pts)
+            if saved_ev.fields.get("player") != dest_ev.fields.get("player"):
+                errors.append(
+                    f"Points carryover player mismatch into Stage #{idx + 2}: "
+                    f"saved player={saved_ev.fields.get('player')!r}, "
+                    f"applied player={dest_ev.fields.get('player')!r}"
+                )
+            if dest_ev.fields.get("carried") != str(saved_vals[idx]):
+                errors.append(
+                    f"Points carryover carried mismatch into Stage #{idx + 2}: "
+                    f"carried={dest_ev.fields.get('carried')!r}, expected {str(saved_vals[idx])!r} ({dest_ev.raw})"
+                )
             if applied_vals[idx + 1] != expected_pts:
                 errors.append(
                     f"Points carryover mismatch into Stage #{idx + 2} (start_round={next_start_round}): "

@@ -243,7 +243,6 @@ redirect_fresh_run_to_nacht( current_map )
 	if ( is_coop )
 	{
 		SetUINextLevel( "nazi_zombie_prototype" );
-		SetDvar( "ui_mapname", "nazi_zombie_prototype" );
 		exitLevel( false );
 		return true;
 	}

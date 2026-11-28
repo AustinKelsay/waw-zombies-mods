@@ -174,8 +174,9 @@ class TestCycle1LogAnalyzer(unittest.TestCase):
             )
             floor_pts = max(500, sr * 500)
             applied = 500 if idx == 0 else max(prev_saved, floor_pts)
+            carried = "none" if idx == 0 else str(prev_saved)
             lines.append(
-                f"dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points={applied};start_round={sr};map={m}"
+                f"dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points={applied};start_round={sr};map={m};carried={carried};floor={floor_pts}"
             )
             if sr > 1:
                 lines.append(
@@ -221,6 +222,11 @@ class TestCycle1LogAnalyzer(unittest.TestCase):
         )
         _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertTrue(any("Points carryover mismatch" in err for err in errors))
+
+    def test_lost_carryover_masked_by_floor_fails(self) -> None:
+        log = self._build_valid_cycle1_log().replace(";carried=1120;", ";carried=none;")
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
+        self.assertTrue(any("carried mismatch" in err for err in errors), errors)
 
     def test_fatal_script_error_fails(self) -> None:
         log = self._build_valid_cycle1_log() + "******* script runtime error *******\n"

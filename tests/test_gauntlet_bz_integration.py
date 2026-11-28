@@ -534,6 +534,8 @@ class TestGauntletBzIntegration(unittest.TestCase):
                 self.coop_game = False
 
             def _call_builtin(self, name_lower: str, args, line: int):
+                if name_lower == "setdvar" and args and _waw_to_str(args[0]).lower() == "ui_mapname":
+                    raise AssertionError("GSC must never call SetDvar('ui_mapname', ...) in WaW 1.7")
                 if name_lower == "changelevel":
                     self.changelevel_calls.append((_waw_to_str(args[0]), bool(args[1]) if len(args) > 1 else False))
                     return True, UNDEFINED
@@ -582,7 +584,6 @@ class TestGauntletBzIntegration(unittest.TestCase):
         coop_gsc.level.set_field("script", "nazi_zombie_factory")
         coop_gsc.call(GAUNTLET_MODE_MOD, "on_stage_init")
         self.assertEqual(coop_gsc.next_level_calls, ["nazi_zombie_prototype"])
-        self.assertEqual(coop_dvars.get("ui_mapname"), "nazi_zombie_prototype")
         self.assertEqual(coop_gsc.exit_level_calls, [False])
         self.assertEqual(coop_dvars.get("gauntlet_active"), "0")
         self.assertTrue(
