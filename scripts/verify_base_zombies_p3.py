@@ -16,8 +16,10 @@ Verifies real Steam/Proton CoD:WaW 1.7 execution across three live runs:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -104,6 +106,32 @@ def analyze_bz_p3_log(
     return events, errors
 
 
+class CompanionVisualCapture:
+    """Screenshots the Xvfb display once per COMPANION_VISUAL phase (requires ImageMagick import)."""
+
+    def __init__(self, out_dir: Path, display_num: int, prefix: str) -> None:
+        self.out_dir = out_dir
+        self.prefix = prefix
+        self.env = dict(os.environ, DISPLAY=f":{display_num}")
+        self.seen: set[str] = set()
+        self.paths: list[Path] = []
+
+    def __call__(self, log_text: str) -> None:
+        for event in vb1.parse_bz_events(log_text):
+            phase = event.fields.get("phase", "")
+            if event.event_type != "COMPANION_VISUAL" or not phase or phase in self.seen:
+                continue
+            self.seen.add(phase)
+            path = self.out_dir / f"{self.prefix}_{phase}.png"
+            try:
+                subprocess.run(["import", "-window", "root", str(path)], env=self.env, check=True, capture_output=True, timeout=5)
+            except (OSError, subprocess.SubprocessError) as exc:
+                print(f"    WARN: capture {path.name} failed: {exc}", file=sys.stderr)
+                continue
+            self.paths.append(path)
+            print(f"    Captured {path}", flush=True)
+
+
 def _selftest_dvars() -> list[tuple[str, str]]:
     return [
         ("gauntlet_enabled", "0"),
@@ -130,7 +158,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--steam-appdata", type=Path, default=build_mod.DEFAULT_STEAM_APPDATA)
     parser.add_argument("--playtest-prefix", type=Path, default=smoke_verify.DEFAULT_PLAYTEST_PREFIX)
     parser.add_argument("--proton", type=Path, default=smoke_verify.DEFAULT_PROTON)
+    parser.add_argument("--capture-dir", type=Path, default=None, help="Save COMPANION_VISUAL screenshots here")
     args = parser.parse_args(argv)
+    if args.capture_dir is not None:
+        args.capture_dir.mkdir(parents=True, exist_ok=True)
 
     playtest_appdata = args.playtest_prefix / "pfx/drive_c/users/steamuser/AppData/Local/Activision/CoDWaW"
     if not playtest_appdata.is_dir():
@@ -189,6 +220,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         for run_id, display, map_name, log_name in selftest_runs:
             print(f"\n--> Run {run_id}: {display} Squad Companions self-test (bz_companions_enabled=1, p3_selftest=1)")
+            capture = None
+            if args.capture_dir is not None:
+                capture = CompanionVisualCapture(args.capture_dir, display_num, map_name)
             res = vb1.run_bz_scenario(
                 name=f"{display} Base Zombies Phase 3",
                 log_filename=log_name,
@@ -201,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
                 display_num=display_num,
                 timeout_s=args.timeout,
                 settle_s=1.5,
+                observe_log=capture,
                 **common,
             )
             fx_note = f" | fx={res.fx_count}/400" if res.fx_count is not None else ""

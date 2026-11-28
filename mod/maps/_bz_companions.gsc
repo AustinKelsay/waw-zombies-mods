@@ -947,6 +947,16 @@ bz_companions_run_selftest()
 	cap_ok = r2.ok && r3.ok && r4.status == "squad_full" && bz_companions_count_active() == 3;
 	bz_companions_selftest_check( st, cap_ok, "squad_cap_players_plus_companions_4" );
 
+	// 3b. Visual capture hold: face the squad so the harness can screenshot it.
+	if ( IsDefined( comp ) )
+	{
+		to_comp = VectorToAngles( comp.origin - p.origin );
+		p SetPlayerAngles( ( 10, to_comp[1], 0 ) );
+		wait( 0.75 );
+		bz_log_emit( "COMPANION_VISUAL", "phase=squad_lineup;map=" + map_name );
+		wait( 1.5 );
+	}
+
 	// 4. Follow + teleport catch-up: jump the owner to the farthest station and expect a warp.
 	wait( 1.0 );
 	start_org = p.origin;
