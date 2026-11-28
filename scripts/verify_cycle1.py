@@ -294,11 +294,13 @@ def analyze_cycle1_log(
             next_start_round = expected_seq[idx + 1][3]
             floor_pts = max(500, next_start_round * 500)
             expected_pts = max(saved_vals[idx], floor_pts)
-            if saved_ev.fields.get("player") != dest_ev.fields.get("player"):
+            saved_player = saved_ev.fields.get("player", "")
+            dest_player = dest_ev.fields.get("player", "")
+            if not dest_player or saved_player != dest_player:
                 errors.append(
                     f"Points carryover player mismatch into Stage #{idx + 2}: "
-                    f"saved player={saved_ev.fields.get('player')!r}, "
-                    f"applied player={dest_ev.fields.get('player')!r}"
+                    f"saved player={saved_player!r}, "
+                    f"applied player={dest_player!r}"
                 )
             if dest_ev.fields.get("carried") != str(saved_vals[idx]):
                 errors.append(

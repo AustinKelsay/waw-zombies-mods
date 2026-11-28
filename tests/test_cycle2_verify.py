@@ -102,6 +102,14 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
                 _, errors3 = fn(other_player, expected_prep_duration=3)
                 self.assertTrue(any("POINTS_SAVED" in err for err in errors3), errors3)
 
+                blank_dest = other_player.replace(
+                    "POINTS_APPLIED|player=n_player;points=5000;", "POINTS_APPLIED|player=;points=5000;"
+                ).replace(
+                    "POINTS_APPLIED|player=n_player;points=7500;", "POINTS_APPLIED|player=;points=7500;"
+                )
+                _, errors4 = fn(blank_dest, expected_prep_duration=3)
+                self.assertTrue(any("missing player" in err or "POINTS_SAVED" in err for err in errors4), errors4)
+
     def test_double_scaled_round10_health_fails(self) -> None:
         bad = self._build_valid_c1_to_c2_wrap_log().replace(
             "ZOMBIE_SPAWNED_SAMPLE|round=10;health=1045;move_speed=sprint",

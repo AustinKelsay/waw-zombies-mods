@@ -224,9 +224,15 @@ class TestCycle1LogAnalyzer(unittest.TestCase):
         self.assertTrue(any("Points carryover mismatch" in err for err in errors))
 
     def test_lost_carryover_masked_by_floor_fails(self) -> None:
-        log = self._build_valid_cycle1_log().replace(";carried=1120;", ";carried=none;")
-        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
+        # span=2 -> Stage 2 starts at R3 (floor=1500 > saved=1120), so applied=1500 still passes
+        # the balance check while carried=none proves carryover was lost.
+        log = self._build_valid_cycle1_log(span=2).replace(";carried=1120;", ";carried=none;")
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=2)
         self.assertTrue(any("carried mismatch" in err for err in errors), errors)
+
+        blank_player = self._build_valid_cycle1_log(span=1).replace("player=n_player;", "player=;")
+        _, errors2 = verify_cycle1.analyze_cycle1_log(blank_player, expected_stage_span=1)
+        self.assertTrue(any("player mismatch" in err for err in errors2), errors2)
 
     def test_fatal_script_error_fails(self) -> None:
         log = self._build_valid_cycle1_log() + "******* script runtime error *******\n"

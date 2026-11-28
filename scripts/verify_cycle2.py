@@ -283,13 +283,16 @@ def analyze_c1_to_c2_wrap_log(
 
     c2_pts_ev = next((e for e in c2_s1 if e.event_type == "POINTS_APPLIED"), None)
     dest_player = c2_pts_ev.fields.get("player", "") if c2_pts_ev is not None else ""
+    if c2_pts_ev is not None and not dest_player:
+        errors.append(f"Cycle 2 Stage 1 (wrap): POINTS_APPLIED missing player ({c2_pts_ev.raw})")
     c1_s4_saved = next(
         (
             e
             for e in c1_s4
             if e.event_type == "POINTS_SAVED"
             and e.fields.get("map") == "nazi_zombie_factory"
-            and (not dest_player or e.fields.get("player") == dest_player)
+            and bool(dest_player)
+            and e.fields.get("player") == dest_player
         ),
         None,
     )
@@ -408,13 +411,16 @@ def analyze_c2_to_c3_wrap_log(
 
     c3_pts_ev = next((e for e in c3_s1 if e.event_type == "POINTS_APPLIED"), None)
     dest_player = c3_pts_ev.fields.get("player", "") if c3_pts_ev is not None else ""
+    if c3_pts_ev is not None and not dest_player:
+        errors.append(f"Cycle 3 Stage 1 (wrap): POINTS_APPLIED missing player ({c3_pts_ev.raw})")
     c2_s4_saved = next(
         (
             e
             for e in c2_s4
             if e.event_type == "POINTS_SAVED"
             and e.fields.get("map") == "nazi_zombie_factory"
-            and (not dest_player or e.fields.get("player") == dest_player)
+            and bool(dest_player)
+            and e.fields.get("player") == dest_player
         ),
         None,
     )
