@@ -478,6 +478,8 @@ class TestCouncilPass2Fixes(unittest.TestCase):
 
     def test_r2_a7_classes_disabled_does_not_skip_second_chance_on_lethal_fall(self) -> None:
         dvars = _make_enhanced_dvars()
+        # Isolated single-map subsystem gate check (ADR-0006 enforces classes when gauntlet_enabled=1).
+        dvars.set("gauntlet_enabled", "0")
         rt = GauntletBzRuntime(MOD_ROOT, dvars)
         rt.level.set_field("script", "nazi_zombie_factory")
         rt.call(BZ_HOOKS_MOD, "bz_init")

@@ -62,6 +62,18 @@ ensure_handoff_dvars_registered()
 	{
 		SetDvar( "gauntlet_spectators", "" );
 	}
+	if ( GetDvar( "gauntlet_cycle_order" ) == "" )
+	{
+		SetDvar( "gauntlet_cycle_order", "" );
+	}
+	if ( GetDvar( "gauntlet_start_round" ) == "" )
+	{
+		SetDvar( "gauntlet_start_round", "" );
+	}
+	if ( GetDvar( "gauntlet_target_round" ) == "" )
+	{
+		SetDvar( "gauntlet_target_round", "" );
+	}
 }
 
 get_current_map_name()
@@ -108,7 +120,7 @@ resolve_prep_phase_duration( stage_info )
 	base_duration = Int( stage_info.prep_duration );
 	if ( base_duration <= 0 )
 	{
-		// Cycle 1 always skips Prep Phase regardless of test dvar overrides.
+		// Opening Stage (start_round <= 1) skips Prep Phase regardless of test dvar overrides.
 		return 0;
 	}
 
@@ -201,6 +213,7 @@ on_pre_zombiemode_init()
 		return;
 	}
 
+	maps\_bz_hooks::ensure_bz_dvars();
 	maps\_gauntlet_hud::on_pre_zombiemode_init();
 	maps\_gauntlet_perks::precache_perk_shaders();
 }
@@ -213,6 +226,7 @@ on_stage_init()
 		return;
 	}
 
+	maps\_bz_hooks::ensure_bz_dvars();
 	ensure_handoff_dvars_registered();
 
 	current_map = get_current_map_name();
@@ -232,7 +246,8 @@ on_stage_init()
 
 		maps\_gauntlet_state::clear_run_state();
 		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
-		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
+		parsed_fresh_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+		map_stage = maps\_gauntlet_rules::stage_index_for_map_in_order( current_map, parsed_fresh_order );
 		if ( map_stage >= 1 && map_stage != state.stage )
 		{
 			state.stage = map_stage;
@@ -242,7 +257,8 @@ on_stage_init()
 	else if ( !state.active )
 	{
 		state = maps\_gauntlet_state::init_fresh_run( generate_run_id() );
-		map_stage = maps\_gauntlet_rules::stage_index_for_map( current_map );
+		parsed_fresh_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+		map_stage = maps\_gauntlet_rules::stage_index_for_map_in_order( current_map, parsed_fresh_order );
 		if ( map_stage >= 1 && map_stage != state.stage )
 		{
 			state.stage = map_stage;
@@ -256,7 +272,8 @@ on_stage_init()
 		maps\_gauntlet_state::clear_lobby_handoff_dvars();
 	}
 
-	stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage );
+	parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	stage_info = maps\_gauntlet_rules::get_stage_info( state.cycle, state.stage, parsed_order, state.start_round, state.target_round );
 	effective_target_round = resolve_effective_target_round( stage_info );
 
 	level.gauntlet_state = state;
@@ -364,6 +381,23 @@ init_high_round_chalk_hud( start_round )
 			level.chalk_hud2.color = ( 0.423, 0.004, 0 );
 			level.chalk_hud2 SetShader( "hud_chalk_" + ( start_round - 5 ), 64, 64 );
 			level.chalk_hud2.alpha = 1;
+		}
+		return;
+	}
+
+	if ( start_round > 1 )
+	{
+		if ( IsDefined( level.chalk_hud1 ) )
+		{
+			level.chalk_hud1.alignX = "left";
+			level.chalk_hud1.alignY = "bottom";
+			level.chalk_hud1.horzAlign = "left";
+			level.chalk_hud1.vertAlign = "bottom";
+			level.chalk_hud1.x = 0;
+			level.chalk_hud1.y = 0;
+			level.chalk_hud1.color = ( 0.423, 0.004, 0 );
+			level.chalk_hud1 SetShader( "hud_chalk_" + start_round, 64, 64 );
+			level.chalk_hud1.alpha = 1;
 		}
 	}
 }
@@ -1179,8 +1213,9 @@ handle_stage_clear( completed_round )
 	snapshot_all_players_points( current_map );
 
 	rounds_cleared = compute_rounds_cleared_in_stage( prev_info.start_round, completed_round );
-	next_state = maps\_gauntlet_state::advance_run_state( prev_state, rounds_cleared );
-	next_info = maps\_gauntlet_rules::get_stage_info( next_state.cycle, next_state.stage );
+	next_state = maps\_gauntlet_state::advance_run_state( prev_state, rounds_cleared, completed_round );
+	next_order = maps\_gauntlet_rules::parse_cycle_order( next_state.cycle_order );
+	next_info = maps\_gauntlet_rules::get_stage_info( next_state.cycle, next_state.stage, next_order, next_state.start_round, next_state.target_round );
 
 	// Populate Co-op lobby handoff dvars for Ticket #8 UI and post-transition checks.
 	maps\_gauntlet_state::set_lobby_handoff_dvars( next_info );

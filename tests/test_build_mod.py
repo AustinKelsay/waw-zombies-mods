@@ -170,45 +170,45 @@ class TestCycle1LogAnalyzer(unittest.TestCase):
             "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=1;map=nazi_zombie_prototype;start_round=1;target_round=1;run_id=run_100",
             "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=500;start_round=1;map=nazi_zombie_prototype",
             "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=560;map=nazi_zombie_prototype",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=1;next_cycle=1;next_stage=2;next_map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_asylum;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=560;start_round=1;map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=620;map=nazi_zombie_asylum",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=2;map=nazi_zombie_asylum;completed_round=1;next_cycle=1;next_stage=3;next_map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf;next_cycle=1;next_stage=3",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=3;map=nazi_zombie_sumpf;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=620;start_round=1;map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=680;map=nazi_zombie_sumpf",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=3;map=nazi_zombie_sumpf;completed_round=1;next_cycle=1;next_stage=4;next_map=nazi_zombie_factory",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=1;map=nazi_zombie_prototype;completed_round=1;next_cycle=1;next_stage=2;next_map=nazi_zombie_sumpf",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_sumpf;next_cycle=1;next_stage=2",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=2;map=nazi_zombie_sumpf;start_round=2;target_round=2;run_id=run_100",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=1000;start_round=2;map=nazi_zombie_sumpf",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=1620;map=nazi_zombie_sumpf",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=2;map=nazi_zombie_sumpf;completed_round=2;next_cycle=1;next_stage=3;next_map=nazi_zombie_asylum",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=1;next_stage=3",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=3;map=nazi_zombie_asylum;start_round=3;target_round=3;run_id=run_100",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=1620;start_round=3;map=nazi_zombie_asylum",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=1680;map=nazi_zombie_asylum",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=3;map=nazi_zombie_asylum;completed_round=3;next_cycle=1;next_stage=4;next_map=nazi_zombie_factory",
             "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_factory;next_cycle=1;next_stage=4",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=4;map=nazi_zombie_factory;start_round=1;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=680;start_round=1;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=740;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=4;map=nazi_zombie_factory;completed_round=1;next_cycle=2;next_stage=1;next_map=nazi_zombie_prototype",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_prototype;next_cycle=2;next_stage=1",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=1;run_id=run_100",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_prototype",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=4;map=nazi_zombie_factory;start_round=4;target_round=4;run_id=run_100",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=2000;start_round=4;map=nazi_zombie_factory",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=2740;map=nazi_zombie_factory",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=4;map=nazi_zombie_factory;completed_round=4;next_cycle=2;next_stage=1;next_map=nazi_zombie_asylum",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_asylum;next_cycle=2;next_stage=1",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_asylum;start_round=5;target_round=5;run_id=run_100",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=2740;start_round=5;map=nazi_zombie_asylum",
         ]
         return "\n".join(lines) + "\n"
 
     def test_valid_cycle1_log_passes(self) -> None:
         log = self._build_valid_cycle1_log()
-        events, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
+        events, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertEqual(errors, [])
         self.assertTrue(verify_cycle1.is_cycle1_complete(events))
 
     def test_broken_points_carryover_fails(self) -> None:
         log = self._build_valid_cycle1_log().replace(
-            "POINTS_APPLIED|player=n_player;points=560;start_round=1;map=nazi_zombie_asylum",
-            "POINTS_APPLIED|player=n_player;points=500;start_round=1;map=nazi_zombie_asylum",
+            "POINTS_APPLIED|player=n_player;points=1620;start_round=3;map=nazi_zombie_asylum",
+            "POINTS_APPLIED|player=n_player;points=1500;start_round=3;map=nazi_zombie_asylum",
         )
-        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertTrue(any("Points carryover mismatch" in err for err in errors))
 
     def test_fatal_script_error_fails(self) -> None:
         log = self._build_valid_cycle1_log() + "******* script runtime error *******\n"
-        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_target_round=1)
+        _, errors = verify_cycle1.analyze_cycle1_log(log, expected_stage_span=1)
         self.assertTrue(any("Script runtime error" in err for err in errors))
 
 

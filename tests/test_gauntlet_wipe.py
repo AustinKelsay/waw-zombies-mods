@@ -308,7 +308,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         state.set_field("stage", 2)
         state.set_field("total_rounds", 45)
         state.set_field("run_id", "run_c2s2")
-        stage_info = self.gsc.call(RULES_MOD, "get_stage_info", 2, 2)
+        stage_info = self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14)
 
         summary = self.gsc.call(WIPE_MOD, "build_wipe_summary", state, stage_info, 12, "nazi_zombie_asylum")
         self.assertEqual(summary.final_cycle, 2)
@@ -341,7 +341,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.level.set_field("gauntlet_stage_cleared", False)
 
         handled = self.gsc.call(WIPE_MOD, "handle_team_wipe")
@@ -426,7 +426,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.call(WIPE_MOD, "handle_team_wipe")
 
         # Reload persisted state -> inactive
@@ -567,7 +567,7 @@ class TestGauntletWipeGsc(unittest.TestCase):
         self.gsc.level.set_field("script", "nazi_zombie_asylum")
         self.gsc.level.set_field("round_number", 12)
         self.gsc.level.set_field("gauntlet_state", state)
-        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2))
+        self.gsc.level.set_field("gauntlet_stage_info", self.gsc.call(RULES_MOD, "get_stage_info", 2, 2, UNDEFINED, 10, 14))
         self.gsc.level.set_field("gauntlet_stage_cleared", False)
 
         self.assertTrue(self.gsc.call(WIPE_MOD, "maybe_run_test_force_wipe", 12))

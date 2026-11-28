@@ -5,6 +5,9 @@
 //   - gauntlet_run_id               (string Run identifier)
 //   - gauntlet_cycle                (positive integer >= 1)
 //   - gauntlet_stage                (integer 1..4)
+//   - gauntlet_cycle_order          (comma-separated shuffled 4-map sequence for active Cycle)
+//   - gauntlet_start_round          (positive integer >= 1 for active Stage start round)
+//   - gauntlet_target_round         (positive integer >= start_round for hidden Stage Target Round)
 //   - gauntlet_total_rounds         (non-negative integer >= 0)
 //   - gauntlet_pending_transition   ("1" / "0")
 //   - gauntlet_player_points        (serialized ledger "key1=pts1;key2=pts2;...")
@@ -20,7 +23,31 @@
 //
 // Strictly WaW 1.7 GSC compliant (indexed for-loops only; no foreach).
 
-init_fresh_run( run_id )
+resolve_cycle_order_override( dvar_name )
+{
+	raw = GetDvar( dvar_name );
+	if ( raw == "" )
+	{
+		return undefined;
+	}
+	return maps\_gauntlet_rules::parse_cycle_order( raw );
+}
+
+resolve_stage_span_override( explicit_span )
+{
+	if ( IsDefined( explicit_span ) && Int( explicit_span ) >= 1 )
+	{
+		return Int( explicit_span );
+	}
+	override_span = GetDvarInt( "gauntlet_test_stage_span" );
+	if ( override_span >= 1 )
+	{
+		return override_span;
+	}
+	return undefined;
+}
+
+init_fresh_run( run_id, explicit_cycle_order, explicit_stage_span )
 {
 	clear_run_state();
 
@@ -30,11 +57,34 @@ init_fresh_run( run_id )
 		resolved_id = "" + run_id;
 	}
 
+	order = undefined;
+	if ( IsDefined( explicit_cycle_order ) )
+	{
+		order = maps\_gauntlet_rules::parse_cycle_order( explicit_cycle_order );
+	}
+	if ( !IsDefined( order ) )
+	{
+		order = resolve_cycle_order_override( "gauntlet_test_cycle_order" );
+	}
+	if ( !IsDefined( order ) )
+	{
+		order = maps\_gauntlet_rules::build_shuffled_cycle_order( 1, "" );
+	}
+
+	span = resolve_stage_span_override( explicit_stage_span );
+	if ( !IsDefined( span ) )
+	{
+		span = maps\_gauntlet_rules::roll_stage_span();
+	}
+
 	state = SpawnStruct();
 	state.active = true;
 	state.run_id = resolved_id;
 	state.cycle = 1;
 	state.stage = 1;
+	state.cycle_order = maps\_gauntlet_rules::format_cycle_order( order );
+	state.start_round = 1;
+	state.target_round = maps\_gauntlet_rules::compute_stage_target_round( 1, span );
 	state.total_rounds = 0;
 	state.pending_transition = false;
 
@@ -91,6 +141,34 @@ save_run_state( state )
 	}
 	normalized.stage = stage;
 
+	parsed_order = undefined;
+	if ( IsDefined( state ) && IsDefined( state.cycle_order ) )
+	{
+		parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	}
+	if ( IsDefined( parsed_order ) )
+	{
+		normalized.cycle_order = maps\_gauntlet_rules::format_cycle_order( parsed_order );
+	}
+	else
+	{
+		normalized.cycle_order = "";
+	}
+
+	start_round = maps\_gauntlet_rules::get_default_stage_start_round( cycle, stage );
+	if ( IsDefined( state ) && IsDefined( state.start_round ) && Int( state.start_round ) >= 1 )
+	{
+		start_round = Int( state.start_round );
+	}
+	normalized.start_round = start_round;
+
+	target_round = maps\_gauntlet_rules::compute_stage_target_round( start_round, maps\_gauntlet_rules::get_default_stage_span() );
+	if ( IsDefined( state ) && IsDefined( state.target_round ) && Int( state.target_round ) >= start_round )
+	{
+		target_round = Int( state.target_round );
+	}
+	normalized.target_round = target_round;
+
 	total_rounds = 0;
 	if ( IsDefined( state ) && IsDefined( state.total_rounds ) )
 	{
@@ -117,6 +195,9 @@ save_run_state( state )
 	SetDvar( "gauntlet_run_id", normalized.run_id );
 	SetDvar( "gauntlet_cycle", "" + normalized.cycle );
 	SetDvar( "gauntlet_stage", "" + normalized.stage );
+	SetDvar( "gauntlet_cycle_order", normalized.cycle_order );
+	SetDvar( "gauntlet_start_round", "" + normalized.start_round );
+	SetDvar( "gauntlet_target_round", "" + normalized.target_round );
 	SetDvar( "gauntlet_total_rounds", "" + normalized.total_rounds );
 	SetDvar( "gauntlet_pending_transition", pending_str );
 
@@ -149,6 +230,31 @@ load_run_state()
 	}
 	state.stage = stage;
 
+	raw_order = GetDvar( "gauntlet_cycle_order" );
+	parsed_order = maps\_gauntlet_rules::parse_cycle_order( raw_order );
+	if ( IsDefined( parsed_order ) )
+	{
+		state.cycle_order = maps\_gauntlet_rules::format_cycle_order( parsed_order );
+	}
+	else
+	{
+		state.cycle_order = "";
+	}
+
+	start_round = GetDvarInt( "gauntlet_start_round" );
+	if ( start_round < 1 )
+	{
+		start_round = maps\_gauntlet_rules::get_default_stage_start_round( cycle, stage );
+	}
+	state.start_round = start_round;
+
+	target_round = GetDvarInt( "gauntlet_target_round" );
+	if ( target_round < start_round )
+	{
+		target_round = maps\_gauntlet_rules::compute_stage_target_round( start_round, maps\_gauntlet_rules::get_default_stage_span() );
+	}
+	state.target_round = target_round;
+
 	total_rounds = GetDvarInt( "gauntlet_total_rounds" );
 	if ( total_rounds < 0 )
 	{
@@ -162,31 +268,85 @@ load_run_state()
 	return state;
 }
 
-advance_run_state( state, rounds_cleared_in_stage )
+advance_run_state( state, rounds_cleared_in_stage, completed_round )
 {
 	if ( !IsDefined( state ) )
 	{
 		state = load_run_state();
 	}
 
-	next = maps\_gauntlet_rules::get_next_stage_state( state.cycle, state.stage );
-
-	updated = SpawnStruct();
-	updated.active = true;
-	updated.run_id = state.run_id;
-	updated.cycle = next.cycle;
-	updated.stage = next.stage;
-
-	base_total = 0;
-	if ( IsDefined( state.total_rounds ) && Int( state.total_rounds ) > 0 )
+	current_order = undefined;
+	if ( IsDefined( state.cycle_order ) && state.cycle_order != "" )
 	{
-		base_total = Int( state.total_rounds );
+		current_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	}
+	if ( !IsDefined( current_order ) )
+	{
+		current_order = maps\_gauntlet_rules::get_stage_maps();
+	}
+
+	cur_start = maps\_gauntlet_rules::get_default_stage_start_round( state.cycle, state.stage );
+	if ( IsDefined( state.start_round ) && Int( state.start_round ) >= 1 )
+	{
+		cur_start = Int( state.start_round );
 	}
 
 	added = 0;
 	if ( IsDefined( rounds_cleared_in_stage ) && Int( rounds_cleared_in_stage ) > 0 )
 	{
 		added = Int( rounds_cleared_in_stage );
+	}
+
+	resolved_completed = completed_round;
+	if ( !IsDefined( resolved_completed ) || Int( resolved_completed ) < 1 )
+	{
+		if ( added >= 1 )
+		{
+			resolved_completed = ( cur_start + added ) - 1;
+		}
+		else if ( IsDefined( state.target_round ) && Int( state.target_round ) >= cur_start )
+		{
+			resolved_completed = Int( state.target_round );
+		}
+		else
+		{
+			resolved_completed = cur_start;
+		}
+	}
+
+	next_order_override = undefined;
+	if ( Int( state.stage ) >= 4 )
+	{
+		next_order_override = resolve_cycle_order_override( "gauntlet_test_next_cycle_order" );
+		if ( !IsDefined( next_order_override ) )
+		{
+			next_order_override = resolve_cycle_order_override( "gauntlet_test_cycle_order" );
+		}
+	}
+
+	span_override = resolve_stage_span_override( undefined );
+	next = maps\_gauntlet_rules::get_next_stage_state(
+		state.cycle,
+		state.stage,
+		current_order,
+		resolved_completed,
+		next_order_override,
+		span_override
+	);
+
+	updated = SpawnStruct();
+	updated.active = true;
+	updated.run_id = state.run_id;
+	updated.cycle = next.cycle;
+	updated.stage = next.stage;
+	updated.cycle_order = maps\_gauntlet_rules::format_cycle_order( next.cycle_order );
+	updated.start_round = next.start_round;
+	updated.target_round = next.target_round;
+
+	base_total = 0;
+	if ( IsDefined( state.total_rounds ) && Int( state.total_rounds ) > 0 )
+	{
+		base_total = Int( state.total_rounds );
 	}
 
 	updated.total_rounds = base_total + added;
@@ -202,7 +362,7 @@ format_lobby_status( stage_info )
 		return "";
 	}
 
-	return "NEXT STAGE: C" + stage_info.cycle + " S" + stage_info.stage + "/4 - " + stage_info.display_name + " (R" + stage_info.start_round + "-R" + stage_info.target_round + ")";
+	return "NEXT STAGE: C" + stage_info.cycle + " S" + stage_info.stage + "/4 - " + stage_info.display_name + " (Starting R" + stage_info.start_round + ")";
 }
 
 set_lobby_handoff_dvars( next_info )
@@ -233,6 +393,9 @@ clear_run_state()
 	SetDvar( "gauntlet_run_id", "" );
 	SetDvar( "gauntlet_cycle", "" );
 	SetDvar( "gauntlet_stage", "" );
+	SetDvar( "gauntlet_cycle_order", "" );
+	SetDvar( "gauntlet_start_round", "" );
+	SetDvar( "gauntlet_target_round", "" );
 	SetDvar( "gauntlet_total_rounds", "" );
 	SetDvar( "gauntlet_pending_transition", "0" );
 	SetDvar( "gauntlet_player_points", "" );
@@ -757,7 +920,12 @@ get_stale_run_reset_reason( state, current_map, force_fresh_run )
 		return "stale_no_pending_transition";
 	}
 
-	expected_map = maps\_gauntlet_rules::get_map_for_stage( state.stage );
+	parsed_order = undefined;
+	if ( IsDefined( state.cycle_order ) && state.cycle_order != "" )
+	{
+		parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+	}
+	expected_map = maps\_gauntlet_rules::get_map_for_stage_in_order( state.stage, parsed_order );
 	normalized_map = "";
 	if ( IsDefined( current_map ) )
 	{

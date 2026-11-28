@@ -203,6 +203,9 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
                 dvars = _make_enhanced_dvars()
                 dvars.set(LEDGER, "g_1=ac:2,cr:0")
                 if gate:
+                    # ADR-0006 couples all shipped BZ gates when gauntlet_enabled=1;
+                    # isolate single-subsystem gate checks with gauntlet_enabled=0.
+                    dvars.set("gauntlet_enabled", "0")
                     dvars.set(gate, "0")
                 runtime = self.make_stage(dvars, VERRUCKT)
                 player = self.add_player(runtime)
@@ -232,10 +235,13 @@ class TestGauntletWeaponCarryover(unittest.TestCase):
         runtime.call(BRIDGE_MOD, "save_all_players_bz_state", NACHT)
         self.assertEqual(dvars.get(LEDGER), "g_1=ac:0")
 
+        # Classic Mode (gauntlet_enabled=0, bz_enabled=0) leaves bridge ledger untouched.
+        dvars.set("gauntlet_enabled", "0")
         dvars.set("bz_enabled", "0")
         runtime.call(BRIDGE_MOD, "save_all_players_bz_state", NACHT)
         self.assertEqual(dvars.get(LEDGER), "g_1=ac:0")
 
+        # Isolated Enhanced Mode with elements gate off clears disabled element entry.
         dvars.set("bz_enabled", "1")
         dvars.set("bz_elements_enabled", "0")
         runtime.call(BRIDGE_MOD, "save_all_players_bz_state", NACHT)

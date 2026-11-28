@@ -71,7 +71,7 @@ def analyze_coop_stage_clear_log(
     log_text: str,
     expected_next_map: str = "nazi_zombie_asylum",
     expected_next_display: str = "Verruckt",
-    expected_lobby_status: str = "NEXT STAGE: C1 S2/4 - Verruckt (R1-R10)",
+    expected_lobby_status: str = "NEXT STAGE: C1 S2/4 - Verruckt (Starting R2)",
 ) -> tuple[list[GauntletEvent], list[str]]:
     """Validate Scenario 1: Co-op Stage Clear -> lobby handoff without ChangeLevel()."""
     events = verify_cycle1.parse_gauntlet_events(log_text)
@@ -391,6 +391,8 @@ def main(argv: list[str] | None = None) -> int:
                 ("gauntlet_next_map", ""),
                 ("gauntlet_next_display", ""),
                 ("gauntlet_lobby_status", ""),
+                ("gauntlet_test_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                ("gauntlet_test_stage_span", "1"),
                 ("gauntlet_test_force_coop", "1"),
                 ("gauntlet_test_target_round", "1"),
                 ("gauntlet_test_banner_delay", str(args.banner_delay)),
@@ -472,11 +474,14 @@ def main(argv: list[str] | None = None) -> int:
                     ("gauntlet_run_id", "coop_roster_run"),
                     ("gauntlet_cycle", "2"),
                     ("gauntlet_stage", "2"),
+                    ("gauntlet_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,nazi_zombie_factory"),
+                    ("gauntlet_start_round", "10"),
+                    ("gauntlet_target_round", "14"),
                     ("gauntlet_total_rounds", "45"),
                     ("gauntlet_pending_transition", "1"),
                     ("gauntlet_next_map", "nazi_zombie_asylum"),
                     ("gauntlet_next_display", "Verruckt"),
-                    ("gauntlet_lobby_status", "NEXT STAGE: C2 S2/4 - Verruckt (R10-R15)"),
+                    ("gauntlet_lobby_status", "NEXT STAGE: C2 S2/4 - Verruckt (Starting R10)"),
                     ("gauntlet_player_points", ledger),
                     ("gauntlet_spectators", spectators),
                     ("gauntlet_disconnected_players", disconnected),

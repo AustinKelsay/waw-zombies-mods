@@ -18,14 +18,17 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
     def _build_valid_c1_to_c2_wrap_log(self) -> str:
         lines = [
             "Loading fastfile 'mod'",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=4;map=nazi_zombie_factory;start_round=1;target_round=1;run_id=verify_c1_c2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=500;start_round=1;map=nazi_zombie_factory;carried=none;floor=500",
-            "dvar set gauntlet_event GAUNTLET_EVENT|ZOMBIE_SPAWNED_SAMPLE|round=1;health=150;move_speed=walk",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=560;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=4;map=nazi_zombie_factory;completed_round=1;next_cycle=2;next_stage=1;next_map=nazi_zombie_prototype",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=1;stage=4;map=nazi_zombie_factory;start_round=9;target_round=9;run_id=verify_c1_c2",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=4500;start_round=9;map=nazi_zombie_factory;carried=none;floor=4500",
+            "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=1;stage=4;map=nazi_zombie_factory;start_round=9;zombie_health=950;zombie_move_speed=72;spawn_delay=1.3268;next_dog_round=11",
+            "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=1;stage=4;map=nazi_zombie_factory;duration=3",
+            "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=1;stage=4;map=nazi_zombie_factory;duration=3",
+            "dvar set gauntlet_event GAUNTLET_EVENT|ZOMBIE_SPAWNED_SAMPLE|round=9;health=950;move_speed=sprint",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=4560;map=nazi_zombie_factory",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=1;stage=4;map=nazi_zombie_factory;completed_round=9;next_cycle=2;next_stage=1;next_map=nazi_zombie_prototype",
             "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_prototype;next_cycle=2;next_stage=1",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=1;run_id=verify_c1_c2",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_prototype;carried=560;floor=5000",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=14;run_id=verify_c1_c2",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_prototype;carried=4560;floor=5000",
             "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;zombie_health=1045;zombie_move_speed=80;spawn_delay=1.89075;next_dog_round=none",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=1;map=nazi_zombie_prototype;duration=3",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=2;stage=1;map=nazi_zombie_prototype;duration=3",
@@ -36,7 +39,7 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
     def _build_valid_surplus_log(self) -> str:
         lines = [
             "Loading fastfile 'mod'",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=15;run_id=verify_surplus",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;target_round=14;run_id=verify_surplus",
             "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=8500;start_round=10;map=nazi_zombie_prototype;carried=8500;floor=5000",
             "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=2;stage=1;map=nazi_zombie_prototype;start_round=10;zombie_health=1045;zombie_move_speed=80;spawn_delay=1.89075;next_dog_round=none",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=1;map=nazi_zombie_prototype;duration=3",
@@ -48,17 +51,17 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
     def _build_valid_c2_to_c3_wrap_log(self) -> str:
         lines = [
             "Loading fastfile 'mod'",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=4;map=nazi_zombie_factory;start_round=10;target_round=10;run_id=verify_c2_c3",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=5000;start_round=10;map=nazi_zombie_factory;carried=none;floor=5000",
-            "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=2;stage=4;map=nazi_zombie_factory;start_round=10;zombie_health=1045;zombie_move_speed=80;spawn_delay=1.2605;next_dog_round=13",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=2;stage=4;map=nazi_zombie_factory;start_round=14;target_round=14;run_id=verify_c2_c3",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=7000;start_round=14;map=nazi_zombie_factory;carried=none;floor=7000",
+            "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=2;stage=4;map=nazi_zombie_factory;start_round=14;zombie_health=1527;zombie_move_speed=112;spawn_delay=1.02668;next_dog_round=16",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=2;stage=4;map=nazi_zombie_factory;duration=3",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=2;stage=4;map=nazi_zombie_factory;duration=3",
-            "dvar set gauntlet_event GAUNTLET_EVENT|ZOMBIE_SPAWNED_SAMPLE|round=10;health=1045;move_speed=sprint",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=5060;map=nazi_zombie_factory",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=2;stage=4;map=nazi_zombie_factory;completed_round=10;next_cycle=3;next_stage=1;next_map=nazi_zombie_prototype",
+            "dvar set gauntlet_event GAUNTLET_EVENT|ZOMBIE_SPAWNED_SAMPLE|round=14;health=1527;move_speed=sprint",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_SAVED|player=n_player;points=7060;map=nazi_zombie_factory",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_CLEAR|cycle=2;stage=4;map=nazi_zombie_factory;completed_round=14;next_cycle=3;next_stage=1;next_map=nazi_zombie_prototype",
             "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_TRANSITION|mode=solo;next_map=nazi_zombie_prototype;next_cycle=3;next_stage=1",
-            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=3;stage=1;map=nazi_zombie_prototype;start_round=15;target_round=10;run_id=verify_c2_c3",
-            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=7500;start_round=15;map=nazi_zombie_prototype;carried=5060;floor=7500",
+            "dvar set gauntlet_event GAUNTLET_EVENT|STAGE_INIT|cycle=3;stage=1;map=nazi_zombie_prototype;start_round=15;target_round=19;run_id=verify_c2_c3",
+            "dvar set gauntlet_event GAUNTLET_EVENT|POINTS_APPLIED|player=n_player;points=7500;start_round=15;map=nazi_zombie_prototype;carried=7060;floor=7500",
             "dvar set gauntlet_event GAUNTLET_EVENT|HIGH_ROUND_APPLIED|cycle=3;stage=1;map=nazi_zombie_prototype;start_round=15;zombie_health=1679;zombie_move_speed=120;spawn_delay=1.46303;next_dog_round=none",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=3;stage=1;map=nazi_zombie_prototype;duration=3",
             "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_END|cycle=3;stage=1;map=nazi_zombie_prototype;duration=3",
@@ -90,14 +93,13 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
         _, errors = verify_cycle2.analyze_c1_to_c2_wrap_log(bad, expected_prep_duration=3)
         self.assertTrue(any("PREP_PHASE_END" in err for err in errors))
 
-    def test_prep_phase_on_cycle1_fails(self) -> None:
+    def test_missing_prep_phase_on_continuous_cycle1_stage4_fails(self) -> None:
         bad = self._build_valid_c1_to_c2_wrap_log().replace(
-            "ZOMBIE_SPAWNED_SAMPLE|round=1;health=150;move_speed=walk",
-            "PREP_PHASE_START|cycle=1;stage=4;map=nazi_zombie_factory;duration=3\n"
-            "dvar set gauntlet_event GAUNTLET_EVENT|ZOMBIE_SPAWNED_SAMPLE|round=1;health=150;move_speed=walk",
+            "dvar set gauntlet_event GAUNTLET_EVENT|PREP_PHASE_START|cycle=1;stage=4;map=nazi_zombie_factory;duration=3\n",
+            "",
         )
         _, errors = verify_cycle2.analyze_c1_to_c2_wrap_log(bad, expected_prep_duration=3)
-        self.assertTrue(any("Cycle 1" in err for err in errors))
+        self.assertTrue(any("PREP_PHASE_START" in err for err in errors))
 
     def test_surplus_preservation_pass_and_overwrite_fail(self) -> None:
         _, errors = verify_cycle2.analyze_surplus_preservation_log(
@@ -120,9 +122,9 @@ class TestCycle2LogAnalyzers(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
-        # Stale stock dog round (< start_round=10) on factory fails
+        # Stale stock dog round (< start_round=14) on factory fails
         bad_dogs = self._build_valid_c2_to_c3_wrap_log().replace(
-            "next_dog_round=13", "next_dog_round=6"
+            "next_dog_round=16", "next_dog_round=6"
         )
         _, errors = verify_cycle2.analyze_c2_to_c3_wrap_log(bad_dogs, expected_prep_duration=3)
         self.assertTrue(any("next_dog_round" in err for err in errors))

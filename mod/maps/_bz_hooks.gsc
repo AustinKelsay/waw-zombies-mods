@@ -57,11 +57,52 @@ bz_get_weapon_safe( player )
 }
 
 // ---------------------------------------------------------------------------
-// Feature Gates (defaulting to 0 / disabled when unset)
+// Feature Gates (defaulting to 0 / disabled when unset; ADR-0006 couples
+// Zombie Gauntlet onto Enhanced Mode so gauntlet_enabled=1 always enables
+// all shipped Base Zombies subsystems while Classic Mode stays untouched)
 // ---------------------------------------------------------------------------
+
+ensure_gauntlet_enhancements_coupled()
+{
+	if ( GetDvarInt( "gauntlet_enabled" ) != 1 )
+	{
+		return false;
+	}
+
+	if ( GetDvarInt( "bz_enabled" ) != 1 )
+	{
+		SetDvar( "bz_enabled", "1" );
+	}
+	if ( GetDvarInt( "bz_perks_enabled" ) != 1 )
+	{
+		SetDvar( "bz_perks_enabled", "1" );
+	}
+	if ( GetDvarInt( "bz_classes_enabled" ) != 1 )
+	{
+		SetDvar( "bz_classes_enabled", "1" );
+	}
+	if ( GetDvarInt( "bz_pap_enabled" ) != 1 )
+	{
+		SetDvar( "bz_pap_enabled", "1" );
+	}
+	if ( GetDvarInt( "bz_elements_enabled" ) != 1 )
+	{
+		SetDvar( "bz_elements_enabled", "1" );
+	}
+	if ( GetDvar( "bz_companions_enabled" ) == "" )
+	{
+		SetDvar( "bz_companions_enabled", "0" );
+	}
+	return true;
+}
 
 ensure_bz_dvars()
 {
+	if ( ensure_gauntlet_enhancements_coupled() )
+	{
+		return;
+	}
+
 	if ( GetDvar( "bz_enabled" ) == "" )
 	{
 		SetDvar( "bz_enabled", "0" );
@@ -90,11 +131,19 @@ ensure_bz_dvars()
 
 bz_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return true;
+	}
 	return GetDvarInt( "bz_enabled" ) == 1;
 }
 
 bz_perks_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return true;
+	}
 	if ( !bz_enabled() )
 	{
 		return false;
@@ -104,6 +153,10 @@ bz_perks_enabled()
 
 bz_classes_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return true;
+	}
 	if ( !bz_enabled() )
 	{
 		return false;
@@ -113,6 +166,10 @@ bz_classes_enabled()
 
 bz_pap_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return true;
+	}
 	if ( !bz_enabled() )
 	{
 		return false;
@@ -122,6 +179,10 @@ bz_pap_enabled()
 
 bz_elements_enabled()
 {
+	if ( GetDvarInt( "gauntlet_enabled" ) == 1 )
+	{
+		return true;
+	}
 	if ( !bz_enabled() )
 	{
 		return false;

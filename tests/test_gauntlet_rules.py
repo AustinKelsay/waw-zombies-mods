@@ -64,66 +64,118 @@ class TestGauntletRulesStages(unittest.TestCase):
         self.assertIs(self.gsc.call(RULES_MOD, "get_display_name_for_stage", 5), UNDEFINED)
         self.assertIs(self.gsc.call(RULES_MOD, "get_display_name_for_map", "unknown_map"), UNDEFINED)
 
-    def test_stage_and_cycle_advancement_with_stage_4_wrap_around(self) -> None:
-        # Cycle 1: Stage 1 -> 2 -> 3 -> 4
-        s2 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 1)
+    def test_stage_and_cycle_advancement_with_continuous_rounds_and_shuffled_wrap(self) -> None:
+        canonical = self.gsc.call(RULES_MOD, "get_stage_maps")
+        # Cycle 1: Stage 1 (R1..R5) -> Stage 2 (R6..R10) -> Stage 3 (R11..R15) -> Stage 4 (R16..R20)
+        s2 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 1, canonical, 5, UNDEFINED, 5)
         self.assertEqual(s2.cycle, 1)
         self.assertEqual(s2.stage, 2)
         self.assertEqual(s2.map_name, "nazi_zombie_asylum")
         self.assertEqual(s2.display_name, "Verruckt")
-        self.assertEqual(s2.start_round, 1)
+        self.assertEqual(s2.start_round, 6)
         self.assertEqual(s2.target_round, 10)
+        self.assertEqual(s2.prep_duration, 45)
         self.assertFalse(s2.wrapped_cycle)
 
-        s3 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 2)
-        self.assertEqual((s3.cycle, s3.stage, s3.map_name, s3.wrapped_cycle), (1, 3, "nazi_zombie_sumpf", False))
+        s3 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 2, canonical, 10, UNDEFINED, 4)
+        self.assertEqual((s3.cycle, s3.stage, s3.map_name, s3.start_round, s3.target_round, s3.wrapped_cycle), (1, 3, "nazi_zombie_sumpf", 11, 14, False))
 
-        s4 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 3)
-        self.assertEqual((s4.cycle, s4.stage, s4.map_name, s4.wrapped_cycle), (1, 4, "nazi_zombie_factory", False))
+        s4 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 3, canonical, 14, UNDEFINED, 6)
+        self.assertEqual((s4.cycle, s4.stage, s4.map_name, s4.start_round, s4.target_round, s4.wrapped_cycle), (1, 4, "nazi_zombie_factory", 15, 20, False))
 
-        # Cycle 1 Stage 4 -> wraps to Cycle 2 Stage 1 (Nacht der Untoten, rounds 10->15)
-        c2_s1 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 4)
+        # Cycle 1 Stage 4 (factory) -> wraps to Cycle 2 Stage 1 (never repeats factory first!)
+        c2_s1 = self.gsc.call(RULES_MOD, "get_next_stage_state", 1, 4, canonical, 20, UNDEFINED, 5)
         self.assertEqual(c2_s1.cycle, 2)
         self.assertEqual(c2_s1.stage, 1)
-        self.assertEqual(c2_s1.map_name, "nazi_zombie_prototype")
-        self.assertEqual(c2_s1.display_name, "Nacht der Untoten")
-        self.assertEqual(c2_s1.start_round, 10)
-        self.assertEqual(c2_s1.target_round, 15)
+        self.assertNotEqual(c2_s1.map_name, "nazi_zombie_factory")
+        self.assertEqual(c2_s1.start_round, 21)
+        self.assertEqual(c2_s1.target_round, 25)
+        self.assertEqual(c2_s1.prep_duration, 45)
         self.assertTrue(c2_s1.wrapped_cycle)
 
-        # Cycle 9 Stage 4 -> wraps to Cycle 10 Stage 1 (rounds 50->55)
-        c10_s1 = self.gsc.call(RULES_MOD, "get_next_stage_state", 9, 4)
-        self.assertEqual(c10_s1.cycle, 10)
-        self.assertEqual(c10_s1.stage, 1)
-        self.assertEqual(c10_s1.map_name, "nazi_zombie_prototype")
-        self.assertEqual(c10_s1.start_round, 50)
-        self.assertEqual(c10_s1.target_round, 55)
-        self.assertTrue(c10_s1.wrapped_cycle)
+    def test_shuffled_cycle_order_and_no_repeat_boundary_across_many_rolls(self) -> None:
+        all_maps = {
+            "nazi_zombie_prototype",
+            "nazi_zombie_asylum",
+            "nazi_zombie_sumpf",
+            "nazi_zombie_factory",
+        }
+        # Cycle 1 always opens on Nacht and shuffles Stages 2..4 across all 6 permutations
+        c1_tails: set[tuple[str, ...]] = set()
+        for _ in range(120):
+            order = self.gsc.call(RULES_MOD, "build_shuffled_cycle_order", 1, "").to_list()
+            self.assertEqual(len(order), 4)
+            self.assertEqual(set(order), all_maps)
+            self.assertEqual(order[0], "nazi_zombie_prototype")
+            c1_tails.add(tuple(order[1:]))
+        self.assertEqual(len(c1_tails), 6, f"Expected all 6 Cycle 1 tail permutations, got {len(c1_tails)}")
+
+        # Cycle 2+ shuffles all 4 maps and NEVER repeats prev_last_map in slot 0
+        for prev_last in sorted(all_maps):
+            first_seen: set[str] = set()
+            for _ in range(80):
+                order = self.gsc.call(RULES_MOD, "build_shuffled_cycle_order", 2, prev_last).to_list()
+                self.assertEqual(len(order), 4)
+                self.assertEqual(set(order), all_maps)
+                self.assertNotEqual(order[0], prev_last)
+                first_seen.add(order[0])
+            self.assertEqual(first_seen, all_maps - {prev_last})
+
+    def test_parse_and_format_cycle_order_validation(self) -> None:
+        raw = "nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_factory,nazi_zombie_asylum"
+        parsed = self.gsc.call(RULES_MOD, "parse_cycle_order", raw)
+        self.assertEqual(
+            parsed.to_list(),
+            ["nazi_zombie_prototype", "nazi_zombie_sumpf", "nazi_zombie_factory", "nazi_zombie_asylum"],
+        )
+        self.assertEqual(self.gsc.call(RULES_MOD, "format_cycle_order", parsed), raw)
+        # Reject duplicates, missing maps, unknown maps, and empty strings
+        self.assertIs(self.gsc.call(RULES_MOD, "parse_cycle_order", ""), UNDEFINED)
+        self.assertIs(
+            self.gsc.call(RULES_MOD, "parse_cycle_order", "nazi_zombie_prototype,nazi_zombie_prototype,nazi_zombie_sumpf,nazi_zombie_factory"),
+            UNDEFINED,
+        )
+        self.assertIs(
+            self.gsc.call(RULES_MOD, "parse_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf"),
+            UNDEFINED,
+        )
+        self.assertIs(
+            self.gsc.call(RULES_MOD, "parse_cycle_order", "nazi_zombie_prototype,nazi_zombie_asylum,nazi_zombie_sumpf,bogus"),
+            UNDEFINED,
+        )
+
+    def test_stage_span_rolls_in_four_to_six_and_averages_five(self) -> None:
+        self.assertEqual(self.gsc.call(RULES_MOD, "get_min_stage_span"), 4)
+        self.assertEqual(self.gsc.call(RULES_MOD, "get_max_stage_span"), 6)
+        self.assertEqual(self.gsc.call(RULES_MOD, "get_default_stage_span"), 5)
+        rolls = [self.gsc.call(RULES_MOD, "roll_stage_span") for _ in range(180)]
+        self.assertEqual(set(rolls), {4, 5, 6})
+        mean = sum(rolls) / len(rolls)
+        self.assertAlmostEqual(mean, 5.0, delta=0.35)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_stage_target_round", 1, 4), 4)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_stage_target_round", 1, 5), 5)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_stage_target_round", 1, 6), 6)
+        self.assertEqual(self.gsc.call(RULES_MOD, "compute_stage_target_round", 11, 5), 15)
 
     def test_full_three_cycle_stage_walk_and_stage_info_clamping(self) -> None:
-        # Walk 12 consecutive Stage Transitions starting from Cycle 1, Stage 1
-        expected_walk = [
-            (1, 2, "nazi_zombie_asylum", 1, 10, False),
-            (1, 3, "nazi_zombie_sumpf", 1, 10, False),
-            (1, 4, "nazi_zombie_factory", 1, 10, False),
-            (2, 1, "nazi_zombie_prototype", 10, 15, True),
-            (2, 2, "nazi_zombie_asylum", 10, 15, False),
-            (2, 3, "nazi_zombie_sumpf", 10, 15, False),
-            (2, 4, "nazi_zombie_factory", 10, 15, False),
-            (3, 1, "nazi_zombie_prototype", 15, 20, True),
-            (3, 2, "nazi_zombie_asylum", 15, 20, False),
-            (3, 3, "nazi_zombie_sumpf", 15, 20, False),
-            (3, 4, "nazi_zombie_factory", 15, 20, False),
-            (4, 1, "nazi_zombie_prototype", 20, 25, True),
-        ]
+        # Walk 12 consecutive Stage Transitions with continuous 5-round spans
         cycle, stage = 1, 1
-        for exp in expected_walk:
-            nxt = self.gsc.call(RULES_MOD, "get_next_stage_state", cycle, stage)
-            self.assertEqual(
-                (nxt.cycle, nxt.stage, nxt.map_name, nxt.start_round, nxt.target_round, nxt.wrapped_cycle),
-                exp,
-            )
-            cycle, stage = nxt.cycle, nxt.stage
+        order = self.gsc.call(RULES_MOD, "build_shuffled_cycle_order", 1, "")
+        completed = 5
+        for step in range(12):
+            prev_last = order.to_list()[3]
+            nxt = self.gsc.call(RULES_MOD, "get_next_stage_state", cycle, stage, order, completed, UNDEFINED, 5)
+            self.assertEqual(nxt.start_round, completed + 1)
+            self.assertEqual(nxt.target_round, completed + 5)
+            self.assertEqual(nxt.prep_duration, 45)
+            if stage == 4:
+                self.assertTrue(nxt.wrapped_cycle)
+                self.assertEqual((nxt.cycle, nxt.stage), (cycle + 1, 1))
+                self.assertNotEqual(nxt.map_name, prev_last)
+            else:
+                self.assertFalse(nxt.wrapped_cycle)
+                self.assertEqual((nxt.cycle, nxt.stage), (cycle, stage + 1))
+            cycle, stage, order, completed = nxt.cycle, nxt.stage, nxt.cycle_order, nxt.target_round
 
         # Defensive clamping in get_stage_info
         clamped_low = self.gsc.call(RULES_MOD, "get_stage_info", 0, 0)
@@ -136,44 +188,35 @@ class TestGauntletRulesRoundBandsAndPrep(unittest.TestCase):
     def setUp(self) -> None:
         self.gsc = GscRuntime(MOD_ROOT)
 
-    def test_inclusive_round_bands_cycles_1_through_10(self) -> None:
-        # Independent worked-out round-band table for Cycles 1..10
-        expected_bands = [
-            (1, 1, 10),
-            (2, 10, 15),
-            (3, 15, 20),
-            (4, 20, 25),
-            (5, 25, 30),
-            (6, 30, 35),
-            (7, 35, 40),
-            (8, 40, 45),
-            (9, 45, 50),
-            (10, 50, 55),
+    def test_default_continuous_round_bands_across_cycles(self) -> None:
+        # Default 5-round continuous progression: C1 S1=R1..5, C2 S1=R21..25, C3 S1=R41..45
+        expected_cycle_starts = [
+            (1, 1, 5),
+            (2, 21, 25),
+            (3, 41, 45),
+            (4, 61, 65),
         ]
-        for cycle, exp_start, exp_target in expected_bands:
+        for cycle, exp_start, exp_target in expected_cycle_starts:
             self.assertEqual(self.gsc.call(RULES_MOD, "get_cycle_start_round", cycle), exp_start)
             self.assertEqual(self.gsc.call(RULES_MOD, "get_cycle_target_round", cycle), exp_target)
-            info = self.gsc.call(RULES_MOD, "get_stage_info", cycle, 3)
-            self.assertEqual(info.cycle, cycle)
-            self.assertEqual(info.stage, 3)
-            self.assertEqual(info.map_name, "nazi_zombie_sumpf")
-            self.assertEqual(info.display_name, "Shi No Numa")
-            self.assertEqual(info.start_round, exp_start)
-            self.assertEqual(info.target_round, exp_target)
+
+        # Stage 3 of Cycle 1 defaults to R11..R15 (Prep Phase active since start_round > 1)
+        info = self.gsc.call(RULES_MOD, "get_stage_info", 1, 3)
+        self.assertEqual((info.cycle, info.stage, info.start_round, info.target_round, info.prep_duration), (1, 3, 11, 15, 45))
 
     def test_target_round_reached_boundaries(self) -> None:
-        self.assertFalse(self.gsc.call(RULES_MOD, "is_target_round_reached", 9, 10))
-        self.assertTrue(self.gsc.call(RULES_MOD, "is_target_round_reached", 10, 10))
-        self.assertTrue(self.gsc.call(RULES_MOD, "is_target_round_reached", 11, 10))
+        self.assertFalse(self.gsc.call(RULES_MOD, "is_target_round_reached", 4, 5))
+        self.assertTrue(self.gsc.call(RULES_MOD, "is_target_round_reached", 5, 5))
+        self.assertTrue(self.gsc.call(RULES_MOD, "is_target_round_reached", 6, 5))
         self.assertFalse(self.gsc.call(RULES_MOD, "is_target_round_reached", 14, 15))
         self.assertTrue(self.gsc.call(RULES_MOD, "is_target_round_reached", 15, 15))
         self.assertFalse(self.gsc.call(RULES_MOD, "is_target_round_reached", UNDEFINED, 10))
 
-    def test_prep_phase_duration(self) -> None:
+    def test_prep_phase_duration_by_start_round(self) -> None:
         self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 0), 0)
         self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 1), 0)
         self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 2), 45)
-        self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 3), 45)
+        self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 5), 45)
         self.assertEqual(self.gsc.call(RULES_MOD, "get_prep_phase_duration", 10), 45)
 
 

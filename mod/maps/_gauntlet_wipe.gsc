@@ -69,7 +69,22 @@ build_wipe_summary( state, stage_info, final_round, current_map )
 
 	if ( !IsDefined( stage_info ) )
 	{
-		stage_info = maps\_gauntlet_rules::get_stage_info( final_cycle, final_stage );
+		parsed_order = undefined;
+		if ( IsDefined( state ) && IsDefined( state.cycle_order ) && state.cycle_order != "" )
+		{
+			parsed_order = maps\_gauntlet_rules::parse_cycle_order( state.cycle_order );
+		}
+		state_start = undefined;
+		state_target = undefined;
+		if ( IsDefined( state ) && IsDefined( state.start_round ) )
+		{
+			state_start = state.start_round;
+		}
+		if ( IsDefined( state ) && IsDefined( state.target_round ) )
+		{
+			state_target = state.target_round;
+		}
+		stage_info = maps\_gauntlet_rules::get_stage_info( final_cycle, final_stage, parsed_order, state_start, state_target );
 	}
 
 	if ( resolved_map == "" && IsDefined( stage_info.map_name ) )

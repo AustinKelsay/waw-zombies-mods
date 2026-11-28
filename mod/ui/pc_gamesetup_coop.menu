@@ -37,7 +37,10 @@
 		onOpen
 		{
 			uiScript loadArenas;
-			exec "party_editingsettings 1"
+			exec "party_editingsettings 1";
+			execOnDvarIntValue bz_enabled 0 "set waw_game_mode 0";
+			execOnDvarIntValue bz_enabled 1 "set waw_game_mode 1";
+			execOnDvarIntValue gauntlet_enabled 1 "set waw_game_mode 2";
 		}
 		onClose
 		{
@@ -77,18 +80,16 @@
 
 	#undef	CHOICE_DVAR_WIDTH_OFFSET
 	#define	CHOICE_DVAR_WIDTH_OFFSET 170
-		// Zombie Gauntlet toggle: 0 = Classic Mode, 1 = Zombie Gauntlet
+		// 3-Mode selector (ADR-0006): 0 = Classic Mode, 1 = Enhanced Mode, 2 = Zombie Gauntlet
 		GAUNTLET_COOP_SETUP_TOGGLE( 8 )
-		// Base Zombies Enhancements toggle: 0 = Off (Classic), 1 = Base Zombies
-		BZ_COOP_SETUP_TOGGLE( 9 )
 
 	#undef	CHOICE_DVAR_WIDTH_OFFSET
 	#define	CHOICE_DVAR_WIDTH_OFFSET 60
 
 		CHOICE_SEPARATOR( CHOICE_SEP_2 )
 
-		CHOICE_BUTTON_VIS( 			10, "@MENU_GAME_TYPE_SETTINGS", LOCAL_GAMERULES_ACTION, when( dvarString( ui_netGameType ) != 1 && dvarInt( gauntlet_enabled ) == 0 ) )
-		CHOICE_DBUTTON_VIS( 		10, "@MENU_GAME_TYPE_SETTINGS", when( dvarString( ui_netGameType ) == 1 || dvarInt( gauntlet_enabled ) == 1 ) )
+		CHOICE_BUTTON_VIS( 			9, "@MENU_GAME_TYPE_SETTINGS", LOCAL_GAMERULES_ACTION, when( dvarString( ui_netGameType ) != 1 && dvarInt( gauntlet_enabled ) == 0 ) )
+		CHOICE_DBUTTON_VIS( 		9, "@MENU_GAME_TYPE_SETTINGS", when( dvarString( ui_netGameType ) == 1 || dvarInt( gauntlet_enabled ) == 1 ) )
 
 		// map selection (unmodified stock picker in Classic Mode; locked in Gauntlet)
 		itemDef

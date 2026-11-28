@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import random
 import re
 from typing import Any
 
@@ -717,10 +718,16 @@ class FakeDvarStore:
 class GscRuntime:
     """Loads and executes WaW 1.7 `.gsc` modules rooted under `mod_root`."""
 
-    def __init__(self, mod_root: Path, dvars: FakeDvarStore | None = None) -> None:
+    def __init__(
+        self,
+        mod_root: Path,
+        dvars: FakeDvarStore | None = None,
+        rng_seed: int | None = 1337,
+    ) -> None:
         self.mod_root = Path(mod_root)
         self.dvars = dvars if dvars is not None else FakeDvarStore()
         self._modules: dict[str, dict[str, FunctionDef]] = {}
+        self._rng = random.Random(rng_seed)
 
     def normalize_module_key(self, module_path: str) -> str:
         key = module_path.replace("\\", "/").lower()
@@ -806,6 +813,17 @@ class GscRuntime:
                 raise GscRuntimeError(f"line {line}: SetDvar requires 2 arguments")
             self.dvars.set(_waw_to_str(args[0]), args[1])
             return True, UNDEFINED
+        if name_lower == "randomint":
+            upper = _waw_int(args[0]) if args else 0
+            if upper <= 1:
+                return True, 0
+            return True, self._rng.randrange(0, upper)
+        if name_lower == "randomintrange":
+            lo = _waw_int(args[0]) if len(args) >= 1 else 0
+            hi = _waw_int(args[1]) if len(args) >= 2 else lo + 1
+            if hi <= lo:
+                return True, lo
+            return True, self._rng.randrange(lo, hi)
         if name_lower == "println":
             return True, UNDEFINED
         return False, UNDEFINED

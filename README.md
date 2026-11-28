@@ -1,6 +1,9 @@
 # WaW Zombies Mods (`waw_gauntlet`)
 
-Unified vanilla Steam 1.7 Call of Duty: World at War Nazi Zombies mod package and automated build/verification tooling for **Zombie Gauntlet** alongside untouched **Classic Mode**.
+Unified vanilla Steam 1.7 Call of Duty: World at War Nazi Zombies mod package and automated build/verification tooling offering **three clean modes** ([ADR-0006](docs/adr/0006-three-mode-architecture-and-unified-gauntlet.md)):
+- **Classic Mode** (`gauntlet_enabled 0`, `bz_enabled 0`): 100% untouched vanilla Nazi Zombies on any of the four Stock Maps.
+- **Enhanced Mode** (`gauntlet_enabled 0`, `bz_enabled 1`): Single-map Base Zombies enhancements (Perks Expansion, 6 Classes, Pack-a-Punch Expansion, Elemental & Special Arsenal) on any individual Stock Map.
+- **Zombie Gauntlet** (`gauntlet_enabled 1`, implicitly enables Enhanced Mode): Enhanced Mode + endless shuffled 4-map progression with continuously escalating randomized 4–6 round Stages ([Gauntlet ADR-0001](docs/contexts/zombie-gauntlet/docs/adr/0001-shuffled-cycles-and-continuous-randomized-stage-bands.md)).
 
 See [GLOSSARY.md](GLOSSARY.md) for canonical terminology, [docs/adr/](docs/adr/) for architectural decisions, and [docs/art/](docs/art/) for the Council-locked **North Star Art Direction** (Sheets 01–11 covering all custom 3D weapons, stations, traps, PaP finishes, Phase 3 Companion rig, and 2D HUD icons).
 
@@ -74,10 +77,13 @@ See [docs/verification.md](docs/verification.md) for stage details, flags (`--sk
 Close World at War before rebuilding an active mod so the game reloads `mod.ff`. Then launch directly via Steam:
 
 ```sh
-# Classic Mode (default: gauntlet_enabled 0)
+# Classic Mode (default: gauntlet_enabled 0, bz_enabled 0)
 steam -applaunch 10090 +set fs_game mods/waw_gauntlet +map nazi_zombie_prototype
 
-# Zombie Gauntlet enabled
+# Enhanced Mode on any single Stock Map
+steam -applaunch 10090 +set fs_game mods/waw_gauntlet +set bz_enabled 1 +set bz_perks_enabled 1 +set bz_classes_enabled 1 +set bz_pap_enabled 1 +set bz_elements_enabled 1 +map nazi_zombie_factory
+
+# Zombie Gauntlet (automatically enables Enhanced Mode + shuffled continuous progression)
 steam -applaunch 10090 +set fs_game mods/waw_gauntlet +set gauntlet_enabled 1 +map nazi_zombie_prototype
 ```
 
