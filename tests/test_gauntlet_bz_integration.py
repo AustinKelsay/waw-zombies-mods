@@ -447,8 +447,11 @@ class TestGauntletBzIntegration(unittest.TestCase):
             "gauntlet_spectators",
             "gauntlet_lobby_status",
         )
+        clear_m = re.search(r"#define\s+GAUNTLET_CLEAR_RUN_STATE_EXEC\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
+        self.assertIsNotNone(clear_m)
+        for dvar in all_persisted_run_dvars:
+            self.assertRegex(clear_m.group(0), rf'setdvar {dvar} "[^"]*"')
         for macro in (
-            "GAUNTLET_CLEAR_RUN_STATE_EXEC",
             "GAUNTLET_SOLO_START_ACTION",
             "GAUNTLET_CLASSIC_MODE_ACTION",
             "GAUNTLET_COOP_FRESH_LOCK_ACTION",
@@ -456,8 +459,11 @@ class TestGauntletBzIntegration(unittest.TestCase):
             with self.subTest(macro=macro):
                 m = re.search(rf"#define\s+{macro}\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
                 self.assertIsNotNone(m, f"Missing {macro}")
-                for dvar in all_persisted_run_dvars:
-                    self.assertIn(f"set {dvar}", m.group(0))
+                self.assertIn("GAUNTLET_CLEAR_RUN_STATE_EXEC", m.group(0))
+
+        # Zero escaped quotes inside menu exec strings (linker_pc.exe strips backslashes, breaking UI_RunMenuScript).
+        self.assertNotIn('\\"', gauntlet_inc, "Escaped quotes inside exec break WaW 1.7 linker_pc.exe menu actions")
+        self.assertNotIn('\\"', bz_inc, "Escaped quotes inside exec break WaW 1.7 linker_pc.exe menu actions")
 
         coop_mode_m = re.search(r"#define\s+GAUNTLET_COOP_MODE_ACTION\b.*?(?:\n\n|\Z)", gauntlet_inc, re.DOTALL)
         self.assertIsNotNone(coop_mode_m)

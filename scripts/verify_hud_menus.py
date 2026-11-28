@@ -144,19 +144,19 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
             ("GAUNTLET_SOLO_START_ACTION", "Solo start action macro"),
             ("set gauntlet_enabled 1", "Solo Gauntlet mode enable"),
             ("set bz_enabled 1", "Unified Gauntlet Enhanced Mode enable"),
-            ("set gauntlet_active 0", "Solo stale active reset"),
-            ("set gauntlet_pending_transition 0", "Solo stale transition reset"),
-            ("set gauntlet_cycle 1", "Solo cycle reset"),
-            ("set gauntlet_stage 1", "Solo stage reset"),
-            ("set gauntlet_cycle_order", "Solo cycle order reset"),
-            ("set gauntlet_start_round", "Solo start round reset"),
-            ("set gauntlet_target_round", "Solo target round reset"),
-            ("set gauntlet_total_rounds 0", "Solo total_rounds reset"),
-            ("set gauntlet_player_points", "Solo player points ledger reset"),
-            ("set gauntlet_player_perks", "Solo player perks ledger reset"),
-            ("set gauntlet_next_map", "Solo next map handoff reset"),
-            ("set gauntlet_next_display", "Solo next display handoff reset"),
-            ("set gauntlet_lobby_status", "Solo lobby status reset"),
+            ('setdvar gauntlet_active "0"', "Solo stale active reset"),
+            ('setdvar gauntlet_pending_transition "0"', "Solo stale transition reset"),
+            ('setdvar gauntlet_cycle "1"', "Solo cycle reset"),
+            ('setdvar gauntlet_stage "1"', "Solo stage reset"),
+            ('setdvar gauntlet_cycle_order ""', "Solo cycle order reset"),
+            ('setdvar gauntlet_start_round ""', "Solo start round reset"),
+            ('setdvar gauntlet_target_round ""', "Solo target round reset"),
+            ('setdvar gauntlet_total_rounds "0"', "Solo total_rounds reset"),
+            ('setdvar gauntlet_player_points ""', "Solo player points ledger reset"),
+            ('setdvar gauntlet_player_perks ""', "Solo player perks ledger reset"),
+            ('setdvar gauntlet_next_map ""', "Solo next map handoff reset"),
+            ('setdvar gauntlet_next_display ""', "Solo next display handoff reset"),
+            ('setdvar gauntlet_lobby_status ""', "Solo lobby status reset"),
             ("map nazi_zombie_prototype", "Solo launch Nacht der Untoten"),
             ("GAUNTLET_CLASSIC_MODE_ACTION", "Classic Mode disable macro"),
             ("set gauntlet_enabled 0", "Classic Mode explicit disable"),
@@ -177,6 +177,8 @@ def validate_ui_contracts(ui_dir: Path = DEFAULT_MOD_UI_DIR) -> list[str]:
         for forbidden in ("GAUNTLET_ENHANCED_SOLO_START_ACTION", "ENHANCED GAUNTLET", "Classic Gauntlet"):
             if forbidden in inc:
                 errors.append(f"gauntlet_menus.inc still contains retired split token {forbidden!r}")
+        if '\\"' in inc:
+            errors.append('gauntlet_menus.inc contains escaped quotes (\\") inside menu strings (stripped by linker_pc.exe)')
 
     # Validate pc_gamesetup_coop.menu structure and contracts
     coop = texts.get("pc_gamesetup_coop.menu", "")
