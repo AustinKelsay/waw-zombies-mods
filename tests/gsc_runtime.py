@@ -8,6 +8,7 @@ Python reimplementation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import random
 import re
@@ -824,6 +825,12 @@ class GscRuntime:
             if hi <= lo:
                 return True, lo
             return True, self._rng.randrange(lo, hi)
+        if name_lower == "anglestoforward":
+            ang = args[0] if args else UNDEFINED
+            pitch = math.radians(float(ang[0])) if isinstance(ang, GscArray) else 0.0
+            yaw = math.radians(float(ang[1])) if isinstance(ang, GscArray) else 0.0
+            cp = math.cos(pitch)
+            return True, GscArray([cp * math.cos(yaw), cp * math.sin(yaw), -math.sin(pitch)])
         if name_lower == "println":
             return True, UNDEFINED
         return False, UNDEFINED

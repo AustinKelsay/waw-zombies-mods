@@ -293,6 +293,38 @@ bz_special_play_stock_fx( kind, pos )
 // 1. War Club (Per-Player Melee Slot Swap, Cleave & PaP AOE Knockback Smash)
 // ---------------------------------------------------------------------------
 
+bz_special_sync_war_club_melee_lock( player )
+{
+	if ( !IsDefined( player ) )
+	{
+		return;
+	}
+	// Stock wall Bowie bought while the club is equipped: hand melee to Bowie here, since the
+	// suppressed native melee can no longer reach the MOD_MELEE handoff in bz_special_on_actor_damage.
+	if ( bz_elements_enabled() && maps\_bz_state::bz_state_get_melee_slot( player ) == "war_club" && player HasPerk( "specialty_altmelee" ) )
+	{
+		maps\_bz_state::bz_state_sync_bowie_ownership( player, true );
+		player.bz_melee_slot = "bowie";
+		player.has_altmelee = true;
+		bz_special_update_hud( player );
+	}
+	should_suppress = bz_elements_enabled() &&
+		IsAlive( player ) &&
+		!bz_special_player_is_downed( player ) &&
+		maps\_bz_state::bz_state_get_melee_slot( player ) == "war_club";
+	if ( should_suppress )
+	{
+		// Suppress stock K-Bar knife slash animation so pressing Melee immediately swings the 3D War Club viewmodel.
+		player AllowMelee( false );
+		player.bz_war_club_melee_suppressed = true;
+	}
+	else if ( IsDefined( player.bz_war_club_melee_suppressed ) && player.bz_war_club_melee_suppressed )
+	{
+		player AllowMelee( true );
+		player.bz_war_club_melee_suppressed = false;
+	}
+}
+
 bz_special_sync_melee_slot_perk( player )
 {
 	if ( !IsDefined( player ) )
@@ -310,6 +342,7 @@ bz_special_sync_melee_slot_perk( player )
 		player SetPerk( "specialty_altmelee" );
 		player.has_altmelee = true;
 	}
+	bz_special_sync_war_club_melee_lock( player );
 }
 
 bz_special_war_club_stagger_timer( stagger_sec, expected_until )
@@ -327,6 +360,54 @@ bz_special_war_club_stagger_timer( stagger_sec, expected_until )
 		self.bz_war_club_stagger_until = 0;
 		self.bz_war_club_staggered = false;
 		maps\_bz_hooks::bz_recompute_zombie_move_rate( self );
+	}
+}
+
+bz_special_snap_push_z( px, py, ref_z, zombie )
+{
+	push_z = ref_z;
+	floor_start = ( px, py, ref_z + 24.0 );
+	floor_end = ( px, py, ref_z - 128.0 );
+	ftr = BulletTrace( floor_start, floor_end, false, zombie );
+	if ( IsDefined( ftr ) && IsDefined( ftr["fraction"] ) && ftr["fraction"] > 0.02 && ftr["fraction"] < 1.0 && IsDefined( ftr["position"] ) )
+	{
+		snapped_z = ftr["position"][2];
+		if ( snapped_z <= ref_z + 36.0 && snapped_z >= ref_z - 128.0 )
+		{
+			push_z = snapped_z;
+		}
+	}
+	return push_z;
+}
+
+bz_special_slide_zombie_knockback( start_x, start_y, start_z, dx_total, dy_total, z_ang, seq )
+{
+	self endon( "death" );
+	level endon( "end_game" );
+
+	// Decelerating kinetic slide over 4 frames (0.20s) after frame-0 impact burst so knockback glides smoothly instead of blinking.
+	fracs = [];
+	fracs[0] = 0.60;
+	fracs[1] = 0.78;
+	fracs[2] = 0.91;
+	fracs[3] = 1.00;
+	cur_z = start_z;
+	for ( i = 0; i < fracs.size; i++ )
+	{
+		wait( 0.05 );
+		if ( !IsDefined( self ) || !IsAlive( self ) )
+		{
+			return;
+		}
+		if ( !IsDefined( self.bz_knockback_seq ) || self.bz_knockback_seq != seq )
+		{
+			return;
+		}
+		f = fracs[i];
+		px = start_x + ( dx_total * f );
+		py = start_y + ( dy_total * f );
+		cur_z = bz_special_snap_push_z( px, py, cur_z, self );
+		self ForceTeleport( ( px, py, cur_z ), z_ang );
 	}
 }
 
@@ -354,45 +435,56 @@ bz_special_push_zombie_safely( zombie, attacker_org, fallback_fwd, push_dist )
 
 	raw_x = z0_x + ( nx * push_dist );
 	raw_y = z0_y + ( ny * push_dist );
-	trace_start = ( z0_x, z0_y, z0_z + 24 );
-	trace_end = ( raw_x, raw_y, z0_z + 24 );
-	push_x = raw_x;
-	push_y = raw_y;
+	safe_frac = 1.0;
 
-	tr = BulletTrace( trace_start, trace_end, false, zombie );
-	if ( IsDefined( tr ) && IsDefined( tr["fraction"] ) && tr["fraction"] < 1.0 )
+	// Trace both waist (+24u) and chest (+48u) so low cover, railings, and walls cleanly cap pushback without clipping.
+	tr_lo = BulletTrace( ( z0_x, z0_y, z0_z + 24 ), ( raw_x, raw_y, z0_z + 24 ), false, zombie );
+	if ( IsDefined( tr_lo ) && IsDefined( tr_lo["fraction"] ) && tr_lo["fraction"] < safe_frac )
 	{
-		safe_frac = tr["fraction"] - 0.15;
+		safe_frac = tr_lo["fraction"];
+	}
+	tr_hi = BulletTrace( ( z0_x, z0_y, z0_z + 48 ), ( raw_x, raw_y, z0_z + 48 ), false, zombie );
+	if ( IsDefined( tr_hi ) && IsDefined( tr_hi["fraction"] ) && tr_hi["fraction"] < safe_frac )
+	{
+		safe_frac = tr_hi["fraction"];
+	}
+
+	if ( safe_frac < 1.0 )
+	{
+		safe_frac = safe_frac - 0.18;
 		if ( safe_frac < 0.0 )
 		{
 			safe_frac = 0.0;
 		}
-		push_x = z0_x + ( nx * push_dist * safe_frac );
-		push_y = z0_y + ( ny * push_dist * safe_frac );
 	}
 
-	// Floor-snap trace (+24u down to -128u) so zombies pushed off stairs/slopes/catwalks
-	// land cleanly on terrain below without floating or clipping through steps.
-	push_z = z0_z;
-	floor_start = ( push_x, push_y, z0_z + 24.0 );
-	floor_end = ( push_x, push_y, z0_z - 128.0 );
-	ftr = BulletTrace( floor_start, floor_end, false, zombie );
-	if ( IsDefined( ftr ) && IsDefined( ftr["fraction"] ) && ftr["fraction"] > 0.02 && ftr["fraction"] < 1.0 && IsDefined( ftr["position"] ) )
+	total_dist = push_dist * safe_frac;
+	if ( total_dist < 4.0 )
 	{
-		snapped_z = ftr["position"][2];
-		if ( snapped_z <= z0_z + 36.0 && snapped_z >= z0_z - 128.0 )
-		{
-			push_z = snapped_z;
-		}
+		return false;
 	}
 
-	push_org = ( push_x, push_y, push_z );
+	dx_total = nx * total_dist;
+	dy_total = ny * total_dist;
 	z_ang = ( 0, 0, 0 );
 	if ( IsDefined( zombie.angles ) )
 	{
 		z_ang = zombie.angles;
 	}
-	zombie ForceTeleport( push_org, z_ang );
+
+	seq = 1;
+	if ( IsDefined( zombie.bz_knockback_seq ) )
+	{
+		seq = Int( zombie.bz_knockback_seq ) + 1;
+	}
+	zombie.bz_knockback_seq = seq;
+
+	// Immediate 34% impact impulse on frame 0 + smooth 4-frame decelerating slide for the remaining 66%.
+	step0_x = z0_x + ( dx_total * 0.34 );
+	step0_y = z0_y + ( dy_total * 0.34 );
+	step0_z = bz_special_snap_push_z( step0_x, step0_y, z0_z, zombie );
+	zombie ForceTeleport( ( step0_x, step0_y, step0_z ), z_ang );
+	zombie thread bz_special_slide_zombie_knockback( z0_x, z0_y, step0_z, dx_total, dy_total, z_ang, seq );
 	return true;
 }
 
@@ -423,23 +515,25 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	}
 	fallback_fwd = ( fx, fy, 0 );
 
-	// Both Base and PaP War Club deliver immediate wall-safe floor-snapped crowd knockback & stagger;
-	// PaP War Club expands to a wide sweeping arc with heavier pushback, longer stagger, and higher cleave damage.
-	push_dist = 104;
-	stagger_sec = 1.5;
+	// Distance-scaled wall-safe kinetic knockback + stagger: point-blank hits hurl zombies firmly back,
+	// tapering smoothly toward the outer cone edge so enemies slide naturally instead of blinking across the room.
+	max_push_dist = 84.0;
+	min_push_dist = 36.0;
+	stagger_sec = 1.4;
 	min_dot = 0.25;
 	cleave_dmg = Int( smash_damage * 0.75 );
-	eq_scale = 0.22;
-	eq_dur = 0.22;
+	eq_scale = 0.20;
+	eq_dur = 0.20;
 	eq_rad = 112;
 	if ( has_pap_wc )
 	{
-		push_dist = 152;
-		stagger_sec = 2.2;
+		max_push_dist = 118.0;
+		min_push_dist = 54.0;
+		stagger_sec = 2.1;
 		min_dot = -0.35;
 		cleave_dmg = Int( smash_damage * 0.85 );
-		eq_scale = 0.38;
-		eq_dur = 0.32;
+		eq_scale = 0.34;
+		eq_dur = 0.30;
 		eq_rad = 160;
 	}
 	if ( cleave_dmg < 300 )
@@ -454,6 +548,38 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 	stagger_until = now + Int( stagger_sec * 1000 );
 	enemies = GetAiSpeciesArray( "axis", "all" );
 	attacker.bz_war_club_cleaving = true;
+
+	// When triggered directly by MeleeButtonPressed (stock knife suppressed via AllowMelee(false)),
+	// select the closest forward zombie within reach (<=80u, dot>=0.45) to receive 100% primary War Club damage.
+	direct_primary = undefined;
+	if ( !IsDefined( primary_zombie ) && IsDefined( enemies ) )
+	{
+		best_pdist = 80.0;
+		for ( pi = 0; pi < enemies.size; pi++ )
+		{
+			cand = enemies[pi];
+			if ( !IsDefined( cand ) || !IsAlive( cand ) || !IsDefined( cand.origin ) || bz_special_is_hidden_spawning_dog( cand ) )
+			{
+				continue;
+			}
+			cdist = Distance( p_org, cand.origin );
+			if ( cdist > best_pdist )
+			{
+				continue;
+			}
+			chdist = Distance( ( p_org[0], p_org[1], 0 ), ( cand.origin[0], cand.origin[1], 0 ) );
+			cdot = 1.0;
+			if ( chdist > 1.0 )
+			{
+				cdot = ( ( ( cand.origin[0] - p_org[0] ) / chdist ) * fx ) + ( ( ( cand.origin[1] - p_org[1] ) / chdist ) * fy );
+			}
+			if ( cdot >= 0.45 )
+			{
+				best_pdist = cdist;
+				direct_primary = cand;
+			}
+		}
+	}
 
 	if ( IsDefined( enemies ) )
 	{
@@ -471,8 +597,9 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 				continue;
 			}
 
-			is_primary = ( IsDefined( primary_zombie ) && z == primary_zombie );
-			if ( !is_primary && dist > 48.0 )
+			is_stock_primary = ( IsDefined( primary_zombie ) && z == primary_zombie );
+			is_direct_primary = ( IsDefined( direct_primary ) && z == direct_primary );
+			if ( !is_stock_primary && !is_direct_primary && dist > 48.0 )
 			{
 				hdist = Distance( ( p_org[0], p_org[1], 0 ), ( z.origin[0], z.origin[1], 0 ) );
 				if ( hdist > 1.0 )
@@ -485,9 +612,14 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 				}
 			}
 
-			if ( !is_primary )
+			if ( !is_stock_primary )
 			{
-				final_cleave_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, cleave_dmg, "MOD_MELEE", "war_club", attacker, smash_pos );
+				base_hit_dmg = cleave_dmg;
+				if ( is_direct_primary )
+				{
+					base_hit_dmg = smash_damage;
+				}
+				final_cleave_dmg = maps\_bz_elem_new::bz_elem_new_apply_status_damage_mult( z, base_hit_dmg, "MOD_MELEE", "war_club", attacker, smash_pos );
 				z.bz_in_damage_dispatch = true;
 				z.bz_damage_dispatch_time = now;
 				z DoDamage( final_cleave_dmg, smash_pos, attacker );
@@ -496,7 +628,17 @@ bz_special_war_club_smash( attacker, primary_zombie, hit_origin, has_pap_wc, sma
 
 			if ( IsAlive( z ) )
 			{
-				if ( bz_special_push_zombie_safely( z, p_org, fallback_fwd, push_dist ) )
+				falloff = 0.0;
+				if ( radius > 1.0 )
+				{
+					falloff = dist / radius;
+					if ( falloff > 1.0 )
+					{
+						falloff = 1.0;
+					}
+				}
+				scaled_push = max_push_dist - ( ( max_push_dist - min_push_dist ) * falloff );
+				if ( bz_special_push_zombie_safely( z, p_org, fallback_fwd, scaled_push ) )
 				{
 					knockbacks++;
 				}
@@ -537,7 +679,12 @@ bz_special_restore_war_club_viewmodel( prev_weap )
 	self endon( "disconnect" );
 	level endon( "end_game" );
 
-	wait( 0.38 );
+	// Wait for the temporary War Club viewmodel raise to complete before holding the swing and restoring prev_weap (A12/S12).
+	for ( raise_t = 0; raise_t < 16 && IsDefined( self ) && self HasWeapon( "bz_war_club" ) && ( self GetCurrentWeapon() ) != "bz_war_club"; raise_t++ )
+	{
+		wait( 0.05 );
+	}
+	wait( 0.30 );
 	if ( !IsDefined( self ) )
 	{
 		return;
@@ -2576,6 +2723,7 @@ bz_special_watch_war_club_melee()
 
 	for ( ;; )
 	{
+		bz_special_sync_war_club_melee_lock( self );
 		if ( bz_elements_enabled() &&
 			IsDefined( self ) &&
 			IsAlive( self ) &&
@@ -2899,6 +3047,11 @@ bz_special_on_end_game()
 		player = players[i];
 		if ( IsDefined( player ) )
 		{
+			if ( IsDefined( player.bz_war_club_melee_suppressed ) && player.bz_war_club_melee_suppressed )
+			{
+				player AllowMelee( true );
+				player.bz_war_club_melee_suppressed = false;
+			}
 			player.bz_special_watchers_started = undefined;
 			player.bz_special_max_ammo_watch_started = undefined;
 		}

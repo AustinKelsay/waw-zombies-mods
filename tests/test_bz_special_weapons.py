@@ -449,6 +449,7 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         )
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "war_club")
         self.assertFalse(p1.has_perk("specialty_altmelee"))
+        self.assertFalse(p1.get_field("allow_melee"))  # Suppresses stock knife slash so 3D War Club swings cleanly
         self.assertTrue(p2.has_perk("specialty_altmelee"))
         self.assertEqual(dvars.get("perk_altMeleeDamage"), "1000")
 
@@ -506,9 +507,15 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertEqual(base_wc_dmg, 1250)
         self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "couch_slam", "pos": (48.0, 0.0, 0.0)}])
         self.assertEqual(len(gsc.earthquakes), 1)
-        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.22)
+        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.20)
         self.assertGreater(len(gsc.played_fx), 0)
-        self.assertGreater(z_cone.get_pos()[0], 175.0)  # Knocked back cleanly (~104u away from player)
+        # Immediate frame-0 impact impulse (~34% of distance-scaled push) + smooth 4-frame kinetic slide queued
+        self.assertGreater(z_cone.get_pos()[0], 102.0)
+        self.assertLess(z_cone.get_pos()[0], 135.0)
+        slide_threads = [t for t in gsc._threads if t[0] is z_cone and t[1] == "bz_special_slide_zombie_knockback"]
+        self.assertTrue(slide_threads)
+        gsc.call_on(z_cone, BZ_SPECIAL_MOD, "bz_special_slide_zombie_knockback", *slide_threads[-1][2])
+        self.assertGreater(z_cone.get_pos()[0], 128.0)  # Smooth distance-scaled knockback lands cleanly without 1-frame teleport blink
         self.assertTrue(z_cone.get_field("bz_stunned"))
         self.assertGreater(len(z_cone.damage_events), 0)  # DID take frontal cleave damage (dist ~95 <= 112)
         self.assertTrue(
@@ -556,19 +563,26 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertEqual(pap_wc_dmg, 2500)
         self.assertEqual(gsc.played_sounds_at_pos, [{"alias": "couch_slam", "pos": (48.0, 0.0, 0.0)}])
         self.assertEqual(len(gsc.earthquakes), 1)
-        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.38)
-        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.32)
+        self.assertAlmostEqual(gsc.earthquakes[0]["scale"], 0.34)
+        self.assertAlmostEqual(gsc.earthquakes[0]["duration"], 0.30)
         self.assertAlmostEqual(gsc.earthquakes[0]["radius"], 160.0)
         self.assertGreater(len(gsc.played_fx), 0)
 
-        # z_cone pushed far back cleanly (~152 units away from player) and staggered
-        self.assertGreater(z_cone.get_pos()[0], 220.0)
+        # z_cone receives smooth distance-scaled PaP knockback (frame-0 burst + 4-frame glide) and stagger
+        self.assertGreater(z_cone.get_pos()[0], 112.0)
+        pap_slide = [t for t in gsc._threads if t[0] is z_cone and t[1] == "bz_special_slide_zombie_knockback"]
+        gsc.call_on(z_cone, BZ_SPECIAL_MOD, "bz_special_slide_zombie_knockback", *pap_slide[-1][2])
+        self.assertGreater(z_cone.get_pos()[0], 162.0)
+        self.assertLess(z_cone.get_pos()[0], 195.0)
         self.assertTrue(z_cone.get_field("bz_stunned"))
         self.assertGreater(len(z_cone.damage_events), 0)
 
-        # z_walled stopped safely before wall (safe_frac = 0.35 - 0.15 = 0.20 -> ~30 units, NOT 152!)
+        # z_walled stopped safely before wall even after full slide (safe_frac = 0.35 - 0.18 = 0.17 -> ~13u, NOT 118u!)
+        wall_slide = [t for t in gsc._threads if t[0] is z_walled and t[1] == "bz_special_slide_zombie_knockback"]
+        if wall_slide:
+            gsc.call_on(z_walled, BZ_SPECIAL_MOD, "bz_special_slide_zombie_knockback", *wall_slide[-1][2])
         self.assertGreater(z_walled.get_pos()[0], 110.0)
-        self.assertLess(z_walled.get_pos()[0], 150.0)
+        self.assertLess(z_walled.get_pos()[0], 145.0)
 
         # z_behind was behind player (dot=-1.0 < -0.35) -> NOT hit or pushed
         self.assertEqual(z_behind.get_pos(), (-120.0, 0.0, 0.0))
@@ -606,23 +620,36 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertTrue(pushed_stair)
         self.assertAlmostEqual(z_stair.get_pos()[2], 96.0)
 
-        # Air-swing War Club trigger swaps in bz_war_club viewmodel, smashes crowd, and restores previous primary cleanly
+        # Direct War Club swing (with stock knife suppressed via AllowMelee(false)) swaps in bz_war_club viewmodel,
+        # deals 100% smash_damage to the closest forward target + cleave to surrounding cone, and restores primary cleanly.
         gsc.sim_time_ms = 9000
+        gsc.level.set_field("zombie_health", 2500)
+        z_primary.set_pos(48.0, 0.0, 0.0)
+        z_primary.set_field("health", 5000)
+        z_primary.damage_events.clear()
+        z_cone.set_pos(115.0, 20.0, 0.0)
+        z_cone.set_field("health", 5000)
+        z_cone.damage_events.clear()
         p1.current_weapon = "thompson"
         swing_res = gsc.call(BZ_SPECIAL_MOD, "bz_special_trigger_war_club_swing", p1)
         self.assertIsNot(swing_res, UNDEFINED)
         self.assertEqual(p1.current_weapon, "bz_war_club")
         self.assertIn("bz_war_club", p1.weapons)
+        self.assertEqual(len(z_primary.damage_events), 1)
+        self.assertEqual(z_primary.damage_events[0]["damage"], 2500)  # 100% direct_primary PaP War Club smash_damage
+        self.assertEqual(len(z_cone.damage_events), 1)
+        self.assertEqual(z_cone.damage_events[0]["damage"], int(2500 * 0.85))  # 85% PaP cleave damage
         gsc.call_on(p1, BZ_SPECIAL_MOD, "bz_special_restore_war_club_viewmodel", "thompson")
         self.assertEqual(p1.current_weapon, "thompson")
         self.assertNotIn("bz_war_club", p1.weapons)
 
-        # Free swap back to Bowie restores specialty_altmelee for p1; War Club hook stops firing for p1
+        # Free swap back to Bowie restores specialty_altmelee AND re-enables stock AllowMelee(true); War Club hook stops firing for p1
         self.assertTrue(
             gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", p1, "bz_station_arsenal", "buy_gear:equip_bowie")
         )
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
         self.assertTrue(p1.has_perk("specialty_altmelee"))
+        self.assertTrue(p1.get_field("allow_melee"))
         self.assertEqual(gsc.played_local_sounds, [(p1, "cha_ching")] * 3)
         bowie_dmg = gsc.call(
             BZ_HOOKS_MOD,
@@ -673,10 +700,14 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
             GscArray([48.0, 0.0, 0.0]),
             p1,
         )
-        # Dead primary took zero extra DoDamage, while alive neighbor was cleaved & knocked back!
+        # Dead primary took zero extra DoDamage, while alive neighbor was cleaved & smoothly knocked back!
         self.assertEqual(z_dead_primary.damage_events, [])
         self.assertEqual(len(z_neighbor.damage_events), 1)
-        self.assertGreater(z_neighbor.get_pos()[0], 150.0)
+        self.assertGreater(z_neighbor.get_pos()[0], 112.0)  # Frame-0 impact burst
+        nbr_slide = [t for t in gsc._threads if t[0] is z_neighbor and t[1] == "bz_special_slide_zombie_knockback"]
+        self.assertTrue(nbr_slide)
+        gsc.call_on(z_neighbor, BZ_SPECIAL_MOD, "bz_special_slide_zombie_knockback", *nbr_slide[-1][2])
+        self.assertGreater(z_neighbor.get_pos()[0], 155.0)
         self.assertEqual(len(gsc.earthquakes), 1)
 
         # Alive high-round primary hit via post-hit bz_global_damage_wrapper must NOT lose 150 HP to double subtraction!
@@ -725,6 +756,36 @@ class TestSpecialWeaponsRegistrationAndWarClub(unittest.TestCase):
         self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
         self.assertEqual(dmg_after_bowie_wallbuy, 1000)
         self.assertEqual(gsc.earthquakes, [])
+
+    def _equip_war_club(self, gsc, player, pap=False):
+        for item in ("war_club", "pap_war_club") if pap else ("war_club",):
+            self.assertTrue(gsc.call(BZ_HOOKS_MOD, "bz_on_menu_response", player, "bz_station_arsenal", f"buy_gear:{item}"))
+
+    def test_war_club_button_swing_primary_hit_ignores_zombie_behind_player(self) -> None:
+        _, gsc, p1 = _setup_special_env()
+        self._equip_war_club(gsc, p1, pap=True)
+        gsc.level.set_field("zombie_health", 2500)
+        rear = SpecialFakeEntity("Rear", ent_num=20, is_player=False)
+        rear.set_pos(-30, 0, 0)
+        rear.set_field("health", 2500)
+        front = SpecialFakeEntity("Front", ent_num=21, is_player=False)
+        front.set_pos(48, 0, 0)
+        front.set_field("health", 2500)
+        gsc.ai_enemies.extend((rear, front))
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_trigger_war_club_swing", p1)
+        # Full primary damage goes to the zombie in the crosshairs, cleave damage to the one behind.
+        self.assertLess(int(front.get_field("health")), int(rear.get_field("health")))
+
+    def test_war_club_lock_hands_melee_to_wall_bowie_bought_while_club_equipped(self) -> None:
+        _, gsc, p1 = _setup_special_env()
+        self._equip_war_club(gsc, p1)
+        self.assertFalse(p1.get_field("allow_melee"))
+        p1.give_perk("specialty_altmelee")
+        p1.set_field("has_altmelee", True)
+        gsc.call(BZ_SPECIAL_MOD, "bz_special_sync_war_club_melee_lock", p1)
+        self.assertEqual(gsc.call(BZ_STATE_MOD, "bz_state_get_melee_slot", p1), "bowie")
+        self.assertTrue(p1.get_field("allow_melee"))
+        self.assertTrue(p1.has_perk("specialty_altmelee"))
 
 
 class TestMultiCrossbowSpecialWeapon(unittest.TestCase):

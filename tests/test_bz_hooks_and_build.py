@@ -569,6 +569,14 @@ class BzGscRuntime(GscRuntime):
             if isinstance(receiver, FakeEntity):
                 receiver.set_field("model", _waw_to_str(args[0]) if args else "")
             return UNDEFINED
+        if method == "allowmelee":
+            if isinstance(receiver, FakeEntity):
+                receiver.set_field("allow_melee", bool(args[0]) if args else True)
+            return UNDEFINED
+        if method == "getplayerangles":
+            if isinstance(receiver, FakeEntity):
+                return receiver.get_field("angles")
+            return UNDEFINED
         if method == "setshader":
             if isinstance(receiver, GscStruct):
                 shader = _waw_to_str(args[0]) if len(args) > 0 else ""
