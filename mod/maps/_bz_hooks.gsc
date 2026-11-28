@@ -341,6 +341,7 @@ bz_ensure_default_modules_registered()
 	maps\_bz_elem_stock::bz_elem_stock_register();
 	maps\_bz_elem_new::bz_elem_new_register();
 	maps\_bz_special_weapons::bz_special_weapons_register();
+	maps\_bz_companions::bz_companions_register();
 }
 
 // Canonical Phase 2 zero-FX cloned primary weapon names (ADR-0003).

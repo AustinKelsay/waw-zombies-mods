@@ -5,7 +5,7 @@
 // Phase 2: Elemental & Special Primaries (Acid Sprayer, Cryo Cannon, Multi-Crossbow,
 //          Blade Boomerang) plus Special Gear / Melee Slot (War Club, PaP War Club,
 //          Equip Bowie Knife swap, Portal Grenade).
-// Phase 3: Squad Companions placeholder panel.
+// Phase 3: Squad Companions hire panel (bz_companions_enabled).
 // Strictly ASCII-only strings and balanced braces.
 
 {
@@ -774,7 +774,7 @@
 			decoration
 		}
 
-		// Phase 3 Read-Only Placeholder Banner (hidden cleanly when bz_companions_enabled == 0)
+		// Phase 3 Squad Companions panel (hidden cleanly when bz_companions_enabled == 0)
 		itemDef
 		{
 			name			"bz_arsenal_p3_panel"
@@ -792,7 +792,7 @@
 			name			"bz_arsenal_p3_title"
 			type			ITEM_TYPE_TEXT
 			rect			50 373 540 16
-			text			"SQUAD COMPANIONS (Coming in Phase 3)"
+			text			"SQUAD COMPANIONS"
 			textfont		UI_FONT_NORMAL
 			textscale		0.22
 			textstyle		ITEM_TEXTSTYLE_SHADOWED
@@ -806,8 +806,8 @@
 		{
 			name			"bz_arsenal_p3_desc"
 			type			ITEM_TYPE_TEXT
-			rect			50 391 540 16
-			text			"Hireable AI squad allies, up to 4 total squad members (bz_companions_enabled)."
+			rect			50 391 380 16
+			exp				text( dvarString( "ui_bz_companion_status" ) );
 			textfont		UI_FONT_NORMAL
 			textscale		0.19
 			textalign		ITEM_ALIGN_LEFT
@@ -815,6 +815,32 @@
 			forecolor		0.62 0.66 0.72 0.90
 			visible			when( dvarInt( "bz_companions_enabled" ) == 1 );
 			decoration
+		}
+
+		itemDef
+		{
+			name			"btn_companion_hire"
+			type			ITEM_TYPE_BUTTON
+			rect			440 374 150 32
+			style			WINDOW_STYLE_FILLED
+			backcolor		0.16 0.12 0.05 0.92
+			border			1
+			bordersize		1
+			bordercolor		1.0 0.69 0.13 0.70
+			text			"Hire Companion (2000)"
+			textfont		UI_FONT_NORMAL
+			textscale		0.22
+			textstyle		ITEM_TEXTSTYLE_SHADOWED
+			textalign		ITEM_ALIGN_CENTER
+			textaligny		21
+			forecolor		1 1 1 1
+			visible			when( dvarInt( "bz_companions_enabled" ) == 1 );
+			mouseEnter		{ play "mouse_over"; }
+			action
+			{
+				play "mouse_click";
+				scriptMenuResponse "buy_companion:hire";
+			}
 		}
 
 		// Footer feedback bar & Close button

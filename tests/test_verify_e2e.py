@@ -30,6 +30,7 @@ DEFAULT_STAGE_IDS = [
     "perk-carryover",
     "base-zombies-p1",
     "base-zombies-p2",
+    "base-zombies-p3",
     "bz-coop",
     "enhanced-gauntlet",
 ]
@@ -52,6 +53,7 @@ def _make_fake_repo(tmp_dir: Path, existing_scripts: list[str] | None = None) ->
             "scripts/verify_perks.py",
             "scripts/verify_base_zombies_p1.py",
             "scripts/verify_base_zombies_p2.py",
+            "scripts/verify_base_zombies_p3.py",
             "scripts/verify_bz_coop_and_visuals.py",
         ]
     )
@@ -108,6 +110,10 @@ class TestStagePlanning(unittest.TestCase):
         self.assertEqual(
             cmds["base-zombies-p2"],
             ["python3", "scripts/verify_base_zombies_p2.py", "--skip-build"],
+        )
+        self.assertEqual(
+            cmds["base-zombies-p3"],
+            ["python3", "scripts/verify_base_zombies_p3.py", "--skip-build"],
         )
         for stage_id, mode in (("bz-coop", "coop"), ("enhanced-gauntlet", "enhanced-gauntlet")):
             self.assertEqual(
@@ -240,6 +246,7 @@ class TestMissingScriptsHandling(unittest.TestCase):
                 "perk-carryover",
                 "base-zombies-p1",
                 "base-zombies-p2",
+                "base-zombies-p3",
                 "bz-coop",
                 "enhanced-gauntlet",
             ):
@@ -247,7 +254,7 @@ class TestMissingScriptsHandling(unittest.TestCase):
                 self.assertIn("Missing script", by_id[missing_id].skip_reason or "")
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 13, "passed": 5, "failed": 0, "skipped": 8, "not_run": 0},
+                {"total": 14, "passed": 5, "failed": 0, "skipped": 9, "not_run": 0},
             )
 
 
@@ -290,7 +297,7 @@ class TestExecutionModes(unittest.TestCase):
             self.assertEqual(by_id["base-zombies-p2"].status, "NOT_RUN")
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 13, "passed": 2, "failed": 1, "skipped": 0, "not_run": 10},
+                {"total": 14, "passed": 2, "failed": 1, "skipped": 0, "not_run": 11},
             )
 
     def test_continue_on_error_runs_all_remaining_stages_and_exits_nonzero(self) -> None:
@@ -319,7 +326,7 @@ class TestExecutionModes(unittest.TestCase):
             self.assertEqual(executed, DEFAULT_STAGE_IDS)
             self.assertEqual(
                 report.summary_counts(),
-                {"total": 13, "passed": 11, "failed": 2, "skipped": 0, "not_run": 0},
+                {"total": 14, "passed": 12, "failed": 2, "skipped": 0, "not_run": 0},
             )
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import math
 import re
 import sys
 from typing import Any, Callable
@@ -332,6 +333,21 @@ class BzGscRuntime(GscRuntime):
         self.sim_time_ms: int = 1000
         self.notifies: list[tuple[Any, str]] = []
 
+    def _eval_binary_op(self, op: str, left: Any, right: Any) -> Any:
+        # WaW 1.7 GSC supports native 3-component vector arithmetic.
+        l_vec = isinstance(left, GscArray) and left.size == 3
+        r_vec = isinstance(right, GscArray) and right.size == 3
+        if l_vec and r_vec and op in ("+", "-"):
+            sign = 1.0 if op == "+" else -1.0
+            return GscArray([float(left[i]) + sign * float(right[i]) for i in range(3)])
+        if op == "*" and l_vec and isinstance(right, (int, float)) and not isinstance(right, bool):
+            return GscArray([float(left[i]) * right for i in range(3)])
+        if op == "*" and r_vec and isinstance(left, (int, float)) and not isinstance(left, bool):
+            return GscArray([left * float(right[i]) for i in range(3)])
+        if op == "/" and l_vec and isinstance(right, (int, float)) and not isinstance(right, bool):
+            return GscArray([float(left[i]) / right for i in range(3)])
+        return super()._eval_binary_op(op, left, right)
+
     def register_py_callback(self, name: str, fn: Callable[..., Any]) -> GscFuncPtr:
         key = name.lower()
         self._py_callbacks[key] = fn
@@ -387,6 +403,31 @@ class BzGscRuntime(GscRuntime):
             return True, UNDEFINED
         if name_lower == "gettime":
             return True, self.sim_time_ms
+        if name_lower == "anglestoright":
+            ang = args[0] if args else GscArray([0.0, 0.0, 0.0])
+            yaw = math.radians(float(ang[1]))
+            return True, GscArray([math.sin(yaw), -math.cos(yaw), 0.0])
+        if name_lower == "vectortoangles":
+            vec = args[0] if args else GscArray([1.0, 0.0, 0.0])
+            vx, vy, vz = float(vec[0]), float(vec[1]), float(vec[2])
+            yaw = math.degrees(math.atan2(vy, vx)) % 360.0
+            pitch = (-math.degrees(math.atan2(vz, math.hypot(vx, vy)))) % 360.0
+            return True, GscArray([pitch, yaw, 0.0])
+        if name_lower == "bullettracepassed":
+            start = args[0] if len(args) > 0 else GscArray([0.0, 0.0, 0.0])
+            end = args[1] if len(args) > 1 else GscArray([0.0, 0.0, 0.0])
+            fn = getattr(self, "trace_passed_fn", None)
+            return True, bool(fn(start, end)) if fn is not None else True
+        if name_lower == "magicbullet":
+            self.__dict__.setdefault("magic_bullets", []).append(
+                {
+                    "weapon": _waw_to_str(args[0]) if len(args) > 0 else "",
+                    "start": args[1] if len(args) > 1 else UNDEFINED,
+                    "end": args[2] if len(args) > 2 else UNDEFINED,
+                    "owner": args[3] if len(args) > 3 else UNDEFINED,
+                }
+            )
+            return True, UNDEFINED
         if name_lower == "issubstr":
             haystack = _waw_to_str(args[0]) if len(args) > 0 else ""
             needle = _waw_to_str(args[1]) if len(args) > 1 else ""
@@ -565,6 +606,16 @@ class BzGscRuntime(GscRuntime):
         if "::" in method:
             mod_path, fn_name = method.split("::", 1)
             return self.call_on(receiver, mod_path, fn_name, *args)
+        if isinstance(receiver, FakeEntity):
+            receiver.__dict__.setdefault("method_log", []).append(method)
+        if method == "attach":
+            if isinstance(receiver, FakeEntity):
+                receiver.__dict__.setdefault("attachments", []).append(
+                    (_waw_to_str(args[0]) if args else "", _waw_to_str(args[1]) if len(args) > 1 else "")
+                )
+            return UNDEFINED
+        if method in ("enableinvulnerability", "disableinvulnerability"):
+            return UNDEFINED
         if method == "setmodel":
             if isinstance(receiver, FakeEntity):
                 receiver.set_field("model", _waw_to_str(args[0]) if args else "")

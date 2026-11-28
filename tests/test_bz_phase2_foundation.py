@@ -1639,6 +1639,7 @@ class TestArsenalStationPhase2AndMenus(unittest.TestCase):
             "buy_gear:pap_war_club",
             "buy_gear:equip_bowie",
             "buy_gear:portal_grenade",
+            "buy_companion:hire",
             "close",
         }
         self.assertEqual(found_tokens, expected_tokens)

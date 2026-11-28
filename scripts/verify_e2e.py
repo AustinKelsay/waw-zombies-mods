@@ -231,6 +231,14 @@ GATE_STAGES: tuple[StageSpec, ...] = (
         description="Verify Der Riese Base Zombies Phase 2 (4 cloned weapons, Wunderwaffe HP fix & stun, Flamethrower, Acid, Cryo, War Club, Crossbow, Boomerang, Portal) and Classic Mode isolation.",
     ),
     StageSpec(
+        stage_id="base-zombies-p3",
+        name="Base Zombies Phase 3 Squad Companions E2E",
+        category="engine",
+        args=("scripts/verify_base_zombies_p3.py", "--skip-build"),
+        script_relpath="scripts/verify_base_zombies_p3.py",
+        description="Verify Squad Companions on Der Riese and Nacht (Arsenal hire, per-map stock model, squad cap, teleport catch-up, owner-credited MagicBullet points, cleanup) and Classic Mode isolation.",
+    ),
+    StageSpec(
         stage_id="bz-coop",
         name="Base Zombies Co-op self-test",
         category="engine",

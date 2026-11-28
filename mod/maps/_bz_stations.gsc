@@ -2050,6 +2050,10 @@ bz_stations_give_element_primary( player, weap_name )
 
 bz_stations_format_feedback( category, item_id, res )
 {
+	if ( IsDefined( res.feedback ) )
+	{
+		return res.feedback;
+	}
 	disp = bz_get_item_display_name( category, item_id );
 	if ( !IsDefined( disp ) )
 	{
@@ -2233,6 +2237,11 @@ bz_stations_on_menu_response( player, menu, response )
 			gate = "pap";
 		}
 	}
+	else if ( action == "buy_companion" )
+	{
+		category = "companion";
+		gate = "companions";
+	}
 	else
 	{
 		score_now = bz_state_get_score_safe( player );
@@ -2333,6 +2342,19 @@ bz_stations_on_menu_response( player, menu, response )
 				player.bz_has_bowie = true;
 				player.bz_owns_bowie = true;
 			}
+		}
+	}
+
+	else if ( category == "companion" )
+	{
+		// Companions module installs this pointer at registration (zero cross-file refs).
+		if ( IsDefined( level.bz_companions_try_hire_fn ) )
+		{
+			res = [[ level.bz_companions_try_hire_fn ]]( player, item_id );
+		}
+		else
+		{
+			res = bz_make_purchase_result( "unavailable", item_id, 0, bz_state_get_score_safe( player ) );
 		}
 	}
 
